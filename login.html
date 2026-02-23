@@ -1,0 +1,135 @@
+﻿<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Login - Prototipo SEC Emendas</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .auth-page {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .auth-shell {
+      width: min(460px, 96vw);
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 20px 60px rgba(6, 18, 36, 0.2);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .auth-links { display: flex; gap: 10px; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+  <main class="auth-page">
+    <section class="auth-shell">
+      <h1>Entrar</h1>
+      <p class="muted small">Acesse com seu nome e senha.</p>
+
+      <form id="loginForm" class="auth-form">
+        <div class="field">
+          <label for="nome">Nome</label>
+          <input id="nome" autocomplete="username" required />
+        </div>
+        <div class="field">
+          <label for="senha">Senha</label>
+          <input id="senha" type="password" autocomplete="current-password" required />
+        </div>
+        <button type="submit" class="btn primary">Entrar</button>
+      </form>
+
+      <div class="auth-links">
+        <a class="btn" id="linkCadastro" href="cadastro.html">Criar cadastro</a>
+        <a class="btn" href="index.html">Voltar</a>
+      </div>
+
+      <p id="msg" class="muted small"></p>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      const API_BASE_URL_KEY = "SEC_API_BASE_URL";
+      const DEFAULT_API_BASE_URL = "http://localhost:8000";
+      const SESSION_TOKEN_KEY = "SEC_SESSION_TOKEN";
+      const USER_NAME_KEY = "SEC_USER_NAME";
+      const USER_ROLE_KEY = "SEC_USER_ROLE";
+      const next = new URLSearchParams(window.location.search).get("next") || "index.html";
+      const incomingMsg = new URLSearchParams(window.location.search).get("msg") || "";
+
+      const form = document.getElementById("loginForm");
+      const nome = document.getElementById("nome");
+      const senha = document.getElementById("senha");
+      const msg = document.getElementById("msg");
+      if (sessionStorage.getItem(SESSION_TOKEN_KEY)) {
+        window.location.href = next;
+        return;
+      }
+
+
+      const linkCadastro = document.getElementById("linkCadastro");
+
+      linkCadastro.href = "cadastro.html?next=" + encodeURIComponent(next);
+      if (incomingMsg) msg.textContent = incomingMsg;
+
+      function getBaseUrl() {
+        const raw = String(localStorage.getItem(API_BASE_URL_KEY) || "").trim();
+        const base = raw || DEFAULT_API_BASE_URL;
+        return base.replace(/\/+$/, "");
+      }
+
+      async function apiRequest(path, body) {
+        const resp = await fetch(getBaseUrl() + path, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body)
+        });
+
+        const text = await resp.text();
+        let json = null;
+        try { json = text ? JSON.parse(text) : null; } catch (_) {}
+
+        if (!resp.ok) {
+          const detail = json && json.detail ? json.detail : (text || ("HTTP " + resp.status));
+          throw new Error(String(detail));
+        }
+        return json;
+      }
+
+      form.addEventListener("submit", async function (e) {
+        e.preventDefault();
+        const n = String(nome.value || "").trim();
+        const s = String(senha.value || "").trim();
+        if (!n || !s) {
+          msg.textContent = "Informe nome e senha.";
+          msg.style.color = "#b4233d";
+          return;
+        }
+
+        msg.textContent = "Autenticando...";
+        msg.style.color = "";
+
+        try {
+          const data = await apiRequest("/auth/login", { nome: n, senha: s });
+          sessionStorage.setItem(SESSION_TOKEN_KEY, String(data.token || ""));
+          localStorage.setItem(USER_NAME_KEY, String(data.usuario && data.usuario.nome || n));
+          localStorage.setItem(USER_ROLE_KEY, String(data.usuario && data.usuario.perfil || "CONTABIL"));
+          window.location.href = next;
+        } catch (err) {
+          msg.textContent = err && err.message ? err.message : "Falha no login.";
+          msg.style.color = "#b4233d";
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
+
+
