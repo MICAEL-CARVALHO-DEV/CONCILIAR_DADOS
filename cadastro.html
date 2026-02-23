@@ -1,0 +1,175 @@
+﻿<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cadastro - Prototipo SEC Emendas</title>
+  <link rel="stylesheet" href="style.css" />
+  <style>
+    .auth-page {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .auth-shell {
+      width: min(500px, 96vw);
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 16px;
+      box-shadow: 0 20px 60px rgba(6, 18, 36, 0.2);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .auth-links { display: flex; gap: 10px; flex-wrap: wrap; }
+  </style>
+</head>
+<body>
+  <main class="auth-page">
+    <section class="auth-shell">
+      <h1>Cadastrar usuario</h1>
+      <p class="muted small">Informe nome, funcao e senha.</p>
+
+      <form id="cadastroForm" class="auth-form">
+        <div class="field">
+          <label for="nome">Nome</label>
+          <input id="nome" autocomplete="username" required />
+        </div>
+        <div class="field">
+          <label for="perfil">Funcao</label>
+          <select id="perfil" required></select>
+        </div>
+        <div class="field">
+          <label for="senha">Senha</label>
+          <input id="senha" type="password" autocomplete="new-password" required />
+        </div>
+        <div class="field">
+          <label for="senha2">Confirmar senha</label>
+          <input id="senha2" type="password" autocomplete="new-password" required />
+        </div>
+        <button type="submit" class="btn primary">Cadastrar e entrar</button>
+      </form>
+
+      <div class="auth-links">
+        <a class="btn" id="linkLogin" href="login.html">Ja tenho conta</a>
+        <a class="btn" href="index.html">Voltar</a>
+      </div>
+
+      <p id="msg" class="muted small"></p>
+    </section>
+  </main>
+
+  <script>
+    (function () {
+      const API_BASE_URL_KEY = "SEC_API_BASE_URL";
+      const DEFAULT_API_BASE_URL = "http://localhost:8000";
+      const SESSION_TOKEN_KEY = "SEC_SESSION_TOKEN";
+      const USER_NAME_KEY = "SEC_USER_NAME";
+      const USER_ROLE_KEY = "SEC_USER_ROLE";
+      const ROLE_FALLBACK = ["APG", "SUPERVISAO", "CONTABIL", "POWERBI", "PROGRAMADOR"];
+      const next = new URLSearchParams(window.location.search).get("next") || "index.html";
+
+      const form = document.getElementById("cadastroForm");
+      const nome = document.getElementById("nome");
+      const perfil = document.getElementById("perfil");
+      const senha = document.getElementById("senha");
+      const senha2 = document.getElementById("senha2");
+      const msg = document.getElementById("msg");
+      if (sessionStorage.getItem(SESSION_TOKEN_KEY)) {
+        window.location.href = next;
+        return;
+      }
+
+
+      const linkLogin = document.getElementById("linkLogin");
+
+      linkLogin.href = "login.html?next=" + encodeURIComponent(next);
+
+      function getBaseUrl() {
+        const raw = String(localStorage.getItem(API_BASE_URL_KEY) || "").trim();
+        const base = raw || DEFAULT_API_BASE_URL;
+        return base.replace(/\/+$/, "");
+      }
+
+      async function request(path, method, body) {
+        const opts = { method: method || "GET", headers: {} };
+        if (body !== undefined) {
+          opts.headers["Content-Type"] = "application/json";
+          opts.body = JSON.stringify(body);
+        }
+
+        const resp = await fetch(getBaseUrl() + path, opts);
+        const text = await resp.text();
+        let json = null;
+        try { json = text ? JSON.parse(text) : null; } catch (_) {}
+
+        if (!resp.ok) {
+          const detail = json && json.detail ? json.detail : (text || ("HTTP " + resp.status));
+          throw new Error(String(detail));
+        }
+        return json;
+      }
+
+      async function loadRoles() {
+        try {
+          const data = await request("/roles", "GET");
+          const roles = Array.isArray(data && data.roles) ? data.roles : ROLE_FALLBACK;
+          fillRoleSelect(roles);
+        } catch (_err) {
+          fillRoleSelect(ROLE_FALLBACK);
+        }
+      }
+
+      function fillRoleSelect(roles) {
+        perfil.innerHTML = "";
+        roles.forEach(function (r) {
+          const opt = document.createElement("option");
+          opt.value = String(r || "").toUpperCase();
+          opt.textContent = String(r || "").toUpperCase();
+          perfil.appendChild(opt);
+        });
+      }
+
+      form.addEventListener("submit", async function (e) {
+        e.preventDefault();
+        const n = String(nome.value || "").trim();
+        const p = String(perfil.value || "").trim().toUpperCase();
+        const s1 = String(senha.value || "").trim();
+        const s2 = String(senha2.value || "").trim();
+
+        if (!n || !p || !s1 || !s2) {
+          msg.textContent = "Preencha todos os campos.";
+          msg.style.color = "#b4233d";
+          return;
+        }
+        if (s1 !== s2) {
+          msg.textContent = "As senhas nao conferem.";
+          msg.style.color = "#b4233d";
+          return;
+        }
+
+        msg.textContent = "Cadastrando...";
+        msg.style.color = "";
+
+        try {
+          const data = await request("/auth/register", "POST", { nome: n, perfil: p, senha: s1 });
+          sessionStorage.setItem(SESSION_TOKEN_KEY, String(data.token || ""));
+          localStorage.setItem(USER_NAME_KEY, String(data.usuario && data.usuario.nome || n));
+          localStorage.setItem(USER_ROLE_KEY, String(data.usuario && data.usuario.perfil || p));
+          window.location.href = next;
+        } catch (err) {
+          msg.textContent = err && err.message ? err.message : "Falha no cadastro.";
+          msg.style.color = "#b4233d";
+        }
+      });
+
+      loadRoles();
+    })();
+  </script>
+</body>
+</html>
+
+

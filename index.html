@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Prototipo SEC Emendas - V3</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="wrap">
+    <header class="topbar">
+      <div>
+        <h1>Prototipo SEC Emendas</h1>
+        <p class="muted">Status oficial, marcacoes por usuario e importacao da planilha real</p>
+      </div>
+      <div class="actions">
+        <span id="currentUserInfo" class="user-chip"></span>
+        <button id="btnSwitchUser" class="btn">Trocar usuario</button>
+        <button id="btnExport" class="btn">Exportar CSV</button>
+        <button id="btnExportXlsx" class="btn">Exportar XLSX</button>
+        <label class="btn file-btn" for="fileCsv">Importar CSV/XLSX</label>
+        <input id="fileCsv" type="file" accept=".csv,.xlsx,.xls" />
+        <button id="btnReset" class="btn danger">Reset Demo</button>
+        <button id="btnDemo4Users" class="btn">Demo 4 usuarios</button>
+      </div>
+    </header>
+
+    <section class="filters card">
+      <div class="field">
+        <label for="statusFilter">Status Oficial</label>
+        <select id="statusFilter"></select>
+      </div>
+
+      <div class="field">
+        <label for="yearFilter">Ano</label>
+        <select id="yearFilter"></select>
+      </div>
+
+      <div class="field grow">
+        <label for="searchInput">Busca</label>
+        <input id="searchInput" placeholder="ID, identificacao, municipio, deputado, SEI..." />
+      </div>
+    </section>
+
+    <section id="importReport" class="card"></section>
+
+    <section class="card table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Identificacao</th>
+            <th>Municipio</th>
+            <th>Deputado</th>
+            <th>Status Oficial</th>
+            <th>Conflitos</th>
+            <th>Valor Atual</th>
+            <th>Atualizado</th>
+            <th>Acao</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </section>
+  </main>
+
+  <div class="modal" id="modal" aria-hidden="true">
+    <div class="modal-card" role="dialog" aria-modal="true">
+      <div class="modal-head">
+        <div>
+          <h3 id="modalTitle">Detalhe</h3>
+          <p class="muted" id="modalSub">-</p>
+        </div>
+        <button id="modalClose" class="icon-btn" title="Fechar" aria-label="Fechar modal">x</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="grid">
+          <div class="card">
+            <h4>Dados principais</h4>
+            <div class="kv" id="kv"></div>
+
+            <div class="divider">
+              <h4>Status Oficial</h4>
+
+              <div class="field">
+                <label for="officialStatus">Status Oficial (APG/SUPERVISAO)</label>
+                <select id="officialStatus"></select>
+              </div>
+
+              <div class="field">
+                <label for="officialReason">Motivo (obrigatorio)</label>
+                <textarea id="officialReason" rows="3" placeholder="Ex.: validacao concluida / aprovacao / retorno por pendencia..."></textarea>
+              </div>
+
+              <button id="btnChangeOfficial" class="btn primary">Alterar Status Oficial</button>
+              <p class="muted small">Somente perfis APG/SUPERVISAO (regra demo).</p>
+            </div>
+          </div>
+
+          <div class="card">
+            <h4>Marcacao de Status (por usuario)</h4>
+
+            <div class="field">
+              <label for="markStatus">Novo status (minha marcacao)</label>
+              <select id="markStatus"></select>
+            </div>
+
+            <div class="field">
+              <label for="markReason">Motivo / Observacao (obrigatorio)</label>
+              <textarea id="markReason" rows="4" placeholder="Ex.: aguardando documento / aguardando execucao / ajuste contabil..."></textarea>
+            </div>
+
+            <div class="row">
+              <button id="btnMarkStatus" class="btn primary">Registrar minha marcacao</button>
+              <button id="btnAddNote" class="btn">Adicionar nota</button>
+            </div>
+
+            <div id="conflictBox" class="card hidden">
+              <h4>Conflito detectado</h4>
+              <p class="muted small" id="conflictText"></p>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h4>Resumo: Ultima marcacao por usuario</h4>
+          <div id="marksSummary" class="table-wrap"></div>
+        </div>
+
+        <div class="card">
+          <h4>Campos originais da planilha</h4>
+          <div id="rawFields" class="table-wrap"></div>
+        </div>
+
+        <div class="card">
+          <h4>Timeline (audit log completo)</h4>
+          <div id="history" class="timeline"></div>
+        </div>
+      </div>
+
+      <div class="modal-foot">
+        <button id="btnExportOne" class="btn">Exportar este registro (CSV)</button>
+        <button id="modalClose2" class="btn">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      function loadApp() {
+        var appScript = document.createElement("script");
+        appScript.src = "app.js";
+        document.body.appendChild(appScript);
+      }
+
+      function loadLocalXlsxAndApp() {
+        var localScript = document.createElement("script");
+        localScript.src = "vendor/xlsx.full.min.js";
+        localScript.onload = loadApp;
+        localScript.onerror = loadApp;
+        document.head.appendChild(localScript);
+      }
+
+      var cdnScript = document.createElement("script");
+      cdnScript.src = "https://cdn.sheetjs.com/xlsx-0.20.2/package/dist/xlsx.full.min.js";
+      cdnScript.onload = loadApp;
+      cdnScript.onerror = loadLocalXlsxAndApp;
+      document.head.appendChild(cdnScript);
+    })();
+  </script>
+</body>
+</html>
+
+
+
+
+
+
