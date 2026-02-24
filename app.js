@@ -20,6 +20,19 @@ const STATUS = [
   "Concluido",
   "Cancelado"
 ];
+const STATUS_FILTERS = [
+  { label: "Todos (andamento)", value: "" },
+  { label: "Concluido global", value: "done" },
+  { label: "Em andamento", value: "in_progress" },
+  { label: "Atencao", value: "attention" },
+  { label: "Sem marcacoes", value: "no_marks" }
+];
+
+const CROSS_TAB_CHANNEL_NAME = "sec_emendas";
+const CROSS_TAB_PING_KEY = "SEC_STATE_PING";
+const LOCAL_TAB_ID = "tab_" + Math.random().toString(36).slice(2) + "_" + Date.now();
+const SYSTEM_MIGRATION_USER = "sistema";
+const SYSTEM_MIGRATION_ROLE = "PROGRAMADOR";
 const USER_ROLE_OPTIONS = ["APG", "SUPERVISAO", "CONTABIL", "POWERBI", "PROGRAMADOR"];
 const USER_NAME_KEY = "SEC_USER_NAME";
 const USER_ROLE_KEY = "SEC_USER_ROLE";
@@ -33,6 +46,11 @@ const STORAGE_MODE_KEY = "SEC_STORAGE_MODE";
 const STORAGE_MODE_LOCAL = "local";
 const STORAGE_MODE_SESSION = "session";
 const DEFAULT_API_BASE_URL = "http://localhost:8000";
+const API_WS_PATH = "/ws";
+const WS_RECONNECT_BASE_MS = 1500;
+const WS_RECONNECT_MAX_MS = 15000;
+const WS_REFRESH_DEBOUNCE_MS = 400;
+const API_DEFAULT_EVENT_ORIGIN = "UI";
 const DEMO_MULTI_USERS = [
   { name: "Miguel", role: "APG" },
   { name: "Ana", role: "CONTABIL" },
@@ -48,7 +66,6 @@ const DEMO_NOTES = [
 ];
 
 const HOME_CHANGES_LIMIT = 14;
-const OFFICIAL_ROLES = new Set(["APG", "SUPERVISAO", "PROGRAMADOR"]);
 const REFERENCE_FIELDS = ["identificacao", "cod_subfonte", "cod_acao", "municipio", "deputado"];
 
 const TRACKED_FIELDS = [
@@ -163,16 +180,24 @@ const DEMO = [
 
 let state = loadState();
 state.records = (state.records || []).map(normalizeRecordShape);
+migrateLegacyStatusRecords(state.records);
 
 let selectedId = null;
 let idCountersByYear = buildIdCounters(state.records);
 let apiOnline = false;
 let apiLastError = "";
 let apiEmendaIdByInterno = {};
+let apiSocket = null;
+let apiSocketReconnectTimer = null;
+let apiSocketBackoffMs = WS_RECONNECT_BASE_MS;
+let apiRefreshTimer = null;
+let apiRefreshRunning = false;
 let latestImportReport = null;
+let lastImportValidation = null;
+const stateChannel = (typeof window !== "undefined" && "BroadcastChannel" in window) ? new BroadcastChannel(CROSS_TAB_CHANNEL_NAME) : null;
 assignMissingIds(state.records, idCountersByYear);
 syncReferenceKeys(state.records);
-saveState();
+saveState(true);
 
 const tbody = document.getElementById("tbody");
 const statusFilter = document.getElementById("statusFilter");
@@ -187,9 +212,7 @@ const modalClose2 = document.getElementById("modalClose2");
 
 const kv = document.getElementById("kv");
 const historyEl = document.getElementById("history");
-const officialStatus = document.getElementById("officialStatus");
-const officialReason = document.getElementById("officialReason");
-const btnChangeOfficial = document.getElementById("btnChangeOfficial");
+const userProgressBox = document.getElementById("userProgressBox");
 
 const markStatus = document.getElementById("markStatus");
 const markReason = document.getElementById("markReason");
@@ -227,17 +250,12 @@ const authMsg = document.getElementById("authMsg");
 
 initSelects();
 setupAuthUi();
+setupCrossTabSync();
 render();
 initializeAuthFlow();
 
 function initSelects() {
-  setSelectOptions(statusFilter, [{ label: "Todos (status oficial)", value: "" }].concat(STATUS.map(function (s) {
-    return { label: s, value: s };
-  })));
-
-  setSelectOptions(officialStatus, STATUS.map(function (s) {
-    return { label: s, value: s };
-  }));
+  setSelectOptions(statusFilter, STATUS_FILTERS);
 
   setSelectOptions(markStatus, STATUS.map(function (s) {
     return { label: s, value: s };
@@ -284,9 +302,9 @@ function render() {
   tbody.innerHTML = "";
 
   rows.forEach(function (r) {
-    const lastMarks = getLastMarksByUser(r);
-    const conflicts = detectConflicts(r, lastMarks);
-    const conflictCount = conflicts.length;
+    const users = getActiveUsersWithLastMark(r);
+    const progress = calcProgress(users);
+    const staleDays = daysSince(lastEventAt(r));
 
     const tr = document.createElement("tr");
     tr.innerHTML = ""
@@ -294,8 +312,9 @@ function render() {
       + "<td>" + escapeHtml(r.identificacao) + "</td>"
       + "<td>" + escapeHtml(r.municipio) + "</td>"
       + "<td>" + escapeHtml(r.deputado) + "</td>"
-      + "<td>" + renderStatus(r.status_oficial) + "</td>"
-      + "<td>" + (conflictCount ? ("(!) " + conflictCount) : "-") + "</td>"
+      + "<td>" + renderProgressBar(progress) + "</td>"
+      + "<td>" + renderMemberChips(users) + "</td>"
+      + "<td class=\"muted small\">" + (staleDays === Infinity ? "-" : (String(staleDays) + " dias")) + "</td>"
       + "<td>R$ " + fmtMoney(r.valor_atual) + "</td>"
       + "<td class=\"muted\">" + fmtDateTime(r.updated_at) + "</td>"
       + "<td><button class=\"btn\" data-action=\"view\" data-id=\"" + escapeHtml(r.id) + "\">Ver</button></td>";
@@ -317,7 +336,9 @@ function getFiltered() {
   const q = (searchInput.value || "").trim().toLowerCase();
 
   return state.records.filter(function (r) {
-    const okStatus = !status || r.status_oficial === status;
+    const users = getActiveUsersWithLastMark(r);
+    const global = getGlobalProgressState(users);
+    const okStatus = !status || global.code === status;
     const okYear = !year || String(r.ano) === year;
     const blob = [r.id, r.identificacao, r.municipio, r.deputado, r.processo_sei, r.cod_subfonte, r.cod_acao, r.cod_uo, r.sigla_uo, r.cod_orgao, r.ref_key].join(" ").toLowerCase();
     const okQuery = !q || blob.indexOf(q) >= 0;
@@ -357,39 +378,6 @@ document.addEventListener("keydown", function (e) {
   if (e.key === "Escape" && modal.classList.contains("show")) {
     closeModal();
   }
-});
-
-btnChangeOfficial.addEventListener("click", async function () {
-  const rec = getSelected();
-  if (!rec) return;
-
-  if (!OFFICIAL_ROLES.has(CURRENT_ROLE)) {
-    alert("Somente APG ou SUPERVISAO podem alterar o status oficial.");
-    return;
-  }
-
-  const next = normalizeStatus(officialStatus.value);
-  const why = (officialReason.value || "").trim();
-  if (!why) {
-    alert("Motivo/observacao e obrigatorio para alterar o status oficial.");
-    return;
-  }
-
-  const prev = rec.status_oficial;
-  rec.status_oficial = next;
-  syncCanonicalToAllFields(rec);
-  rec.updated_at = isoNow();
-  rec.eventos.unshift(mkEvent("OFFICIAL_STATUS", { from: prev, to: next, note: why }));
-
-  try {
-    await syncOfficialStatusToApi(rec, next, why);
-  } catch (err) {
-    handleApiSyncError(err, "status oficial");
-  }
-
-  saveState();
-  render();
-  openModal(rec.id, true);
 });
 
 btnMarkStatus.addEventListener("click", async function () {
@@ -448,18 +436,57 @@ btnAddNote.addEventListener("click", async function () {
   openModal(rec.id, true);
 });
 
-btnExportOne.addEventListener("click", function () {
+btnExportOne.addEventListener("click", async function () {
   const rec = getSelected();
   if (!rec) return;
-  downloadCsv("emenda_" + rec.id + ".csv", toCsv([rec]));
+  const filename = "emenda_" + rec.id + ".csv";
+  downloadCsv(filename, toCsv([rec]));
+  await syncExportLogToApi({
+    formato: "CSV",
+    arquivoNome: filename,
+    quantidadeRegistros: 1,
+    quantidadeEventos: countAuditEvents([rec]),
+    filtros: { single_id: rec.id },
+    modoHeaders: "normalizados",
+    roundTripOk: null,
+    roundTripIssues: []
+  });
 });
 
-btnExport.addEventListener("click", function () {
-  downloadCsv("emendas_export_" + dateStamp() + ".csv", toCsv(state.records));
+btnExport.addEventListener("click", async function () {
+  const filename = "emendas_export_" + dateStamp() + ".csv";
+  downloadCsv(filename, toCsv(state.records));
+  await syncExportLogToApi({
+    formato: "CSV",
+    arquivoNome: filename,
+    quantidadeRegistros: state.records.length,
+    quantidadeEventos: countAuditEvents(state.records),
+    filtros: getCurrentFilterSnapshot(),
+    modoHeaders: "normalizados",
+    roundTripOk: null,
+    roundTripIssues: []
+  });
 });
 
-btnExportXlsx.addEventListener("click", function () {
-  exportRecordsToXlsx(state.records, "emendas_export_" + dateStamp() + ".xlsx");
+btnExportXlsx.addEventListener("click", async function () {
+  const modeOriginal = confirm("Exportar com headers originais? OK = Originais, Cancelar = Normalizados.");
+  const roundTripCheck = confirm("Executar round-trip check apos exportar? (pode ser mais lento)");
+  const filename = "emendas_export_" + dateStamp() + ".xlsx";
+  const exportMeta = exportRecordsToXlsx(state.records, filename, {
+    useOriginalHeaders: modeOriginal,
+    roundTripCheck: roundTripCheck
+  });
+
+  await syncExportLogToApi({
+    formato: "XLSX",
+    arquivoNome: filename,
+    quantidadeRegistros: state.records.length,
+    quantidadeEventos: countAuditEvents(state.records),
+    filtros: getCurrentFilterSnapshot(),
+    modoHeaders: modeOriginal ? "originais" : "normalizados",
+    roundTripOk: exportMeta && exportMeta.roundTrip ? exportMeta.roundTrip.ok : null,
+    roundTripIssues: exportMeta && exportMeta.roundTrip ? (exportMeta.roundTrip.issues || []) : []
+  });
 });
 
 btnReset.addEventListener("click", function () {
@@ -492,6 +519,7 @@ fileCsv.addEventListener("change", async function () {
     syncYearFilter();
     render();
     showImportReport(report);
+    await syncImportBatchToApi(file, report);
 
     alert("Importacao concluida. Criados: " + report.created + " | Atualizados: " + report.updated + " | Sem alteracao: " + report.unchanged + " | Linhas lidas: " + report.totalRows);
   } catch (err) {
@@ -513,20 +541,13 @@ function openModal(id, keepReasons) {
   modalTitle.textContent = "Emenda: " + rec.id;
   modalSub.textContent = rec.identificacao + " | " + rec.municipio + " | " + rec.deputado;
 
-  officialStatus.value = normalizeStatus(rec.status_oficial);
-  const canChangeOfficial = OFFICIAL_ROLES.has(CURRENT_ROLE);
-  officialStatus.disabled = !canChangeOfficial;
-  officialReason.disabled = !canChangeOfficial;
-  btnChangeOfficial.disabled = !canChangeOfficial;
   if (!keepReasons) {
-    officialReason.value = "";
     markReason.value = "";
   }
 
   kv.innerHTML = "";
   const pairs = [
     ["Ano", rec.ano],
-    ["Status Oficial", rec.status_oficial],
     ["Identificacao", rec.identificacao],
     ["Cod Subfonte", rec.cod_subfonte || "-"],
     ["Cod Acao", rec.cod_acao || "-"],
@@ -548,14 +569,27 @@ function openModal(id, keepReasons) {
     kv.appendChild(item);
   });
 
+  const users = getActiveUsersWithLastMark(rec);
+  const progress = calcProgress(users);
+  const delays = whoIsDelaying(users);
+  const attentionIssues = getAttentionIssues(users);
+
   const lastMarks = getLastMarksByUser(rec);
   renderMarksSummary(lastMarks);
   renderRawFields(rec);
 
-  const conflicts = detectConflicts(rec, lastMarks);
-  if (conflicts.length) {
+  if (userProgressBox) {
+    userProgressBox.innerHTML = ""
+      + renderProgressBar(progress)
+      + "<div class=\"member-chip-wrap\" style=\"margin-top:8px\">" + renderMemberChips(users) + "</div>"
+      + (delays.length
+        ? ("<p class=\"muted small\" style=\"margin-top:8px\"><b>Quem esta atrasando:</b> " + delays.map(function (u) { return escapeHtml(u.name); }).join(", ") + "</p>")
+        : "<p class=\"muted small\" style=\"margin-top:8px\"><b>Todos concluiram.</b></p>");
+  }
+
+  if (attentionIssues.length) {
     conflictBox.classList.remove("hidden");
-    conflictText.textContent = "Status Oficial = \"" + rec.status_oficial + "\". Divergencias: " + conflicts.join(" | ");
+    conflictText.textContent = attentionIssues.join(" | ");
   } else {
     conflictBox.classList.add("hidden");
     conflictText.textContent = "";
@@ -569,7 +603,7 @@ function openModal(id, keepReasons) {
     const who = (ev.actor_role || "-") + " | " + (ev.actor_user || "-");
     let right = "";
     if (ev.type === "OFFICIAL_STATUS") {
-      right = "<b>" + escapeHtml(ev.from || "") + "</b> -> <b>" + escapeHtml(ev.to || "") + "</b>";
+      right = "<b>LEGADO</b> " + "<b>" + escapeHtml(ev.from || "") + "</b> -> <b>" + escapeHtml(ev.to || "") + "</b>";
     } else if (ev.type === "MARK_STATUS") {
       right = "<b>" + escapeHtml(ev.to || "") + "</b>";
     } else if (ev.type === "EDIT_FIELD") {
@@ -661,17 +695,143 @@ function getLastMarksByUser(rec) {
   return map;
 }
 
-function detectConflicts(rec, lastMarks) {
-  const conflicts = [];
-  const official = rec.status_oficial;
-  Object.entries(lastMarks).forEach(function (entry) {
-    const user = entry[0];
-    const info = entry[1];
-    if (info.status && info.status !== official) {
-      conflicts.push((info.role || "-") + "/" + user + ": " + info.status);
+function getActiveUsersWithLastMark(rec) {
+  const map = new Map();
+  const events = Array.isArray(rec && rec.eventos) ? rec.eventos : [];
+
+  events.forEach(function (ev) {
+    if (!ev || !ev.actor_user) return;
+    if (ev.type !== "MARK_STATUS" && ev.type !== "NOTE") return;
+    if (!map.has(ev.actor_user)) {
+      map.set(ev.actor_user, {
+        name: ev.actor_user,
+        role: ev.actor_role || "-",
+        lastStatus: null,
+        lastAt: null,
+        lastNote: ""
+      });
     }
   });
-  return conflicts;
+
+  events.forEach(function (ev) {
+    if (!ev || ev.type !== "MARK_STATUS" || !ev.actor_user || !map.has(ev.actor_user)) return;
+    const user = map.get(ev.actor_user);
+    const ts = ev.at ? (new Date(ev.at).getTime() || 0) : 0;
+    const oldTs = user.lastAt ? (new Date(user.lastAt).getTime() || 0) : 0;
+    if (!user.lastAt || ts >= oldTs) {
+      user.lastStatus = normalizeStatus(ev.to || "");
+      user.lastAt = ev.at || null;
+      user.lastNote = ev.note || "";
+      user.role = ev.actor_role || user.role || "-";
+    }
+  });
+
+  return Array.from(map.values()).sort(function (a, b) {
+    return a.name.localeCompare(b.name, "pt-BR");
+  });
+}
+
+function calcProgress(users) {
+  const total = Array.isArray(users) ? users.length : 0;
+  const concl = (users || []).filter(function (u) { return u.lastStatus === "Concluido"; }).length;
+  return {
+    total: total,
+    concl: concl,
+    percent: total ? Math.round((concl / total) * 100) : 0,
+    done: total > 0 && concl === total
+  };
+}
+
+function getAttentionIssues(users) {
+  const issues = [];
+  const list = Array.isArray(users) ? users : [];
+  if (!list.length) return issues;
+
+  const noStatus = list.filter(function (u) { return !u.lastStatus; });
+  if (noStatus.length) {
+    issues.push("Usuarios sem status: " + noStatus.map(function (u) { return u.name; }).join(", "));
+  }
+
+  const hasCancelado = list.some(function (u) { return u.lastStatus === "Cancelado"; });
+  const hasConcluido = list.some(function (u) { return u.lastStatus === "Concluido"; });
+  if (hasCancelado && hasConcluido) {
+    issues.push("Ha Cancelado junto com Concluido no mesmo registro.");
+  }
+
+  return issues;
+}
+
+function getGlobalProgressState(users) {
+  const list = Array.isArray(users) ? users : [];
+  if (!list.length) return { code: "no_marks", label: "Sem marcacoes" };
+  const progress = calcProgress(list);
+  const issues = getAttentionIssues(list);
+  if (issues.length) return { code: "attention", label: "Atencao" };
+  if (progress.done) return { code: "done", label: "Concluido global" };
+  return { code: "in_progress", label: "Em andamento" };
+}
+
+function getInitials(name) {
+  return String(name || "").trim().split(/\s+/).slice(0, 2).map(function (p) { return p.charAt(0); }).join("").toUpperCase();
+}
+
+function statusClass(status) {
+  const s = normalizeLooseText(status);
+  if (s.indexOf("concl") >= 0) return "st-ok";
+  if (s.indexOf("cancel") >= 0) return "st-bad";
+  if (s.indexOf("pend") >= 0 || s.indexOf("aguard") >= 0) return "st-warn";
+  if (s.indexOf("exec") >= 0 || s.indexOf("anal") >= 0 || s.indexOf("apro") >= 0 || s.indexOf("rece") >= 0) return "st-mid";
+  return "st-none";
+}
+
+function renderMemberChips(users) {
+  const list = Array.isArray(users) ? users : [];
+  if (!list.length) return "<span class=\"muted small\">Sem marcacoes</span>";
+
+  return list.map(function (u) {
+    const cls = statusClass(u.lastStatus || "");
+    const stale = daysSince(u.lastAt);
+    const staleTag = stale === Infinity ? "" : "<span class=\"chip-age\">" + String(stale) + "d</span>";
+    const title = escapeHtml(u.name + " / " + (u.role || "-") + " | " + (u.lastStatus || "Sem status") + " | " + (u.lastAt || "-"));
+    return "<span class=\"member-chip " + cls + "\" title=\"" + title + "\"><span class=\"mav\">" + escapeHtml(getInitials(u.name)) + "</span><span class=\"mtxt\">" + escapeHtml(u.lastStatus || "Sem status") + "</span>" + staleTag + "</span>";
+  }).join("");
+}
+
+function renderProgressBar(progress) {
+  const safe = progress || { concl: 0, total: 0, percent: 0, done: false };
+  const cls = safe.done ? "ok" : (safe.percent >= 50 ? "warn" : "bad");
+  return ""
+    + "<div class=\"prog\">"
+    + "  <div class=\"prog-top\"><span class=\"light " + cls + "\"></span><span class=\"muted small\">" + String(safe.concl) + "/" + String(safe.total) + " concluiram (" + String(safe.percent) + "%)</span></div>"
+    + "  <div class=\"prog-bar\"><div class=\"prog-fill " + cls + "\" style=\"width:" + String(safe.percent) + "%\"></div></div>"
+    + "</div>";
+}
+
+function lastEventAt(rec) {
+  const events = Array.isArray(rec && rec.eventos) ? rec.eventos : [];
+  let maxTs = 0;
+  let out = null;
+  events.forEach(function (ev) {
+    const ts = ev && ev.at ? (new Date(ev.at).getTime() || 0) : 0;
+    if (ts > maxTs) {
+      maxTs = ts;
+      out = ev.at;
+    }
+  });
+  return out;
+}
+
+function daysSince(iso) {
+  if (!iso) return Infinity;
+  const ts = new Date(iso).getTime();
+  if (!Number.isFinite(ts) || ts <= 0) return Infinity;
+  return Math.floor((Date.now() - ts) / (1000 * 60 * 60 * 24));
+}
+
+function whoIsDelaying(users) {
+  return (users || []).filter(function (u) {
+    return u.lastStatus !== "Concluido";
+  });
 }
 
 function closeModal() {
@@ -702,7 +862,8 @@ function processImportedRows(sourceRows, fileName) {
     duplicateByRef: 0,
     duplicateInFile: 0,
     conflictIdVsRef: 0,
-    sheetNames: []
+    sheetNames: [],
+    validation: lastImportValidation || null
   };
 
   const sheetSet = new Set();
@@ -760,6 +921,7 @@ function processImportedRows(sourceRows, fileName) {
   });
 
   report.sheetNames = Array.from(sheetSet);
+  if (!report.validation) report.validation = buildImportValidationReport(sourceRows);
   return report;
 }
 
@@ -767,7 +929,6 @@ function createRecordFromImport(incoming, ctx, fileName) {
   const now = isoNow();
   const ano = incoming.ano || currentYear();
   const id = incoming.id || generateInternalId(ano, idCountersByYear);
-  const status = incoming.status_oficial || "Recebido";
 
   const base = mkRecord({
     id: id,
@@ -784,18 +945,25 @@ function createRecordFromImport(incoming, ctx, fileName) {
     valor_inicial: incoming.valor_inicial != null ? incoming.valor_inicial : (incoming.valor_atual != null ? incoming.valor_atual : 0),
     valor_atual: incoming.valor_atual != null ? incoming.valor_atual : (incoming.valor_inicial != null ? incoming.valor_inicial : 0),
     processo_sei: incoming.processo_sei || "",
-    status_oficial: status,
     created_at: now,
     updated_at: now,
     source_sheet: incoming.source_sheet || ctx.sheetName || "Controle de EPI",
     source_row: ctx.rowNumber != null ? Number(ctx.rowNumber) : null,
     all_fields: shallowCloneObj(incoming.all_fields || {}),
-    eventos: [
-      mkEvent("IMPORT", { note: buildImportNote(fileName, ctx) }),
-      mkEvent("OFFICIAL_STATUS", { from: null, to: status, note: "Status oficial definido na importacao." })
-    ]
+    eventos: [mkEvent("IMPORT", { note: buildImportNote(fileName, ctx) })]
   });
+
   base.ref_key = buildReferenceKey(base);
+
+  if (incoming.status_oficial) {
+    base.eventos.unshift(mkEvent("MARK_STATUS", {
+      to: normalizeStatus(incoming.status_oficial),
+      note: "Marcacao inicial vinda da importacao.",
+      actor_user: SYSTEM_MIGRATION_USER,
+      actor_role: SYSTEM_MIGRATION_ROLE
+    }));
+  }
+
   return base;
 }
 
@@ -835,11 +1003,15 @@ function mergeImportIntoRecord(target, incoming, ctx, fileName) {
   });
 
   if (incoming.status_oficial) {
-    const prevStatus = normalizeStatus(target.status_oficial);
     const nextStatus = normalizeStatus(incoming.status_oficial);
-    if (prevStatus !== nextStatus) {
-      target.status_oficial = nextStatus;
-      changedEvents.push(mkEvent("OFFICIAL_STATUS", { from: prevStatus, to: nextStatus, note: "Atualizado via importacao." }));
+    const prevMarked = latestMarkedStatus(target);
+    if (normalizeStatus(prevMarked || "") !== nextStatus) {
+      changedEvents.push(mkEvent("MARK_STATUS", {
+        to: nextStatus,
+        note: "Marcacao atualizada via importacao.",
+        actor_user: SYSTEM_MIGRATION_USER,
+        actor_role: SYSTEM_MIGRATION_ROLE
+      }));
       changedAny = true;
     }
   }
@@ -937,9 +1109,11 @@ async function parseInputFile(file) {
   if (name.endsWith(".csv")) {
     const text = await file.text();
     const rows = parseCsv(text);
-    return rows.map(function (row, idx) {
+    const out = rows.map(function (row, idx) {
       return { sheetName: "CSV", rowNumber: idx + 2, row: row };
     });
+    lastImportValidation = buildImportValidationReport(out);
+    return out;
   }
 
   if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
@@ -965,12 +1139,111 @@ async function parseInputFile(file) {
       }
     });
 
+    lastImportValidation = buildImportValidationReport(out);
     return out;
   }
 
   throw new Error("Formato nao suportado. Use CSV ou XLSX.");
 }
 
+
+function buildImportValidationReport(sourceRows) {
+  const rows = Array.isArray(sourceRows) ? sourceRows : [];
+  const knownSet = buildKnownHeaderSet();
+  const headersFound = [];
+  const headerSeen = new Set();
+  const headerNormalizedCount = {};
+  const preview = [];
+  const alerts = [];
+
+  rows.slice(0, 5).forEach(function (ctx) {
+    preview.push({
+      aba: ctx && ctx.sheetName ? ctx.sheetName : "CSV",
+      linha: ctx && ctx.rowNumber != null ? Number(ctx.rowNumber) : null,
+      dados: shallowCloneObj((ctx && ctx.row) || {})
+    });
+  });
+
+  rows.forEach(function (ctx) {
+    const row = (ctx && ctx.row) || {};
+    Object.keys(row).forEach(function (k) {
+      if (!headerSeen.has(k)) {
+        headerSeen.add(k);
+        headersFound.push(k);
+      }
+      const nk = normalizeHeader(k);
+      headerNormalizedCount[nk] = (headerNormalizedCount[nk] || 0) + 1;
+    });
+  });
+
+  const recognized = [];
+  const unrecognized = [];
+  headersFound.forEach(function (h) {
+    if (knownSet.has(normalizeHeader(h))) recognized.push(h);
+    else unrecognized.push(h);
+  });
+
+  const duplicated = Object.keys(headerNormalizedCount).filter(function (k) {
+    return headerNormalizedCount[k] > 1;
+  });
+
+  if (recognized.length < 3) alerts.push("Cabecalho suspeito: poucas colunas reconhecidas.");
+  if (duplicated.length) alerts.push("Colunas duplicadas detectadas: " + duplicated.join(", "));
+
+  const criticalEmpty = countCriticalEmpties(rows);
+  Object.keys(criticalEmpty).forEach(function (key) {
+    if (criticalEmpty[key] > 0) alerts.push("Campo critico vazio em " + key + ": " + String(criticalEmpty[key]) + " linha(s).");
+  });
+
+  return {
+    recognizedHeaders: recognized,
+    unrecognizedHeaders: unrecognized,
+    duplicatedHeaders: duplicated,
+    previewRows: preview,
+    detectedTypes: detectImportTypes(rows),
+    alerts: alerts
+  };
+}
+
+function buildKnownHeaderSet() {
+  const set = new Set();
+  Object.keys(IMPORT_ALIASES).forEach(function (key) {
+    (IMPORT_ALIASES[key] || []).forEach(function (alias) {
+      set.add(normalizeHeader(alias));
+    });
+  });
+  return set;
+}
+
+function countCriticalEmpties(rows) {
+  const counters = { identificacao: 0, deputado: 0, municipio: 0 };
+  rows.forEach(function (ctx) {
+    const mapped = mapImportRow(ctx);
+    if (!text(mapped.identificacao)) counters.identificacao += 1;
+    if (!text(mapped.deputado)) counters.deputado += 1;
+    if (!text(mapped.municipio)) counters.municipio += 1;
+  });
+  return counters;
+}
+
+function detectImportTypes(rows) {
+  const sample = rows.slice(0, 50).map(function (ctx) { return mapImportRow(ctx); });
+  return {
+    ano: detectType(sample.map(function (r) { return r.ano; })),
+    valor_inicial: detectType(sample.map(function (r) { return r.valor_inicial; })),
+    valor_atual: detectType(sample.map(function (r) { return r.valor_atual; })),
+    identificacao: detectType(sample.map(function (r) { return r.identificacao; })),
+    processo_sei: detectType(sample.map(function (r) { return r.processo_sei; }))
+  };
+}
+
+function detectType(values) {
+  const v = (values || []).filter(function (x) { return x != null && String(x).trim() !== ""; });
+  if (!v.length) return "vazio";
+  const allNum = v.every(function (x) { return Number.isFinite(Number(x)); });
+  if (allNum) return "numero";
+  return "texto";
+}
 function detectHeaderRow(matrix) {
   if (!Array.isArray(matrix) || !matrix.length) return null;
 
@@ -1089,17 +1362,6 @@ function generateRandomMultiUserDemo() {
         actor_role: u.role
       }));
     }
-
-    const nextOfficial = pickRandom(STATUS);
-    rec.eventos.unshift(mkEvent("OFFICIAL_STATUS", {
-      from: rec.status_oficial,
-      to: nextOfficial,
-      note: "Atualizacao oficial automatica de demonstracao.",
-      actor_user: "Carla",
-      actor_role: "SUPERVISAO"
-    }));
-
-    rec.status_oficial = nextOfficial;
     rec.updated_at = isoNow();
     syncCanonicalToAllFields(rec);
   });
@@ -1244,9 +1506,12 @@ function onAuthSuccess(resp) {
   setAuthenticatedUser(usuario);
   hideAuthGate();
   applyAccessProfile();
-  bootstrapApiIntegration();
+  bootstrapApiIntegration().finally(function () {
+    connectApiSocket();
+  });
   render();
 }
+
 
 function setAuthenticatedUser(usuario) {
   CURRENT_USER = String(usuario.nome || CURRENT_USER).trim() || CURRENT_USER;
@@ -1275,10 +1540,12 @@ async function logoutCurrentUser() {
     }
   }
   sessionStorage.removeItem(SESSION_TOKEN_KEY);
+  closeApiSocket();
 }
 
 async function initializeAuthFlow() {
   if (!isApiEnabled()) {
+    closeApiSocket();
     loadUserConfig(false);
     applyAccessProfile();
     bootstrapApiIntegration();
@@ -1287,6 +1554,7 @@ async function initializeAuthFlow() {
 
   const token = String(sessionStorage.getItem(SESSION_TOKEN_KEY) || "").trim();
   if (!token) {
+    closeApiSocket();
     redirectToAuth(AUTH_LOGIN_PAGE, "msg=" + encodeURIComponent("Entre para continuar."));
     return;
   }
@@ -1297,11 +1565,14 @@ async function initializeAuthFlow() {
     hideAuthGate();
     applyAccessProfile();
     await bootstrapApiIntegration();
+    connectApiSocket();
   } catch (_err) {
     sessionStorage.removeItem(SESSION_TOKEN_KEY);
+    closeApiSocket();
     redirectToAuth(AUTH_LOGIN_PAGE, "msg=" + encodeURIComponent("Sessao expirada. Faca login novamente."));
   }
 }
+
 
 function loadUserConfig(forcePrompt) {
   const legacyUser = localStorage.getItem("SEC_USER_ID");
@@ -1344,20 +1615,22 @@ function applyAccessProfile() {
 
 async function bootstrapApiIntegration() {
   if (!isApiEnabled()) {
+    closeApiSocket();
     apiOnline = false;
     applyAccessProfile();
     return;
   }
 
   try {
-    await apiRequest("GET", "/health");
-    const remoteList = await apiRequest("GET", "/emendas");
+    await apiRequest("GET", "/health", undefined, "API");
+    const remoteList = await apiRequest("GET", "/emendas", undefined, "API");
     mergeRemoteEmendas(Array.isArray(remoteList) ? remoteList : []);
     apiOnline = true;
     apiLastError = "";
   } catch (err) {
     apiOnline = false;
     apiLastError = err && err.message ? String(err.message) : "falha de conexao";
+    closeApiSocket();
     console.warn("API indisponivel, mantendo modo local:", apiLastError);
   }
 
@@ -1366,6 +1639,7 @@ async function bootstrapApiIntegration() {
   applyAccessProfile();
   render();
 }
+
 
 function mergeRemoteEmendas(remoteList) {
   const localByInternal = {};
@@ -1382,8 +1656,18 @@ function mergeRemoteEmendas(remoteList) {
     const local = localByInternal[idInterno];
     if (local) {
       local.backend_id = Number(re.id);
-      local.status_oficial = normalizeStatus(re.status_oficial || local.status_oficial);
       if (re.updated_at) local.updated_at = String(re.updated_at);
+
+      const remoteStatus = normalizeStatus(re.status_oficial || "");
+      if (remoteStatus && !latestMarkedStatus(local)) {
+        local.eventos.unshift(mkEvent("MARK_STATUS", {
+          to: remoteStatus,
+          note: "Status importado da API.",
+          actor_user: SYSTEM_MIGRATION_USER,
+          actor_role: SYSTEM_MIGRATION_ROLE
+        }));
+      }
+
       syncCanonicalToAllFields(local);
       return;
     }
@@ -1393,10 +1677,19 @@ function mergeRemoteEmendas(remoteList) {
       backend_id: Number(re.id),
       ano: toInt(re.ano) || currentYear(),
       identificacao: text(re.identificacao) || "-",
-      status_oficial: normalizeStatus(re.status_oficial || "Recebido"),
       updated_at: re.updated_at || isoNow(),
       eventos: [mkEvent("IMPORT", { note: "Carregado da API." })]
     });
+
+    const remoteStatusNovo = normalizeStatus(re.status_oficial || "");
+    if (remoteStatusNovo) {
+      novo.eventos.unshift(mkEvent("MARK_STATUS", {
+        to: remoteStatusNovo,
+        note: "Status importado da API.",
+        actor_user: SYSTEM_MIGRATION_USER,
+        actor_role: SYSTEM_MIGRATION_ROLE
+      }));
+    }
 
     state.records.push(novo);
   });
@@ -1408,7 +1701,7 @@ async function syncOfficialStatusToApi(rec, nextStatus, motivo) {
   await apiRequest("POST", "/emendas/" + String(backendId) + "/status", {
     novo_status: nextStatus,
     motivo: motivo
-  });
+  }, "UI");
   apiOnline = true;
   apiLastError = "";
   applyAccessProfile();
@@ -1417,7 +1710,7 @@ async function syncOfficialStatusToApi(rec, nextStatus, motivo) {
 async function syncGenericEventToApi(rec, payload) {
   if (!isApiEnabled()) return;
   const backendId = await ensureBackendEmenda(rec);
-  await apiRequest("POST", "/emendas/" + String(backendId) + "/eventos", payload);
+  await apiRequest("POST", "/emendas/" + String(backendId) + "/eventos", payload, payload && payload.origem_evento ? payload.origem_evento : "UI");
   apiOnline = true;
   apiLastError = "";
   applyAccessProfile();
@@ -1432,7 +1725,7 @@ async function ensureBackendEmenda(rec) {
     return rec.backend_id;
   }
 
-  const remoteList = await apiRequest("GET", "/emendas");
+  const remoteList = await apiRequest("GET", "/emendas", undefined, "API");
   const found = (Array.isArray(remoteList) ? remoteList : []).find(function (x) {
     return text(x.id_interno) === rec.id;
   });
@@ -1447,14 +1740,112 @@ async function ensureBackendEmenda(rec) {
     id_interno: rec.id,
     ano: toInt(rec.ano) || currentYear(),
     identificacao: rec.identificacao || "-",
-    status_oficial: normalizeStatus(rec.status_oficial || "Recebido")
-  });
+    status_oficial: deriveStatusForBackend(rec)
+  }, "IMPORT");
 
   rec.backend_id = created && created.id != null ? Number(created.id) : null;
   if (rec.backend_id) apiEmendaIdByInterno[rec.id] = rec.backend_id;
   return rec.backend_id;
 }
 
+
+function getApiWebSocketUrl() {
+  const base = getApiBaseUrl();
+  if (!base) return "";
+  if (base.indexOf("https://") === 0) return "wss://" + base.slice(8) + API_WS_PATH;
+  if (base.indexOf("http://") === 0) return "ws://" + base.slice(7) + API_WS_PATH;
+  return "";
+}
+
+function clearApiSocketReconnectTimer() {
+  if (!apiSocketReconnectTimer) return;
+  clearTimeout(apiSocketReconnectTimer);
+  apiSocketReconnectTimer = null;
+}
+
+function closeApiSocket() {
+  clearApiSocketReconnectTimer();
+  if (apiSocket) {
+    try { apiSocket.onopen = null; apiSocket.onmessage = null; apiSocket.onerror = null; apiSocket.onclose = null; } catch (_err) {}
+    try { apiSocket.close(); } catch (_err) {}
+    apiSocket = null;
+  }
+}
+
+function scheduleApiSocketReconnect() {
+  clearApiSocketReconnectTimer();
+  const token = String(sessionStorage.getItem(SESSION_TOKEN_KEY) || "").trim();
+  if (!isApiEnabled() || !token) return;
+
+  const waitMs = Math.max(WS_RECONNECT_BASE_MS, Math.min(apiSocketBackoffMs, WS_RECONNECT_MAX_MS));
+  apiSocketReconnectTimer = setTimeout(function () {
+    connectApiSocket();
+  }, waitMs);
+  apiSocketBackoffMs = Math.min(WS_RECONNECT_MAX_MS, Math.floor(waitMs * 1.8));
+}
+
+function queueApiRefreshFromSocket() {
+  if (apiRefreshRunning) return;
+  if (apiRefreshTimer) clearTimeout(apiRefreshTimer);
+  apiRefreshTimer = setTimeout(async function () {
+    apiRefreshTimer = null;
+    if (apiRefreshRunning) return;
+    apiRefreshRunning = true;
+    try {
+      await bootstrapApiIntegration();
+    } catch (_err) {
+      // bootstrap ja trata erro internamente
+    } finally {
+      apiRefreshRunning = false;
+    }
+  }, WS_REFRESH_DEBOUNCE_MS);
+}
+
+
+function connectApiSocket() {
+  closeApiSocket();
+
+  if (typeof WebSocket === "undefined") return;
+  if (!isApiEnabled()) return;
+
+  const token = String(sessionStorage.getItem(SESSION_TOKEN_KEY) || "").trim();
+  if (!token) return;
+
+  const wsBase = getApiWebSocketUrl();
+  if (!wsBase) return;
+
+  const wsUrl = wsBase + "?token=" + encodeURIComponent(token);
+  try {
+    apiSocket = new WebSocket(wsUrl);
+  } catch (_err) {
+    scheduleApiSocketReconnect();
+    return;
+  }
+
+  apiSocket.onopen = function () {
+    apiSocketBackoffMs = WS_RECONNECT_BASE_MS;
+  };
+
+  apiSocket.onmessage = function (evt) {
+    const raw = evt && evt.data ? String(evt.data) : "";
+    if (!raw) return;
+
+    let data = null;
+    try { data = JSON.parse(raw); } catch (_err) { return; }
+    if (!data || data.type !== "update") return;
+
+    queueApiRefreshFromSocket();
+  };
+
+  apiSocket.onerror = function () {
+    // onclose trata reconexao
+  };
+
+  apiSocket.onclose = function () {
+    apiSocket = null;
+    scheduleApiSocketReconnect();
+  };
+}
 function isApiEnabled() {
   const raw = localStorage.getItem(API_ENABLED_KEY);
   if (raw == null || raw === "") return true;
@@ -1467,9 +1858,9 @@ function getApiBaseUrl() {
   return base.replace(/\/+$/, "");
 }
 
-async function apiRequest(method, path, body) {
+async function apiRequest(method, path, body, eventOrigin) {
   const url = getApiBaseUrl() + path;
-  const opts = { method: method, headers: buildApiHeaders() };
+  const opts = { method: method, headers: buildApiHeaders(eventOrigin) };
   if (body !== undefined) {
     opts.headers["Content-Type"] = "application/json";
     opts.body = JSON.stringify(body);
@@ -1492,6 +1883,7 @@ async function apiRequest(method, path, body) {
     applyAccessProfile();
     if (resp.status === 401 && isApiEnabled()) {
       sessionStorage.removeItem(SESSION_TOKEN_KEY);
+  closeApiSocket();
       showAuthGate("Sessao expirada. Faca login novamente.");
     }
     throw new Error(apiLastError + "::" + t);
@@ -1527,14 +1919,21 @@ async function apiRequestPublic(method, path, body) {
   return null;
 }
 
-function buildApiHeaders() {
+function buildApiHeaders(eventOrigin) {
   const headers = {
     "X-User-Name": CURRENT_USER,
     "X-User-Role": CURRENT_ROLE
   };
 
+  const origin = String(eventOrigin || API_DEFAULT_EVENT_ORIGIN).trim().toUpperCase();
+  if (origin) headers["X-Event-Origin"] = origin;
+
   const token = String(sessionStorage.getItem(SESSION_TOKEN_KEY) || "").trim();
-  if (token) headers["X-Session-Token"] = token;
+  if (token) {
+    headers["Authorization"] = "Bearer " + token;
+    // Compatibilidade com backend antigo.
+    headers["X-Session-Token"] = token;
+  }
 
   const key = String(sessionStorage.getItem(API_SHARED_KEY_SESSION_KEY) || "").trim();
   if (key) headers["X-API-Key"] = key;
@@ -1630,6 +2029,77 @@ function normalizeRecordShape(raw) {
   return rec;
 }
 
+
+function migrateLegacyStatusRecords(records) {
+  (records || []).forEach(function (rec) {
+    const events = Array.isArray(rec && rec.eventos) ? rec.eventos : [];
+    const hasMark = events.some(function (ev) { return ev && ev.type === "MARK_STATUS"; });
+    const legacyStatus = normalizeStatus(rec && rec.status_oficial ? rec.status_oficial : "");
+
+    if (!hasMark && legacyStatus) {
+      events.unshift(mkEvent("MARK_STATUS", {
+        to: legacyStatus,
+        note: "Migracao automatica de status legado.",
+        actor_user: SYSTEM_MIGRATION_USER,
+        actor_role: SYSTEM_MIGRATION_ROLE
+      }));
+      rec.eventos = events;
+      rec.updated_at = rec.updated_at || isoNow();
+    }
+
+    if (rec && Object.prototype.hasOwnProperty.call(rec, "status_oficial")) {
+      rec.status_oficial = "";
+    }
+  });
+}
+
+function latestMarkedStatus(rec) {
+  const events = getEventsSorted(rec || {});
+  for (let i = 0; i < events.length; i += 1) {
+    const ev = events[i];
+    if (ev && ev.type === "MARK_STATUS" && ev.to) return normalizeStatus(ev.to);
+  }
+  return "";
+}
+
+function deriveStatusForBackend(rec) {
+  return latestMarkedStatus(rec) || "Recebido";
+}
+
+function setupCrossTabSync() {
+  if (stateChannel) {
+    stateChannel.onmessage = function (evt) {
+      const data = evt && evt.data ? evt.data : null;
+      if (!data || data.type !== "state_updated") return;
+      if (data.tabId && data.tabId === LOCAL_TAB_ID) return;
+      refreshStateFromStorage();
+    };
+  }
+
+  if (typeof window !== "undefined") {
+    window.addEventListener("storage", function (e) {
+      if (!e) return;
+      if (e.key !== STORAGE_KEY && e.key !== CROSS_TAB_PING_KEY) return;
+      refreshStateFromStorage();
+    });
+  }
+}
+
+function notifyStateUpdated() {
+  if (stateChannel) {
+    stateChannel.postMessage({ type: "state_updated", at: Date.now(), tabId: LOCAL_TAB_ID });
+  }
+  localStorage.setItem(CROSS_TAB_PING_KEY, String(Date.now()));
+}
+
+function refreshStateFromStorage() {
+  const loaded = loadState();
+  state = { records: (loaded.records || []).map(normalizeRecordShape) };
+  migrateLegacyStatusRecords(state.records);
+  syncReferenceKeys(state.records);
+  syncYearFilter();
+  render();
+}
 function loadState() {
   try {
     const primary = getPrimaryStorage();
@@ -1659,14 +2129,29 @@ function loadState() {
   }
 }
 
-function saveState() {
+function saveState(silentSync) {
+  syncActiveUsersCache(state.records || []);
   const data = JSON.stringify(state);
   const primary = getPrimaryStorage();
   const secondary = getSecondaryStorage();
   primary.setItem(STORAGE_KEY, data);
   secondary.removeItem(STORAGE_KEY);
+  if (!silentSync) notifyStateUpdated();
 }
 
+
+function syncActiveUsersCache(records) {
+  (records || []).forEach(function (rec) {
+    rec.active_users = getActiveUsersWithLastMark(rec).map(function (u) {
+      return {
+        name: u.name,
+        role: u.role,
+        lastStatus: u.lastStatus,
+        lastAt: u.lastAt
+      };
+    });
+  });
+}
 function buildIdCounters(records) {
   const counters = {};
   records.forEach(function (r) {
@@ -1787,7 +2272,6 @@ function syncCanonicalToAllFields(record) {
   upsertRawField(record.all_fields, "valor_inicial", record.valor_inicial);
   upsertRawField(record.all_fields, "valor_atual", record.valor_atual);
   upsertRawField(record.all_fields, "processo_sei", record.processo_sei);
-  upsertRawField(record.all_fields, "status_oficial", record.status_oficial);
 }
 
 function upsertRawField(rawObj, canonicalKey, value) {
@@ -1856,6 +2340,7 @@ function buildImportSummaryHtml(report) {
     + "<div class=\"import-tabs\" role=\"tablist\" aria-label=\"Abas do relatorio de importacao\">"
     + "  <button type=\"button\" class=\"import-tab-btn active\" data-import-tab=\"resumo\" role=\"tab\" aria-selected=\"true\">Resumo da importacao</button>"
     + "  <button type=\"button\" class=\"import-tab-btn\" data-import-tab=\"planilha1\" role=\"tab\" aria-selected=\"false\">Planilha1 (Deputados)</button>"
+    + "  <button type=\"button\" class=\"import-tab-btn\" data-import-tab=\"validacao\" role=\"tab\" aria-selected=\"false\">Validacao</button>"
     + "</div>"
     + "<div class=\"import-tab-panels\">"
     + "  <section class=\"import-tab-panel active entering\" data-import-panel=\"resumo\">"
@@ -1876,9 +2361,45 @@ function buildImportSummaryHtml(report) {
     + "    <h4 style=\"margin-bottom:8px\">Resumo por deputado (Planilha1)</h4>"
     + planilha1Html
     + "  </section>"
+    + "  <section class=\"import-tab-panel\" data-import-panel=\"validacao\">"
+    + buildImportValidationHtml(report.validation)
+    + "  </section>"
     + "</div>";
 }
 
+function buildImportValidationHtml(validation) {
+  const v = validation || {};
+  const recognized = Array.isArray(v.recognizedHeaders) ? v.recognizedHeaders : [];
+  const unrecognized = Array.isArray(v.unrecognizedHeaders) ? v.unrecognizedHeaders : [];
+  const duplicated = Array.isArray(v.duplicatedHeaders) ? v.duplicatedHeaders : [];
+  const alerts = Array.isArray(v.alerts) ? v.alerts : [];
+  const preview = Array.isArray(v.previewRows) ? v.previewRows : [];
+  const types = v.detectedTypes || {};
+
+  let html = ""
+    + "<h4>Relatorio de validacao</h4>"
+    + "<div class=\"kv\" style=\"margin-top:8px\">"
+    + "  <div class=\"k\">Colunas reconhecidas</div><div class=\"v\">" + escapeHtml(recognized.join(", ") || "-") + "</div>"
+    + "  <div class=\"k\">Colunas nao reconhecidas</div><div class=\"v\">" + escapeHtml(unrecognized.join(", ") || "-") + "</div>"
+    + "  <div class=\"k\">Colunas duplicadas</div><div class=\"v\">" + escapeHtml(duplicated.join(", ") || "-") + "</div>"
+    + "  <div class=\"k\">Tipos detectados</div><div class=\"v\">" + escapeHtml(JSON.stringify(types)) + "</div>"
+    + "</div>";
+
+  if (alerts.length) {
+    html += "<div style=\"margin-top:8px\"><b>Alertas</b><ul>" + alerts.map(function (a) { return "<li>" + escapeHtml(a) + "</li>"; }).join("") + "</ul></div>";
+  }
+
+  if (preview.length) {
+    html += "<div style=\"margin-top:8px\"><b>Preview (5 linhas)</b>";
+    html += "<div class=\"table-wrap\"><table class=\"table\" style=\"min-width:720px\"><thead><tr><th>Aba</th><th>Linha</th><th>Dados</th></tr></thead><tbody>";
+    preview.forEach(function (row) {
+      html += "<tr><td>" + escapeHtml(row.aba || "-") + "</td><td>" + escapeHtml(String(row.linha || "-")) + "</td><td><code>" + escapeHtml(JSON.stringify(row.dados)) + "</code></td></tr>";
+    });
+    html += "</tbody></table></div></div>";
+  }
+
+  return html;
+}
 function buildRecentChangesPanelHtml(items) {
   if (!items.length) {
     return ""
@@ -1945,7 +2466,7 @@ function describeEventForPanel(item) {
   if (!item) return "Alteracao registrada";
 
   if (item.type === "OFFICIAL_STATUS") {
-    return "Status oficial: " + text(item.from || "-") + " -> " + text(item.to || "-");
+    return "Status oficial legado: " + text(item.from || "-") + " -> " + text(item.to || "-");
   }
   if (item.type === "MARK_STATUS") {
     return "Marcacao de status: " + text(item.to || "-");
@@ -2024,6 +2545,85 @@ function hideImportReport() {
   latestImportReport = null;
   renderImportDashboard();
 }
+
+function quickHashString(input) {
+  let hash = 2166136261;
+  const str = String(input || "");
+  for (let i = 0; i < str.length; i += 1) {
+    hash ^= str.charCodeAt(i);
+    hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+function getCurrentFilterSnapshot() {
+  return {
+    status: statusFilter ? statusFilter.value : "",
+    ano: yearFilter ? yearFilter.value : "",
+    busca: searchInput ? (searchInput.value || "").trim() : ""
+  };
+}
+
+function countAuditEvents(records) {
+  return (records || []).reduce(function (acc, rec) {
+    return acc + ((rec && Array.isArray(rec.eventos)) ? rec.eventos.length : 0);
+  }, 0);
+}
+
+async function syncImportBatchToApi(file, report) {
+  if (!isApiEnabled()) return;
+  const payload = {
+    arquivo_nome: file && file.name ? file.name : (report.fileName || "importacao"),
+    arquivo_hash: quickHashString((file && file.name ? file.name : "") + "|" + (file && file.size ? file.size : 0) + "|" + (file && file.lastModified ? file.lastModified : 0) + "|" + (report.totalRows || 0) + "|" + (report.created || 0) + "|" + (report.updated || 0)),
+    linhas_lidas: report.totalRows || 0,
+    linhas_validas: report.consideredRows || 0,
+    linhas_ignoradas: report.skippedRows || 0,
+    registros_criados: report.created || 0,
+    registros_atualizados: report.updated || 0,
+    sem_alteracao: report.unchanged || 0,
+    duplicidade_id: report.duplicateById || 0,
+    duplicidade_ref: report.duplicateByRef || 0,
+    duplicidade_arquivo: report.duplicateInFile || 0,
+    conflito_id_ref: report.conflictIdVsRef || 0,
+    abas_lidas: report.sheetNames || [],
+    observacao: "Importacao via interface web",
+    origem_evento: "IMPORT"
+  };
+
+  try {
+    await apiRequest("POST", "/imports/lotes", payload, "IMPORT");
+    apiOnline = true;
+    apiLastError = "";
+    applyAccessProfile();
+  } catch (err) {
+    handleApiSyncError(err, "lote de importacao");
+  }
+}
+
+async function syncExportLogToApi(meta) {
+  if (!isApiEnabled()) return;
+  const payload = {
+    formato: String(meta && meta.formato ? meta.formato : "CSV").toUpperCase(),
+    arquivo_nome: meta && meta.arquivoNome ? meta.arquivoNome : "exportacao",
+    quantidade_registros: meta && Number.isFinite(Number(meta.quantidadeRegistros)) ? Number(meta.quantidadeRegistros) : 0,
+    quantidade_eventos: meta && Number.isFinite(Number(meta.quantidadeEventos)) ? Number(meta.quantidadeEventos) : 0,
+    filtros_json: JSON.stringify(meta && meta.filtros ? meta.filtros : {}),
+    modo_headers: meta && meta.modoHeaders ? meta.modoHeaders : "normalizados",
+    round_trip_ok: meta && Object.prototype.hasOwnProperty.call(meta, "roundTripOk") ? meta.roundTripOk : null,
+    round_trip_issues: meta && Array.isArray(meta.roundTripIssues) ? meta.roundTripIssues : [],
+    origem_evento: "EXPORT"
+  };
+
+  try {
+    await apiRequest("POST", "/exports/logs", payload, "EXPORT");
+    apiOnline = true;
+    apiLastError = "";
+    applyAccessProfile();
+  } catch (err) {
+    handleApiSyncError(err, "log de exportacao");
+  }
+}
+
 function toCsv(records) {
   const table = buildExportTableData(records);
   const headers = table.headers;
@@ -2034,14 +2634,15 @@ function toCsv(records) {
   return lines.join("\n");
 }
 
-function exportRecordsToXlsx(records, filename) {
+function exportRecordsToXlsx(records, filename, options) {
   const xlsxApi = typeof window !== "undefined" ? window.XLSX : null;
   if (!xlsxApi) {
     alert("Biblioteca XLSX nao carregada.");
-    return;
+    return null;
   }
 
-  const dataTable = buildExportTableData(records);
+  const opts = options || {};
+  const dataTable = buildExportTableData(records, opts);
   const dataAoa = [dataTable.headers].concat(dataTable.rows.map(function (rowObj) {
     return dataTable.headers.map(function (h) { return rowObj[h] == null ? "" : rowObj[h]; });
   }));
@@ -2059,11 +2660,29 @@ function exportRecordsToXlsx(records, filename) {
   const wb = xlsxApi.utils.book_new();
   xlsxApi.utils.book_append_sheet(wb, wsPlanilha1, "Planilha1");
   xlsxApi.utils.book_append_sheet(wb, wsData, "Controle de EPI");
-  xlsxApi.utils.book_append_sheet(wb, wsAudit, "Resumo_AuditLog");
+  xlsxApi.utils.book_append_sheet(wb, wsAudit, "AuditLog");
+
+  let roundTrip = null;
+  if (opts.roundTripCheck) {
+    const check = runRoundTripCheck(wb, dataTable.headers);
+    roundTrip = check;
+    if (!check.ok) {
+      alert("Round-trip check encontrou divergencias\n" + check.issues.join("\n"));
+    }
+  }
+
   xlsxApi.writeFile(wb, filename || ("emendas_export_" + dateStamp() + ".xlsx"));
+  return {
+    totalRegistros: records.length,
+    totalEventos: auditTable.rows.length,
+    roundTrip: roundTrip
+  };
 }
 
-function buildExportTableData(records) {
+function buildExportTableData(records, options) {
+  const opts = options || {};
+  const useOriginal = !!opts.useOriginalHeaders;
+
   const extraHeaders = [];
   const extraSet = new Set();
 
@@ -2077,20 +2696,32 @@ function buildExportTableData(records) {
     });
   });
 
-  const systemHeaders = ["id_interno_sistema", "backend_id", "status_oficial_sistema", "ref_key", "created_at", "updated_at", "source_sheet", "source_row"];
-  const headers = extraHeaders.concat(systemHeaders);
+  const normalizedHeaders = ["id", "ano", "identificacao", "cod_subfonte", "deputado", "cod_uo", "sigla_uo", "cod_orgao", "cod_acao", "descricao_acao", "municipio", "valor_inicial", "valor_atual", "processo_sei"];
+  const systemHeaders = ["id_interno_sistema", "backend_id", "usuarios_ativos", "progresso", "global_state", "ref_key", "created_at", "updated_at", "source_sheet", "source_row"];
+  const headers = (useOriginal ? extraHeaders : normalizedHeaders).concat(systemHeaders);
 
   const rows = records.map(function (r) {
     const out = {};
     const raw = r && r.all_fields && typeof r.all_fields === "object" ? r.all_fields : {};
+    const users = getActiveUsersWithLastMark(r);
+    const progress = calcProgress(users);
+    const global = getGlobalProgressState(users);
 
-    extraHeaders.forEach(function (h) {
-      out[h] = raw[h] == null ? "" : raw[h];
-    });
+    if (useOriginal) {
+      extraHeaders.forEach(function (h) {
+        out[h] = raw[h] == null ? "" : raw[h];
+      });
+    } else {
+      normalizedHeaders.forEach(function (h) {
+        out[h] = r[h] == null ? "" : r[h];
+      });
+    }
 
     out.id_interno_sistema = r.id || "";
     out.backend_id = r.backend_id == null ? "" : r.backend_id;
-    out.status_oficial_sistema = r.status_oficial || "";
+    out.usuarios_ativos = users.map(function (u) { return u.name + " (" + (u.role || "-") + ")"; }).join(" | ");
+    out.progresso = String(progress.concl) + "/" + String(progress.total) + " (" + String(progress.percent) + "%)";
+    out.global_state = global.label;
     out.ref_key = r.ref_key || "";
     out.created_at = r.created_at || "";
     out.updated_at = r.updated_at || "";
@@ -2108,7 +2739,9 @@ function buildAuditLogTableData(records) {
     "identificacao",
     "municipio",
     "deputado",
-    "status_oficial_atual",
+    "usuarios_ativos",
+    "progresso",
+    "global_state",
     "data_hora_evento",
     "tipo_evento",
     "usuario",
@@ -2124,13 +2757,20 @@ function buildAuditLogTableData(records) {
   const rows = [];
   records.forEach(function (r) {
     const orderedEvents = getEventsSorted(r);
+    const users = getActiveUsersWithLastMark(r);
+    const progress = calcProgress(users);
+    const global = getGlobalProgressState(users);
+    const usersList = users.map(function (u) { return u.name; }).join(" | ");
+
     orderedEvents.forEach(function (ev) {
       rows.push({
         id_interno_sistema: r.id || "",
         identificacao: r.identificacao || "",
         municipio: r.municipio || "",
         deputado: r.deputado || "",
-        status_oficial_atual: r.status_oficial || "",
+        usuarios_ativos: usersList,
+        progresso: String(progress.concl) + "/" + String(progress.total) + " (" + String(progress.percent) + "%)",
+        global_state: global.label,
         data_hora_evento: ev.at || "",
         tipo_evento: ev.type || "",
         usuario: ev.actor_user || "",
@@ -2156,14 +2796,11 @@ function buildAuditLogTableData(records) {
 
 function buildSummaryAoa(records, totalEvents) {
   const now = new Date().toISOString();
-  const byStatus = {};
-  STATUS.forEach(function (s) {
-    byStatus[s] = 0;
-  });
+  const byGlobal = { done: 0, in_progress: 0, attention: 0, no_marks: 0 };
 
   records.forEach(function (r) {
-    const st = normalizeStatus(r.status_oficial);
-    byStatus[st] = (byStatus[st] || 0) + 1;
+    const global = getGlobalProgressState(getActiveUsersWithLastMark(r));
+    byGlobal[global.code] = (byGlobal[global.code] || 0) + 1;
   });
 
   const out = [
@@ -2172,14 +2809,60 @@ function buildSummaryAoa(records, totalEvents) {
     ["Total de emendas", records.length],
     ["Total de eventos (audit log)", totalEvents],
     [],
-    ["Status Oficial", "Quantidade"]
+    ["Andamento Global", "Quantidade"],
+    ["Concluido global", byGlobal.done || 0],
+    ["Em andamento", byGlobal.in_progress || 0],
+    ["Atencao", byGlobal.attention || 0],
+    ["Sem marcacoes", byGlobal.no_marks || 0]
   ];
 
-  STATUS.forEach(function (s) {
-    out.push([s, byStatus[s] || 0]);
-  });
-
   return out;
+}
+
+function runRoundTripCheck(workbook, headers) {
+  try {
+    const xlsxApi = typeof window !== "undefined" ? window.XLSX : null;
+    if (!xlsxApi) return { ok: true, issues: [] };
+
+    const arr = xlsxApi.write(workbook, { type: "array", bookType: "xlsx" });
+    const wb2 = xlsxApi.read(arr, { type: "array" });
+    const ws = wb2.Sheets["Controle de EPI"];
+    const aoa = xlsxApi.utils.sheet_to_json(ws, { header: 1, defval: "", raw: false, blankrows: false });
+    const issues = [];
+
+    if (!aoa.length) return { ok: false, issues: ["Planilha de retorno vazia."] };
+
+    const head2 = aoa[0] || [];
+    if (head2.length !== headers.length) {
+      issues.push("Quantidade de colunas mudou no round-trip.");
+    }
+
+    const rowCount = Math.max(0, aoa.length - 1);
+    if (rowCount <= 0) issues.push("Nenhuma linha de dados apos round-trip.");
+
+    const wanted = ["id_interno_sistema", "identificacao", "municipio", "deputado", "processo_sei", "valor_atual"];
+    const idx = {};
+    wanted.forEach(function (k) { idx[k] = head2.indexOf(k); });
+    const missingCols = wanted.filter(function (k) { return idx[k] < 0; });
+    if (missingCols.length) {
+      issues.push("Campos-chave ausentes no round-trip: " + missingCols.join(", "));
+    }
+
+    if (!missingCols.length && rowCount > 0) {
+      const limit = Math.min(rowCount, 20);
+      for (let i = 1; i <= limit; i += 1) {
+        const row = aoa[i] || [];
+        if (!String(row[idx.id_interno_sistema] || "").trim()) {
+          issues.push("Linha " + String(i + 1) + " sem id_interno_sistema apos round-trip.");
+          break;
+        }
+      }
+    }
+
+    return { ok: issues.length === 0, issues: issues };
+  } catch (err) {
+    return { ok: false, issues: ["Falha no round-trip: " + (err && err.message ? err.message : "erro desconhecido")] };
+  }
 }
 
 function buildPlanilha1Aoa(records) {

@@ -1,45 +1,42 @@
 # CONCILIAR_DADOS
 
-Sistema para conciliação e governança de dados de emendas, com rastreabilidade de alterações por usuário.
-
-## Objetivo
-
-Reduzir dependência de planilhas como fonte principal e centralizar o fluxo em aplicação web + API + banco de dados.
+Sistema de governanca de emendas com trilha de auditoria por usuario.
 
 ## Stack
-
-- Frontend: HTML, CSS e JavaScript
+- Frontend: HTML, CSS, JavaScript
 - Backend: Python + FastAPI
-- Banco: PostgreSQL (produção) ou SQLite (teste local)
+- Banco: SQLite (local) ou PostgreSQL (rede/producao)
 
-## Estrutura
+## Execucao padrao (Etapa 0)
+Use sempre estes 3 comandos para evitar oscilacao de ambiente.
 
-- `index.html`, `cadastro.html`, `login.html`: telas principais
-- `app.js`, `style.css`: lógica e estilos do frontend
-- `backend/`: API, modelos e scripts de execução
-
-## Execução rápida do backend
-
+### Terminal 1 - API
 ```powershell
-cd backend
-py -3.11 -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install --upgrade pip
-pip install -r requirements.txt
-powershell -ExecutionPolicy Bypass -File .\switch_to_sqlite.ps1
-uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+powershell -ExecutionPolicy Bypass -File .\scripts\start_api.ps1
 ```
 
-Health check:
-
+### Terminal 2 - Front
 ```powershell
-Invoke-RestMethod http://127.0.0.1:8000/health
+powershell -ExecutionPolicy Bypass -File .\scripts\start_front.ps1
 ```
 
-## Perfis de acesso
+### Terminal 3 - Smoke test E2E
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\smoke_e2e.ps1
+```
 
-`APG`, `SUPERVISAO`, `CONTABIL`, `POWERBI`, `PROGRAMADOR`
+## URLs
+- Front: http://127.0.0.1:5500/login.html
+- API: http://127.0.0.1:8000
+- Health: http://127.0.0.1:8000/health
 
-## Licença
+## Perfis
+- APG
+- SUPERVISAO
+- CONTABIL
+- POWERBI
+- PROGRAMADOR
 
-Este projeto está licenciado sob a licença MIT. Veja `LICENSE`.
+## Observacao
+- O script de smoke detecta automaticamente se a API esta usando `Bearer` ou `X-Session-Token`.
+- Se houver banco legado sem historico Alembic, use: `alembic stamp head`.

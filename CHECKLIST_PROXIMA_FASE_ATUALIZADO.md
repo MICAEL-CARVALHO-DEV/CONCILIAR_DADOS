@@ -21,32 +21,32 @@ Legenda:
 ## 3. Regras de permissao
 - [x] APG/SUPERVISAO/PROGRAMADOR podem alterar status oficial
 - [x] Mudancas de status oficial exigem motivo
-- [~] Regras completas de workflow (transicoes permitidas)
+- [x] Regras completas de workflow (transicoes permitidas)
 - [x] Perfil supervisor/programador com visao geral
 
 ## 4. Historico e linha do tempo (audit log)
 - [x] Eventos por usuario/perfil/data-hora
 - [x] Timeline por emenda no detalhe
 - [x] Painel inicial com ultimas alteracoes e autor
-- [~] Rastreio formal de origem do evento (UI/API/IMPORT/EXPORT)
+- [x] Rastreio formal de origem do evento (UI/API/IMPORT/EXPORT)
 - [ ] Politica append-only homologada com TI
 
 ## 5. Importacao (CSV/XLSX)
 - [x] Importacao de CSV/XLSX funcionando
 - [x] Resumo de importacao na tela
 - [x] Deteccao de duplicidade por ID/chave de referencia
-- [~] Registro formal de lote (arquivo, hash, responsavel)
+- [x] Registro formal de lote (arquivo, hash, responsavel)
 - [ ] Registro detalhado por linha importada (`import_linhas`)
 
 ## 6. Exportacao (CSV/XLSX)
 - [x] Exportacao CSV/XLSX funcionando
 - [~] Exportacao com base no estado consolidado
-- [ ] Log formal de exportacao (usuario, filtros, quantidade)
+- [x] Log formal de exportacao (usuario, filtros, quantidade)
 - [ ] Persistir arquivo exportado em pasta de rede (historico + atual)
 
 ## 7. Estrutura de banco (PostgreSQL)
 - [x] Estrutura inicial de usuarios/emendas/historico
-- [~] Estrutura ampliada para lotes de importacao/exportacao
+- [x] Estrutura ampliada para lotes de importacao/exportacao
 - [ ] Indices e constraints finais de producao
 - [ ] Migracoes versionadas completas (Alembic)
 
@@ -97,3 +97,6 @@ Legenda:
 - [ ] 0 dependencia de Excel como fonte principal
 - [ ] Importacao/exportacao com trilha auditavel fim a fim
 - [ ] Supervisor com visao geral e governanca operacional
+
+
+
