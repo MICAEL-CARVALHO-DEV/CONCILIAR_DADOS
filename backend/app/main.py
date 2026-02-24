@@ -386,6 +386,17 @@ def _ensure_legacy_schema() -> None:
                     conn.execute(text(st))
 
 
+    if "export_logs" in tables:
+        cols = {c["name"] for c in insp.get_columns("export_logs")}
+        statements = []
+        if "escopo_exportacao" not in cols:
+            statements.append("ALTER TABLE export_logs ADD COLUMN escopo_exportacao VARCHAR(20) NOT NULL DEFAULT 'ATUAIS'")
+
+        if statements:
+            with engine.begin() as conn:
+                for st in statements:
+                    conn.execute(text(st))
+
 def _versioned_id_interno(base_id: str, version_num: int, db: Session) -> str:
     raw_base = (base_id or "").strip() or "EMENDA"
     m = VERSIONED_ID_RE.match(raw_base)
@@ -860,7 +871,7 @@ def listar_linhas_importacao(
 @app.post("/exports/logs")
 def criar_log_exportacao(
     payload: ExportLogCreate,
-    actor: dict = Depends(_require_manager),
+    actor: dict = Depends(_actor_from_headers),
     db: Session = Depends(get_db),
 ):
     log = ExportLog(
@@ -870,6 +881,7 @@ def criar_log_exportacao(
         quantidade_eventos=max(0, int(payload.quantidade_eventos or 0)),
         filtros_json=payload.filtros_json or "",
         modo_headers=(payload.modo_headers or "normalizados")[:30],
+        escopo_exportacao=(payload.escopo_exportacao or "ATUAIS")[:20],
         round_trip_ok=payload.round_trip_ok,
         round_trip_issues=" | ".join([x for x in (payload.round_trip_issues or []) if str(x).strip()]),
         origem_evento=_resolve_event_origin(payload.origem_evento, actor, fallback="EXPORT"),
@@ -954,3 +966,6 @@ async def websocket_updates(websocket: WebSocket):
         await ws_broker.disconnect(websocket)
     except Exception:
         await ws_broker.disconnect(websocket)
+
+
+

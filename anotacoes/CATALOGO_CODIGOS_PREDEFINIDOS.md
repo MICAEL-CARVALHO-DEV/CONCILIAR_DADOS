@@ -46,3 +46,9 @@
 ## Regra operacional atual
 - Fluxo oficial com arquivo `.xlsx`.
 - Nao misturar dados demo com dados reais.
+
+## Exportacao - escopo auditavel
+- Enum de escopo no front: `EXPORT_SCOPE`
+- Valores: `ATUAIS`, `HISTORICO`, `PERSONALIZADO`
+- Campo de auditoria no backend (`export_logs`): `escopo_exportacao`
+- Default retrocompativel quando ausente: `ATUAIS`

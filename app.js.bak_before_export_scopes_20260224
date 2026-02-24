@@ -28,16 +28,6 @@ const STATUS_FILTERS = [
   { label: "Sem marcacoes", value: "no_marks" }
 ];
 
-const EXPORT_SCOPE = Object.freeze({
-  ATUAIS: "ATUAIS",
-  HISTORICO: "HISTORICO",
-  PERSONALIZADO: "PERSONALIZADO"
-});
-const EXPORT_SCOPE_SUFFIX = Object.freeze({
-  ATUAIS: "atual",
-  HISTORICO: "historico",
-  PERSONALIZADO: "custom"
-});
 const CROSS_TAB_CHANNEL_NAME = "sec_emendas";
 const CROSS_TAB_PING_KEY = "SEC_STATE_PING";
 const LOCAL_TAB_ID = "tab_" + Math.random().toString(36).slice(2) + "_" + Date.now();
@@ -206,7 +196,6 @@ let apiSocketBackoffMs = WS_RECONNECT_BASE_MS;
 let apiRefreshTimer = null;
 let apiRefreshRunning = false;
 let latestImportReport = null;
-let latestExportReport = null;
 let lastImportValidation = null;
 let lastImportedWorkbookTemplate = null;
 let lastImportedPlanilha1Aoa = null;
@@ -240,9 +229,8 @@ const conflictText = document.getElementById("conflictText");
 const marksSummary = document.getElementById("marksSummary");
 const rawFields = document.getElementById("rawFields");
 
-const btnExportAtuais = document.getElementById("btnExportAtuais");
-const btnExportHistorico = document.getElementById("btnExportHistorico");
-const btnExportCustom = document.getElementById("btnExportCustom");
+const btnExport = document.getElementById("btnExport");
+const btnExportXlsx = document.getElementById("btnExportXlsx");
 const btnExportOne = document.getElementById("btnExportOne");
 const btnReset = document.getElementById("btnReset");
 const fileCsv = document.getElementById("fileCsv");
@@ -251,17 +239,6 @@ const importLabel = document.querySelector("label[for='fileCsv']");
 const currentUserInfo = document.getElementById("currentUserInfo");
 const btnSwitchUser = document.getElementById("btnSwitchUser");
 const btnDemo4Users = document.getElementById("btnDemo4Users");
-
-const exportCustomModal = document.getElementById("exportCustomModal");
-const btnExportCustomClose = document.getElementById("btnExportCustomClose");
-const btnExportCustomCancel = document.getElementById("btnExportCustomCancel");
-const btnExportCustomApply = document.getElementById("btnExportCustomApply");
-const exportCustomYear = document.getElementById("exportCustomYear");
-const exportCustomStatus = document.getElementById("exportCustomStatus");
-const exportCustomDeputado = document.getElementById("exportCustomDeputado");
-const exportCustomMunicipio = document.getElementById("exportCustomMunicipio");
-const exportCustomIncludeOld = document.getElementById("exportCustomIncludeOld");
-const exportCustomSummary = document.getElementById("exportCustomSummary");
 
 const authGate = document.getElementById("authGate");
 const authTabLogin = document.getElementById("authTabLogin");
@@ -290,7 +267,6 @@ function initSelects() {
   }));
 
   syncYearFilter();
-  syncCustomExportFilters();
 }
 
 function syncYearFilter() {
@@ -310,28 +286,6 @@ function syncYearFilter() {
   setSelectOptions(yearFilter, opts, current);
 }
 
-function syncCustomExportFilters() {
-  if (!exportCustomYear || !exportCustomStatus) return;
-
-  const years = Array.from(new Set((state.records || []).map(function (r) {
-    return toInt(r.ano);
-  }))).filter(function (y) {
-    return y > 0;
-  }).sort(function (a, b) {
-    return b - a;
-  });
-
-  const yearOptions = [{ label: "Todos", value: "" }].concat(years.map(function (y) {
-    return { label: String(y), value: String(y) };
-  }));
-
-  const statusOptions = [{ label: "Todos", value: "" }].concat(STATUS.map(function (s) {
-    return { label: s, value: s };
-  }));
-
-  setSelectOptions(exportCustomYear, yearOptions, exportCustomYear.value || "");
-  setSelectOptions(exportCustomStatus, statusOptions, exportCustomStatus.value || "");
-}
 function setSelectOptions(select, options, preferredValue) {
   const prev = preferredValue !== undefined ? preferredValue : select.value;
   select.innerHTML = "";
@@ -426,13 +380,8 @@ modal.addEventListener("click", function (e) {
   if (e.target === modal) closeModal();
 });
 document.addEventListener("keydown", function (e) {
-  if (e.key !== "Escape") return;
-  if (modal.classList.contains("show")) {
+  if (e.key === "Escape" && modal.classList.contains("show")) {
     closeModal();
-    return;
-  }
-  if (exportCustomModal && exportCustomModal.classList.contains("show")) {
-    closeExportCustomModal();
   }
 });
 
@@ -506,20 +455,8 @@ btnExportOne.addEventListener("click", async function () {
   const exportMeta = exportRecordsToXlsx([rec], filename, {
     useOriginalHeaders: true,
     roundTripCheck: roundTripCheck,
-    templateMode: templateMode,
-    exportScope: EXPORT_SCOPE.ATUAIS,
-    exportFilters: { single_id: rec.id }
+    templateMode: templateMode
   });
-  if (!exportMeta) return;
-
-  latestExportReport = {
-    escopo: EXPORT_SCOPE.ATUAIS,
-    arquivoNome: filename,
-    quantidadeRegistros: 1,
-    filtros: { single_id: rec.id },
-    geradoEm: isoNow()
-  };
-  renderImportDashboard();
 
   await syncExportLogToApi({
     formato: "XLSX",
@@ -528,60 +465,40 @@ btnExportOne.addEventListener("click", async function () {
     quantidadeEventos: countAuditEvents([rec]),
     filtros: { single_id: rec.id },
     modoHeaders: templateMode ? "template_original" : "originais",
-    escopoExportacao: EXPORT_SCOPE.ATUAIS,
     roundTripOk: exportMeta && exportMeta.roundTrip ? exportMeta.roundTrip.ok : null,
     roundTripIssues: exportMeta && exportMeta.roundTrip ? (exportMeta.roundTrip.issues || []) : []
   });
 });
-if (btnExportAtuais) {
-  btnExportAtuais.addEventListener("click", async function () {
-    await runExportByScope(EXPORT_SCOPE.ATUAIS);
-  });
+if (btnExport) {
+  btnExport.style.display = "none";
 }
 
-if (btnExportHistorico) {
-  btnExportHistorico.addEventListener("click", async function () {
-    await runExportByScope(EXPORT_SCOPE.HISTORICO);
-  });
-}
+btnExportXlsx.addEventListener("click", async function () {
+  const templateReady = !!(lastImportedWorkbookTemplate && lastImportedWorkbookTemplate.buffer);
+  const templateMode = templateReady
+    ? confirm("Exportar em modo TEMPLATE (mesma estrutura do XLSX original, alterando apenas dados)?")
+    : false;
 
-if (btnExportCustom) {
-  btnExportCustom.addEventListener("click", function () {
-    openExportCustomModal();
+  const modeOriginal = templateMode ? true : confirm("Exportar com headers originais? OK = Originais, Cancelar = Normalizados.");
+  const roundTripCheck = confirm("Executar round-trip check apos exportar? (pode ser mais lento)");
+  const filename = "emendas_export_" + dateStamp() + ".xlsx";
+  const exportMeta = exportRecordsToXlsx(state.records, filename, {
+    useOriginalHeaders: modeOriginal,
+    roundTripCheck: roundTripCheck,
+    templateMode: templateMode
   });
-}
 
-if (btnExportCustomApply) {
-  btnExportCustomApply.addEventListener("click", async function () {
-    const filters = {
-      ano: exportCustomYear ? exportCustomYear.value : "",
-      status: exportCustomStatus ? exportCustomStatus.value : "",
-      deputado: exportCustomDeputado ? (exportCustomDeputado.value || "").trim() : "",
-      municipio: exportCustomMunicipio ? (exportCustomMunicipio.value || "").trim() : "",
-      include_old: !!(exportCustomIncludeOld && exportCustomIncludeOld.checked)
-    };
-
-    const ok = await runExportByScope(EXPORT_SCOPE.PERSONALIZADO, { customFilters: filters });
-    if (ok) closeExportCustomModal();
+  await syncExportLogToApi({
+    formato: "XLSX",
+    arquivoNome: filename,
+    quantidadeRegistros: state.records.length,
+    quantidadeEventos: countAuditEvents(state.records),
+    filtros: getCurrentFilterSnapshot(),
+    modoHeaders: templateMode ? "template_original" : (modeOriginal ? "originais" : "normalizados"),
+    roundTripOk: exportMeta && exportMeta.roundTrip ? exportMeta.roundTrip.ok : null,
+    roundTripIssues: exportMeta && exportMeta.roundTrip ? (exportMeta.roundTrip.issues || []) : []
   });
-}
-
-if (btnExportCustomClose) {
-  btnExportCustomClose.addEventListener("click", closeExportCustomModal);
-}
-if (btnExportCustomCancel) {
-  btnExportCustomCancel.addEventListener("click", closeExportCustomModal);
-}
-if (exportCustomModal) {
-  exportCustomModal.addEventListener("click", function (e) {
-    if (e.target === exportCustomModal) closeExportCustomModal();
-  });
-}
-if (exportCustomYear) exportCustomYear.addEventListener("change", refreshCustomExportSummary);
-if (exportCustomStatus) exportCustomStatus.addEventListener("change", refreshCustomExportSummary);
-if (exportCustomDeputado) exportCustomDeputado.addEventListener("input", debounce(refreshCustomExportSummary, 120));
-if (exportCustomMunicipio) exportCustomMunicipio.addEventListener("input", debounce(refreshCustomExportSummary, 120));
-if (exportCustomIncludeOld) exportCustomIncludeOld.addEventListener("change", refreshCustomExportSummary);
+});
 
 btnReset.addEventListener("click", function () {
   if (!confirm("Resetar para dados DEMO? Isso apaga alteracoes locais.")) return;
@@ -1807,9 +1724,8 @@ function applyAccessProfile() {
     currentUserInfo.textContent = "Usuario: " + CURRENT_USER + " / " + CURRENT_ROLE + (isSupervisor ? " (visao geral)" : "") + " | " + apiTag + " | " + storageTag;
   }
 
-  if (btnExportAtuais) btnExportAtuais.style.display = "inline-block";
-  if (btnExportHistorico) btnExportHistorico.style.display = "inline-block";
-  if (btnExportCustom) btnExportCustom.style.display = "inline-block";
+  if (btnExport) btnExport.style.display = canManageData ? "inline-block" : "none";
+  if (btnExportXlsx) btnExportXlsx.style.display = canManageData ? "inline-block" : "none";
   if (importLabel) importLabel.style.display = canManageData ? "inline-block" : "none";
   if (btnReset) btnReset.style.display = canManageData ? "inline-block" : "none";
   if (btnDemo4Users) btnDemo4Users.style.display = canManageData ? "inline-block" : "none";
@@ -2224,9 +2140,6 @@ function normalizeRecordShape(raw) {
   const rec = mkRecord(raw || {});
   rec.id = asText(raw && raw.id ? raw.id : rec.id);
   rec.backend_id = raw && raw.backend_id != null ? Number(raw.backend_id) : rec.backend_id;
-  rec.parent_id = raw && raw.parent_id != null ? Number(raw.parent_id) : rec.parent_id;
-  rec.version = raw && toInt(raw.version) > 0 ? toInt(raw.version) : rec.version;
-  rec.is_current = raw && Object.prototype.hasOwnProperty.call(raw, "is_current") ? raw.is_current !== false : rec.is_current;
   rec.created_at = (raw && raw.created_at) || rec.created_at;
   rec.updated_at = (raw && raw.updated_at) || rec.updated_at;
   rec.eventos = Array.isArray(raw && raw.eventos) && raw.eventos.length ? raw.eventos : rec.eventos;
@@ -2542,10 +2455,8 @@ function renderImportDashboard() {
 
   const left = latestImportReport ? buildImportSummaryHtml(latestImportReport) : buildImportSummaryPlaceholderHtml();
   const recent = getRecentChangesForPanel(HOME_CHANGES_LIMIT);
-  const exportSummary = buildExportSummaryBadgeHtml(latestExportReport);
 
   importReport.innerHTML = ""
-    + exportSummary
     + "<div class=\"import-dashboard-grid\">"
     + "  <section class=\"import-dashboard-left\">" + left + "</section>"
     + "  <section class=\"import-dashboard-right\">" + buildRecentChangesPanelHtml(recent) + "</section>"
@@ -2556,24 +2467,6 @@ function renderImportDashboard() {
   }
 }
 
-function buildExportSummaryBadgeHtml(report) {
-  if (!report) {
-    return '<div class="export-summary-banner muted small">MODO: -</div>';
-  }
-
-  const scope = exportScopeLabel(report.escopo || EXPORT_SCOPE.ATUAIS);
-  const file = report.arquivoNome ? escapeHtml(String(report.arquivoNome)) : "-";
-  const qty = Number.isFinite(Number(report.quantidadeRegistros)) ? Number(report.quantidadeRegistros) : 0;
-  const when = report.geradoEm ? fmtDateTime(report.geradoEm) : "-";
-
-  return ''
-    + '<div class="export-summary-banner">'
-    + '  <span class="export-summary-mode">MODO: ' + scope + '</span>'
-    + '  <span class="muted small">Arquivo: ' + file + '</span>'
-    + '  <span class="muted small">Registros: ' + String(qty) + '</span>'
-    + '  <span class="muted small">Gerado em: ' + escapeHtml(String(when)) + '</span>'
-    + '</div>';
-}
 function buildImportSummaryPlaceholderHtml() {
   const totalRegistros = (state.records || []).length;
   const totalEventos = (state.records || []).reduce(function (acc, rec) {
@@ -2847,177 +2740,6 @@ function countAuditEvents(records) {
   }, 0);
 }
 
-function exportScopeLabel(scope) {
-  if (scope === EXPORT_SCOPE.HISTORICO) return "HISTORICO";
-  if (scope === EXPORT_SCOPE.PERSONALIZADO) return "PERSONALIZADO";
-  return "ATUAIS";
-}
-
-function buildExportFilename(scope) {
-  const suffix = EXPORT_SCOPE_SUFFIX[scope] || EXPORT_SCOPE_SUFFIX.ATUAIS;
-  return "emendas_export_" + dateStamp() + "_" + suffix + ".xlsx";
-}
-
-function isCurrentRecord(rec) {
-  return !(rec && Object.prototype.hasOwnProperty.call(rec, "is_current") && rec.is_current === false);
-}
-
-function getRecordCurrentStatus(rec) {
-  return latestMarkedStatus(rec) || normalizeStatus(rec && rec.status_oficial ? rec.status_oficial : "") || "";
-}
-
-function matchesTextFilter(value, term) {
-  const src = normalizeLooseText(value || "");
-  const q = normalizeLooseText(term || "");
-  if (!q) return true;
-  return src.indexOf(q) >= 0;
-}
-
-function filterRecordsForExport(scope, customFilters) {
-  const records = Array.isArray(state.records) ? state.records.slice() : [];
-
-  if (scope === EXPORT_SCOPE.HISTORICO) {
-    return records;
-  }
-
-  if (scope === EXPORT_SCOPE.PERSONALIZADO) {
-    const filters = customFilters || {};
-    const year = String(filters.ano || "").trim();
-    const status = String(filters.status || "").trim();
-    const deputado = String(filters.deputado || "").trim();
-    const municipio = String(filters.municipio || "").trim();
-    const includeOld = !!filters.include_old;
-
-    return records.filter(function (rec) {
-      if (!includeOld && !isCurrentRecord(rec)) return false;
-      if (year && String(toInt(rec.ano) || "") !== year) return false;
-      if (status && getRecordCurrentStatus(rec) !== normalizeStatus(status)) return false;
-      if (!matchesTextFilter(rec.deputado, deputado)) return false;
-      if (!matchesTextFilter(rec.municipio, municipio)) return false;
-      return true;
-    });
-  }
-
-  return records.filter(function (rec) {
-    return isCurrentRecord(rec);
-  });
-}
-
-function buildExportFiltersSnapshot(scope, customFilters) {
-  const base = getCurrentFilterSnapshot();
-  base.escopo = exportScopeLabel(scope);
-  if (scope === EXPORT_SCOPE.PERSONALIZADO) {
-    base.personalizado = {
-      ano: customFilters && customFilters.ano ? String(customFilters.ano) : "",
-      status: customFilters && customFilters.status ? String(customFilters.status) : "",
-      deputado: customFilters && customFilters.deputado ? String(customFilters.deputado) : "",
-      municipio: customFilters && customFilters.municipio ? String(customFilters.municipio) : "",
-      include_old: !!(customFilters && customFilters.include_old)
-    };
-  }
-  return base;
-}
-
-function openExportCustomModal() {
-  if (!exportCustomModal) return;
-  syncCustomExportFilters();
-
-  if (exportCustomYear && yearFilter && !exportCustomYear.value) {
-    exportCustomYear.value = yearFilter.value || "";
-  }
-
-  if (exportCustomStatus && !exportCustomStatus.value) {
-    exportCustomStatus.value = "";
-  }
-
-  if (exportCustomIncludeOld) exportCustomIncludeOld.checked = false;
-  if (exportCustomDeputado) exportCustomDeputado.value = "";
-  if (exportCustomMunicipio) exportCustomMunicipio.value = "";
-
-  refreshCustomExportSummary();
-  exportCustomModal.classList.add("show");
-  exportCustomModal.setAttribute("aria-hidden", "false");
-}
-
-function closeExportCustomModal() {
-  if (!exportCustomModal) return;
-  exportCustomModal.classList.remove("show");
-  exportCustomModal.setAttribute("aria-hidden", "true");
-}
-
-function refreshCustomExportSummary() {
-  if (!exportCustomSummary) return;
-  const filters = {
-    ano: exportCustomYear ? exportCustomYear.value : "",
-    status: exportCustomStatus ? exportCustomStatus.value : "",
-    deputado: exportCustomDeputado ? (exportCustomDeputado.value || "").trim() : "",
-    municipio: exportCustomMunicipio ? (exportCustomMunicipio.value || "").trim() : "",
-    include_old: !!(exportCustomIncludeOld && exportCustomIncludeOld.checked)
-  };
-
-  const rows = filterRecordsForExport(EXPORT_SCOPE.PERSONALIZADO, filters);
-  const totalBase = Array.isArray(state.records) ? state.records.length : 0;
-  exportCustomSummary.textContent = "Registros selecionados: " + String(rows.length) + " de " + String(totalBase);
-}
-
-async function runExportByScope(scope, options) {
-  const opts = options || {};
-  const exportScope = scope || EXPORT_SCOPE.ATUAIS;
-  const customFilters = opts.customFilters || null;
-
-  if (exportScope !== EXPORT_SCOPE.ATUAIS) {
-    const ok = confirm("Confirmar exportacao no modo " + exportScopeLabel(exportScope) + "?");
-    if (!ok) return false;
-  }
-
-  const selectedRecords = filterRecordsForExport(exportScope, customFilters);
-  if (!selectedRecords.length) {
-    alert("Nenhum registro encontrado para o modo de exportacao selecionado.");
-    return false;
-  }
-
-  const templateReady = !!(lastImportedWorkbookTemplate && lastImportedWorkbookTemplate.buffer);
-  const templateMode = templateReady
-    ? confirm("Exportar em modo TEMPLATE (mesma estrutura do XLSX original, alterando apenas dados)?")
-    : false;
-
-  const modeOriginal = templateMode ? true : confirm("Exportar com headers originais? OK = Originais, Cancelar = Normalizados.");
-  const roundTripCheck = confirm("Executar round-trip check apos exportar? (pode ser mais lento)");
-  const filename = buildExportFilename(exportScope);
-  const filtersSnapshot = buildExportFiltersSnapshot(exportScope, customFilters);
-
-  const exportMeta = exportRecordsToXlsx(selectedRecords, filename, {
-    useOriginalHeaders: modeOriginal,
-    roundTripCheck: roundTripCheck,
-    templateMode: templateMode,
-    exportScope: exportScope,
-    exportFilters: filtersSnapshot
-  });
-  if (!exportMeta) return false;
-
-  latestExportReport = {
-    escopo: exportScope,
-    arquivoNome: filename,
-    quantidadeRegistros: selectedRecords.length,
-    filtros: filtersSnapshot,
-    geradoEm: isoNow()
-  };
-  renderImportDashboard();
-
-  await syncExportLogToApi({
-    formato: "XLSX",
-    arquivoNome: filename,
-    quantidadeRegistros: selectedRecords.length,
-    quantidadeEventos: countAuditEvents(selectedRecords),
-    filtros: filtersSnapshot,
-    modoHeaders: templateMode ? "template_original" : (modeOriginal ? "originais" : "normalizados"),
-    escopoExportacao: exportScope,
-    roundTripOk: exportMeta && exportMeta.roundTrip ? exportMeta.roundTrip.ok : null,
-    roundTripIssues: exportMeta && exportMeta.roundTrip ? (exportMeta.roundTrip.issues || []) : []
-  });
-
-  return true;
-}
 async function syncImportBatchToApi(file, report) {
   if (!isApiEnabled()) return null;
   const payload = {
@@ -3095,7 +2817,6 @@ async function syncExportLogToApi(meta) {
     quantidade_eventos: meta && Number.isFinite(Number(meta.quantidadeEventos)) ? Number(meta.quantidadeEventos) : 0,
     filtros_json: JSON.stringify(meta && meta.filtros ? meta.filtros : {}),
     modo_headers: meta && meta.modoHeaders ? meta.modoHeaders : "normalizados",
-    escopo_exportacao: meta && meta.escopoExportacao ? String(meta.escopoExportacao) : EXPORT_SCOPE.ATUAIS,
     round_trip_ok: meta && Object.prototype.hasOwnProperty.call(meta, "roundTripOk") ? meta.roundTripOk : null,
     round_trip_issues: meta && Array.isArray(meta.roundTripIssues) ? meta.roundTripIssues : [],
     origem_evento: "EXPORT"
@@ -3129,7 +2850,7 @@ function exportRecordsToXlsx(records, filename, options) {
   }));
 
   const auditTable = buildAuditLogTableData(records);
-  const summaryAoa = buildSummaryAoa(records, auditTable.rows.length, opts.exportScope || EXPORT_SCOPE.ATUAIS, opts.exportFilters || {});
+  const summaryAoa = buildSummaryAoa(records, auditTable.rows.length);
   const auditAoa = [auditTable.headers].concat(auditTable.rows.map(function (rowObj) {
     return auditTable.headers.map(function (h) { return rowObj[h] == null ? "" : rowObj[h]; });
   }));
@@ -3425,7 +3146,7 @@ function buildExportTableData(records, options) {
   });
 
   const normalizedHeaders = ["id", "ano", "identificacao", "cod_subfonte", "deputado", "cod_uo", "sigla_uo", "cod_orgao", "cod_acao", "descricao_acao", "municipio", "valor_inicial", "valor_atual", "processo_sei"];
-  const systemHeaders = ["id_interno_sistema", "backend_id", "parent_id", "version", "is_current", "usuarios_ativos", "progresso", "global_state", "ref_key", "created_at", "updated_at", "source_sheet", "source_row"];
+  const systemHeaders = ["id_interno_sistema", "backend_id", "usuarios_ativos", "progresso", "global_state", "ref_key", "created_at", "updated_at", "source_sheet", "source_row"];
   const headers = (useOriginal ? extraHeaders : normalizedHeaders).concat(systemHeaders);
 
   const rows = records.map(function (r) {
@@ -3447,9 +3168,6 @@ function buildExportTableData(records, options) {
 
     out.id_interno_sistema = r.id || "";
     out.backend_id = r.backend_id == null ? "" : r.backend_id;
-    out.parent_id = r.parent_id == null ? "" : r.parent_id;
-    out.version = r.version == null ? 1 : r.version;
-    out.is_current = r.is_current !== false;
     out.usuarios_ativos = users.map(function (u) { return u.name + " (" + (u.role || "-") + ")"; }).join(" | ");
     out.progresso = String(progress.concl) + "/" + String(progress.total) + " (" + String(progress.percent) + "%)";
     out.global_state = global.label;
@@ -3525,11 +3243,9 @@ function buildAuditLogTableData(records) {
   return { headers: headers, rows: rows };
 }
 
-function buildSummaryAoa(records, totalEvents, exportScope, exportFilters) {
+function buildSummaryAoa(records, totalEvents) {
   const now = new Date().toISOString();
   const byGlobal = { done: 0, in_progress: 0, attention: 0, no_marks: 0 };
-  const scope = exportScopeLabel(exportScope || EXPORT_SCOPE.ATUAIS);
-  const filtersJson = JSON.stringify(exportFilters || {});
 
   records.forEach(function (r) {
     const global = getGlobalProgressState(getActiveUsersWithLastMark(r));
@@ -3538,11 +3254,9 @@ function buildSummaryAoa(records, totalEvents, exportScope, exportFilters) {
 
   const out = [
     ["Resumo da exportacao"],
-    ["MODO: " + scope],
     ["Gerado em", now],
     ["Total de emendas", records.length],
     ["Total de eventos (audit log)", totalEvents],
-    ["Filtros", filtersJson],
     [],
     ["Andamento Global", "Quantidade"],
     ["Concluido global", byGlobal.done || 0],
@@ -3708,25 +3422,3 @@ function debounce(fn, ms) {
 function deepClone(obj) {
   return JSON.parse(JSON.stringify(obj));
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

@@ -53,9 +53,9 @@ Legenda de execucao:
 - [x] C29 `[P0][COD]` Estrutura lotes/import/export
 - [ ] C30 `[P0][COD]` Indices e constraints finais
 - [ ] C31 `[P0][COD]` Migracoes Alembic completas
-- [~] C32 `[P0][QA]` Testes manuais API documentados
-- [ ] C33 `[P0][QA]` Regressao por release
-- [ ] C34 `[P0][QA]` Teste de concorrencia (2-5 usuarios)
+- [x] C32 `[P0][QA]` Testes manuais API documentados
+- [~] C33 `[P0][QA]` Regressao por release
+- [~] C34 `[P0][QA]` Teste de concorrencia (2-5 usuarios)
 
 ## P1 - Producao controlada (codigo + TI)
 - [ ] C35 `[P1][TI]` Servidor API na intranet
@@ -97,3 +97,4 @@ Legenda de execucao:
 ## Regra de foco
 - Nao iniciar item `P1/P2` enquanto houver `P0` pendente que impacta operacao.
 - Toda entrega fecha com teste + registro em `LOG_ALTERACOES.md` + commit.
+

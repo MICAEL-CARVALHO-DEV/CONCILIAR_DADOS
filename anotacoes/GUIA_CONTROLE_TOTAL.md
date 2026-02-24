@@ -35,3 +35,11 @@ Exemplo:
 - `contexto`: valor divergente na emenda EPI-2026-000321
 - `acao`: ajuste de valor_atual de 120000 para 150000
 - `resultado`: evento registrado e exportacao concluida
+
+## Exportacao com 3 modos (operacao atual)
+- `Exportar (Atuais)`: exporta somente registros `is_current=true`.
+- `Exportar (Com historico)`: exporta atuais + versoes antigas.
+- `Exportar (Personalizado)`: aplica filtros de `ano`, `status`, `deputado`, `municipio` e `include_old`.
+- Modos nao padrao (`Com historico` e `Personalizado`) pedem confirmacao obrigatoria.
+- O relatorio de export exibe badge: `MODO: ATUAIS | HISTORICO | PERSONALIZADO`.
+- Nome do arquivo inclui sufixo de modo: `_atual.xlsx`, `_historico.xlsx`, `_custom.xlsx`.

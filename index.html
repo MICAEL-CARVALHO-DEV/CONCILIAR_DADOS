@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
@@ -16,7 +16,9 @@
       <div class="actions">
         <span id="currentUserInfo" class="user-chip"></span>
         <button id="btnSwitchUser" class="btn">Trocar usuario</button>
-        <button id="btnExportXlsx" class="btn">Exportar XLSX</button>
+        <button id="btnExportAtuais" class="btn primary">Exportar (Atuais)</button>
+        <button id="btnExportHistorico" class="btn">Exportar (Com historico)</button>
+        <button id="btnExportCustom" class="btn">Exportar (Personalizado)</button>
         <label class="btn file-btn" for="fileCsv">Importar XLSX</label>
         <input id="fileCsv" type="file" accept=".xlsx" />
         <button id="btnReset" class="btn danger">Reset Demo</button>
@@ -130,6 +132,47 @@
       <div class="modal-foot">
         <button id="btnExportOne" class="btn">Exportar este registro (XLSX)</button>
         <button id="modalClose2" class="btn">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal" id="exportCustomModal" aria-hidden="true">
+    <div class="modal-card export-modal-card" role="dialog" aria-modal="true" aria-labelledby="exportCustomTitle">
+      <div class="modal-head">
+        <div>
+          <h3 id="exportCustomTitle">Exportacao personalizada</h3>
+          <p class="muted">Defina filtros para gerar um XLSX sob medida.</p>
+        </div>
+        <button id="btnExportCustomClose" class="icon-btn" title="Fechar" aria-label="Fechar modal">x</button>
+      </div>
+      <div class="modal-body">
+        <div class="grid export-custom-grid">
+          <div class="field">
+            <label for="exportCustomYear">Ano</label>
+            <select id="exportCustomYear"></select>
+          </div>
+          <div class="field">
+            <label for="exportCustomStatus">Status</label>
+            <select id="exportCustomStatus"></select>
+          </div>
+          <div class="field">
+            <label for="exportCustomDeputado">Deputado</label>
+            <input id="exportCustomDeputado" placeholder="Ex.: Fabíola Mansur" />
+          </div>
+          <div class="field">
+            <label for="exportCustomMunicipio">Municipio</label>
+            <input id="exportCustomMunicipio" placeholder="Ex.: Salvador" />
+          </div>
+        </div>
+        <label class="export-checkbox">
+          <input type="checkbox" id="exportCustomIncludeOld" />
+          Incluir versoes antigas (historico)
+        </label>
+        <p class="muted small" id="exportCustomSummary">-</p>
+      </div>
+      <div class="modal-foot">
+        <button id="btnExportCustomApply" class="btn primary">Exportar (Personalizado)</button>
+        <button id="btnExportCustomCancel" class="btn">Cancelar</button>
       </div>
     </div>
   </div>

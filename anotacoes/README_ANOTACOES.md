@@ -11,6 +11,7 @@ Esta pasta centraliza as anotacoes de processo, escopo, checklist e manutencao.
 - `LOG_ALTERACOES.md`
 - `TERMO_DE_OPERACAO_E_RESPONSABILIDADES.md`
 - `ESCOPO_FLUXO_COMPARATIVO_SEC_EMENDAS.md`
+- `ETAPA_01_PONTA_PE_INICIAL.md`
 
 ## Snapshot automatico de handoff
 Use o script abaixo para gerar pacote de continuidade por release:
@@ -33,3 +34,5 @@ Cada snapshot inclui:
 ## Observacao
 Os arquivos originais continuam na raiz para nao quebrar referencias antigas.
 A pasta `anotacoes/` funciona como central de consulta.
+
+

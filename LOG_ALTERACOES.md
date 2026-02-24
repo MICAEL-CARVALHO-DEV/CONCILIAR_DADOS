@@ -38,3 +38,14 @@ Use este arquivo para rastrear alteracoes operacionais e tecnicas.
 - Validacao realizada: revisao manual dos arquivos `.md`
 - Rollback (se necessario): remover arquivo e entrada no README
 - Status final: ok
+
+### 2026-02-24 (etapa 1 - ponta pe inicial)
+- Data: 2026-02-24
+- Responsavel: Micael
+- Tipo: melhoria
+- Contexto: iniciar P0 com validacao automatizada e controle anti-oscilacao
+- Alteracao executada: criados `scripts/regressao_p0.ps1`, `scripts/concorrencia_c34.ps1` e `anotacoes/ETAPA_01_PONTA_PE_INICIAL.md`
+- Impacto esperado: validar API, fluxo auditavel e concorrencia (2-5 usuarios) antes de novas mudancas funcionais
+- Validacao realizada: regressao P0 = sucesso; concorrencia C34 (Users=4) = sucesso
+- Rollback (se necessario): remover scripts novos e reverter checklist/log
+- Status final: ok

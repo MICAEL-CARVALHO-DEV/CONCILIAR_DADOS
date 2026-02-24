@@ -30,6 +30,8 @@ EVENT_TYPES = {
     "VERSIONAR",
 }
 
+EXPORT_SCOPES = {"ATUAIS", "HISTORICO", "PERSONALIZADO"}
+
 
 class UserOut(BaseModel):
     id: int
@@ -183,6 +185,7 @@ class ExportLogCreate(BaseModel):
     quantidade_eventos: int = 0
     filtros_json: str = ""
     modo_headers: str = "normalizados"
+    escopo_exportacao: str = "ATUAIS"
     round_trip_ok: bool | None = None
     round_trip_issues: list[str] = Field(default_factory=list)
     origem_evento: str = "EXPORT"
@@ -201,6 +204,14 @@ class ExportLogCreate(BaseModel):
         v = (value or "EXPORT").strip().upper()
         if v not in EVENT_ORIGINS:
             raise ValueError("origem_evento invalida")
+        return v
+
+    @field_validator("escopo_exportacao")
+    @classmethod
+    def validate_export_scope(cls, value: str) -> str:
+        v = (value or "ATUAIS").strip().upper()
+        if v not in EXPORT_SCOPES:
+            raise ValueError("escopo_exportacao invalido")
         return v
 
 
@@ -224,6 +235,7 @@ class ExportLogOut(BaseModel):
     arquivo_nome: str
     quantidade_registros: int
     quantidade_eventos: int
+    escopo_exportacao: str
     created_at: datetime
     usuario_nome: str
     setor: str
@@ -269,3 +281,9 @@ class ImportLinhaOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+
+
+
+
