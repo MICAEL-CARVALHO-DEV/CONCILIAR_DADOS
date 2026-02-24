@@ -1,4 +1,4 @@
-# PLANO ETAPAS - 62 ITENS (ANTI OSCILACAO)
+﻿# PLANO ETAPAS - 62 ITENS (ANTI OSCILACAO)
 
 Objetivo:
 - Concluir todos os itens pendentes por etapas curtas, sem quebrar o que ja funciona.
@@ -33,7 +33,7 @@ Aceite:
 
 ## Etapa 1 - Fechar itens em andamento (2 a 3 dias)
 Meta:
-- Converter os 8 itens [~] para [x].
+- Converter os 4 itens [~] para [x].
 
 Escopo:
 - Workflow de status (transicoes permitidas)
@@ -153,5 +153,6 @@ Modo de trabalho recomendado (curto):
 - Semana 3: Etapas 4 e 5 (com TI)
 - Semana 4: Etapas 6, 7 e 8
 - Semana 5: Etapa 9 e homologacao final
+
 
 

@@ -1,99 +1,99 @@
-# CHECKLIST ATUALIZADO - PROXIMA FASE (SEC EMENDAS)
+﻿# CHECKLIST 62 - PRIORIZADO E ENXUTO (SEC EMENDAS)
 
-Legenda:
+Legenda de status:
 - `[x]` Concluido
 - `[~]` Em andamento
 - `[ ]` Pendente
 
-## 1. Governanca do dado (Excel x Sistema)
-- [~] Definir oficialmente que o banco e a fonte principal
-- [~] Definir que Excel sera apenas importacao/exportacao
-- [ ] Publicar regra oficial de versao dos arquivos importados
-- [ ] Publicar politica de retencao (5-10 anos)
+Legenda de prioridade:
+- `P0` Critico (operacao confiavel)
+- `P1` Producao controlada
+- `P2` Escala/gestao
 
-## 2. Autenticacao, usuarios e perfis
-- [x] Login de usuario implementado
-- [x] Cadastro de usuario com nome + perfil implementado
-- [x] Perfis ativos: APG, SUPERVISAO, CONTABIL, POWERBI, PROGRAMADOR
-- [x] Sessao com token + logout
-- [ ] Bloqueio de usuario inativo (painel administrativo)
+Legenda de execucao:
+- `COD` Precisa codigo
+- `TI` Dependencia de infraestrutura
+- `PROC` Processo/documentacao/regra
+- `QA` Teste/validacao
 
-## 3. Regras de permissao
-- [x] APG/SUPERVISAO/PROGRAMADOR podem alterar status oficial
-- [x] Mudancas de status oficial exigem motivo
-- [x] Regras completas de workflow (transicoes permitidas)
-- [x] Perfil supervisor/programador com visao geral
+## Resumo geral (62 itens)
+- Concluidos: 22
+- Em andamento: 4
+- Pendentes: 36
 
-## 4. Historico e linha do tempo (audit log)
-- [x] Eventos por usuario/perfil/data-hora
-- [x] Timeline por emenda no detalhe
-- [x] Painel inicial com ultimas alteracoes e autor
-- [x] Rastreio formal de origem do evento (UI/API/IMPORT/EXPORT)
-- [ ] Politica append-only homologada com TI
+## P0 - Operacao essencial (codar agora)
+- [~] C01 `[P0][PROC]` Banco como fonte principal oficial
+- [~] C02 `[P0][PROC]` Excel apenas importacao/exportacao
+- [ ] C03 `[P0][PROC]` Regra oficial de versao de arquivo importado
+- [ ] C04 `[P0][PROC]` Politica de retencao publicada
+- [x] C05 `[P0][COD]` Login de usuario ativo
+- [x] C06 `[P0][COD]` Cadastro com nome + perfil
+- [x] C07 `[P0][PROC]` Perfis padrao definidos
+- [x] C08 `[P0][COD]` Sessao com token + logout
+- [ ] C09 `[P0][COD]` Bloqueio de usuario inativo
+- [x] C10 `[P0][COD]` Permissao APG/SUP/PROG para status oficial
+- [x] C11 `[P0][COD]` Motivo obrigatorio em mudanca de status oficial
+- [x] C12 `[P0][PROC]` Workflow de transicao definido
+- [x] C13 `[P0][COD]` Visao geral supervisor/programador
+- [x] C14 `[P0][COD]` Eventos com usuario/perfil/data-hora
+- [x] C15 `[P0][COD]` Timeline por emenda
+- [x] C16 `[P0][COD]` Painel inicial com ultimas alteracoes
+- [x] C17 `[P0][COD]` Origem do evento (UI/API/IMPORT/EXPORT)
+- [ ] C18 `[P0][PROC]` Politica append-only homologada
+- [x] C19 `[P0][COD]` Importacao operacional (`.xlsx`)
+- [x] C20 `[P0][COD]` Resumo de importacao na tela
+- [x] C21 `[P0][COD]` Duplicidade por ID/chave
+- [x] C22 `[P0][COD]` Lote de importacao com hash e responsavel
+- [x] C23 `[P0][COD]` Detalhe por linha importada (`import_linhas`)
+- [x] C24 `[P0][COD]` Exportacao operacional (`.xlsx`)
+- [~] C25 `[P0][COD]` Exportacao pelo estado consolidado
+- [x] C26 `[P0][COD]` Log formal de exportacao
+- [ ] C27 `[P0][TI]` Persistir export em pasta oficial
+- [x] C28 `[P0][COD]` Estrutura base usuarios/emendas/historico
+- [x] C29 `[P0][COD]` Estrutura lotes/import/export
+- [ ] C30 `[P0][COD]` Indices e constraints finais
+- [ ] C31 `[P0][COD]` Migracoes Alembic completas
+- [~] C32 `[P0][QA]` Testes manuais API documentados
+- [ ] C33 `[P0][QA]` Regressao por release
+- [ ] C34 `[P0][QA]` Teste de concorrencia (2-5 usuarios)
 
-## 5. Importacao (CSV/XLSX)
-- [x] Importacao de CSV/XLSX funcionando
-- [x] Resumo de importacao na tela
-- [x] Deteccao de duplicidade por ID/chave de referencia
-- [x] Registro formal de lote (arquivo, hash, responsavel)
-- [x] Registro detalhado por linha importada (`import_linhas`)
+## P1 - Producao controlada (codigo + TI)
+- [ ] C35 `[P1][TI]` Servidor API na intranet
+- [ ] C36 `[P1][TI]` Servidor PostgreSQL central
+- [ ] C37 `[P1][TI]` Pasta de rede oficial (historico/atual/logs)
+- [ ] C38 `[P1][TI]` CORS e firewall internos
+- [ ] C39 `[P1][TI]` HTTPS interno
+- [ ] C40 `[P1][TI]` Backup diario automatizado
+- [ ] C41 `[P1][QA]` Teste mensal de restauracao
+- [ ] C42 `[P1][PROC]` Politica de senha e bloqueio por tentativas
+- [ ] C43 `[P1][PROC]` Plano de contingencia operacional
+- [ ] C44 `[P1][QA]` Suite automatizada backend
+- [x] C45 `[P1][COD]` Visao geral inicial da supervisao
+- [x] C46 `[P1][COD]` Alertas de conflito por emenda
+- [ ] C47 `[P1][COD]` SLA por etapa
+- [ ] C48 `[P1][COD]` Filtros gerenciais avancados
+- [ ] C49 `[P1][COD]` Exportacao de relatorio executivo
+- [ ] C50 `[P1][COD]` Painel admin (ativar/desativar usuario)
 
-## 6. Exportacao (CSV/XLSX)
-- [x] Exportacao CSV/XLSX funcionando
-- [~] Exportacao com base no estado consolidado
-- [x] Log formal de exportacao (usuario, filtros, quantidade)
-- [ ] Persistir arquivo exportado em pasta de rede (historico + atual)
+## P2 - Escala e governanca (futuro)
+- [x] C51 `[P2][COD]` Sprint 1: lote + hash importacao
+- [x] C52 `[P2][COD]` Sprint 1: log de exportacao
+- [ ] C53 `[P2][TI]` Sprint 1: persistencia em pasta simulada/rede
+- [ ] C54 `[P2][PROC]` Sprint 2: politica de workflow formalizada
+- [ ] C55 `[P2][COD]` Sprint 2: painel administrativo completo
+- [ ] C56 `[P2][COD]` Sprint 2: bloqueio/reativacao de usuario
+- [ ] C57 `[P2][TI]` Sprint 3: PostgreSQL de rede homologado
+- [ ] C58 `[P2][TI]` Sprint 3: backup/restore homologado com evidencia
+- [ ] C59 `[P2][TI]` Sprint 3: Power BI no banco central
+- [ ] C60 `[P2][PROC]` Aceite: 100% rastreio por usuario
+- [ ] C61 `[P2][PROC]` Aceite: 0 dependencia de Excel como fonte principal
+- [ ] C62 `[P2][PROC]` Aceite: supervisor com governanca em tempo real
 
-## 7. Estrutura de banco (PostgreSQL)
-- [x] Estrutura inicial de usuarios/emendas/historico
-- [x] Estrutura ampliada para lotes de importacao/exportacao
-- [ ] Indices e constraints finais de producao
-- [ ] Migracoes versionadas completas (Alembic)
+## Ordem pratica (enxuta)
+1. Fechar todos os `P0` pendentes (`C01-C04`, `C09`, `C18`, `C25`, `C27`, `C30-C34`).
+2. Entrar em `P1` com TI (`C35-C43`) e qualidade (`C44`).
+3. Fechar `P1` gestor (`C47-C50`) e depois `P2` (`C53-C62`).
 
-## 8. Infra e rede interna
-- [ ] Definir servidor da API na intranet
-- [ ] Definir servidor do PostgreSQL
-- [ ] Definir pasta de rede oficial (`historico`, `atual`, `logs`)
-- [ ] Configurar CORS/firewall para rede interna
-- [ ] Habilitar HTTPS interno (quando TI liberar)
-
-## 9. Backup, seguranca e continuidade
-- [ ] Backup diario automatizado
-- [ ] Teste de restauracao mensal
-- [ ] Politica de senha e bloqueio por tentativas
-- [ ] Plano de contingencia para indisponibilidade
-
-## 10. Qualidade e testes
-- [~] Testes manuais de API (health/auth/emendas)
-- [ ] Suite de testes automatizados backend
-- [ ] Testes de concorrencia com 2-5 usuarios reais
-- [ ] Testes de regressao por release
-
-## 11. Painel gestor (supervisao)
-- [x] Visao geral inicial no front
-- [x] Alerta de conflitos por emenda
-- [ ] Indicadores de SLA por etapa
-- [ ] Filtros gerenciais por periodo/deputado/municipio
-- [ ] Exportacao de relatorio executivo
-
-## 12. Proximas entregas (ordem recomendada)
-### Sprint 1 - Controle operacional
-- [x] Tabela `lotes_importacao` + hash de arquivo
-- [x] Log `export_logs`
-- [ ] Persistencia de arquivo em pasta simulada de rede
-
-### Sprint 2 - Governanca e seguranca
-- [ ] Politica de workflow por status
-- [ ] Painel de administracao de usuarios
-- [ ] Bloqueio/ativacao de usuario
-
-### Sprint 3 - Producao corporativa
-- [ ] PostgreSQL central na rede
-- [ ] Backup/restore homologado
-- [ ] Power BI conectado ao banco
-
-## Criterios de aceite da fase
-- [ ] 100% das alteracoes rastreaveis por usuario
-- [ ] 0 dependencia de Excel como fonte principal
-- [ ] Importacao/exportacao com trilha auditavel fim a fim
-- [ ] Supervisor com visao geral e governanca operacional
+## Regra de foco
+- Nao iniciar item `P1/P2` enquanto houver `P0` pendente que impacta operacao.
+- Toda entrega fecha com teste + registro em `LOG_ALTERACOES.md` + commit.
