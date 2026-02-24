@@ -1,4 +1,4 @@
-# Python cache/artifacts
+﻿# Python cache/artifacts
 __pycache__/
 *.py[cod]
 
@@ -9,6 +9,9 @@ venv/
 
 # Local database
 backend/test.db
+
+# Generated handoff snapshots
+anotacoes/snapshots/
 
 # OS/editor noise
 .DS_Store
