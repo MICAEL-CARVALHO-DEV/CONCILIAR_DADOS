@@ -1,4 +1,4 @@
-﻿# LOG ALTERACOES - SEC Emendas
+# LOG ALTERACOES - SEC Emendas
 
 Use este arquivo para rastrear alteracoes operacionais e tecnicas.
 
@@ -60,4 +60,15 @@ Use este arquivo para rastrear alteracoes operacionais e tecnicas.
 - Impacto esperado: operacao diaria mais segura e auditoria de exportacao mais precisa
 - Validacao realizada: `scripts/regressao_p0.ps1` = sucesso; `scripts/concorrencia_c34.ps1 -Users 4` = sucesso
 - Rollback (se necessario): remover novos handlers de export no front e coluna `escopo_exportacao` do backend
+- Status final: ok
+
+### 2026-02-24 (etapa 2 - C09/C30/C31)
+- Data: 2026-02-24
+- Responsavel: Micael
+- Tipo: melhoria
+- Contexto: fechar pendencias criticas de autenticacao inativa e performance de consulta
+- Alteracao executada: backend com endpoints de admin de usuarios (`GET /users`, `PATCH /users/{user_id}/status`), bloqueio real de login para inativos com revogacao de sessao, indice de performance em `emendas/historico/import_linhas/export_logs`, migration Alembic `20260224_0006`, ajuste do script `scripts/regressao_p0.ps1` com teste de usuario inativo
+- Impacto esperado: reduzir risco operacional (acesso indevido) e melhorar tempo de resposta em listagens/auditoria/import-export
+- Validacao realizada: `regressao_p0.ps1` = sucesso (incluindo passo "bloqueio de usuario inativo"), `concorrencia_c34.ps1 -Users 4` = sucesso, `alembic upgrade head` = aplicado ate `20260224_0006`
+- Rollback (se necessario): `alembic downgrade -1` para voltar migration de indices + revert do commit
 - Status final: ok

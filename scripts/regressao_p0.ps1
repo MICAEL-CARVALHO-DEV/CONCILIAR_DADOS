@@ -1,4 +1,4 @@
-﻿param(
+param(
   [string]$BaseUrl = "http://127.0.0.1:8000"
 )
 
@@ -44,6 +44,9 @@ $token = ""
 $script:headers = @{}
 $user = "qa_reg_" + (Get-Date -Format "HHmmss")
 $pass = "123456"
+$inactiveUser = "qa_inativo_" + (Get-Date -Format "HHmmss")
+$inactivePass = "123456"
+$inactiveUserId = $null
 $eid = $null
 $loteId = $null
 $exportId = $null
@@ -65,7 +68,9 @@ Step "openapi rotas minimas" {
     "/emendas/{emenda_id}/eventos",
     "/imports/lotes",
     "/exports/logs",
-    "/audit"
+    "/audit",
+    "/users",
+    "/users/{user_id}/status"
   )
 
   $missing = @($required | Where-Object { $paths -notcontains $_ })
@@ -103,6 +108,37 @@ Step "register e login" {
 Step "auth me" {
   $me = Invoke-Json -Method "GET" -Url "$BaseUrl/auth/me" -Headers $script:headers -Body $null
   if ([string]$me.nome -ne $user) { throw "auth/me retornou usuario inesperado: $($me.nome)" }
+}
+
+Step "bloqueio de usuario inativo" {
+  $regInactive = Invoke-Json -Method "POST" -Url "$BaseUrl/auth/register" -Headers @{} -Body @{
+    nome = $inactiveUser
+    perfil = "CONTABIL"
+    senha = $inactivePass
+  }
+
+  $script:inactiveUserId = $regInactive.usuario.id
+  if (-not $script:inactiveUserId) { throw "id do usuario inativo nao retornou" }
+
+  $patchResp = Invoke-Json -Method "PATCH" -Url "$BaseUrl/users/$script:inactiveUserId/status" -Headers $script:headers -Body @{
+    ativo = $false
+  }
+  if (-not $patchResp.ok) { throw "patch de bloqueio sem ok" }
+
+  try {
+    $null = Invoke-Json -Method "POST" -Url "$BaseUrl/auth/login" -Headers @{} -Body @{
+      nome = $inactiveUser
+      senha = $inactivePass
+    }
+    throw "login de usuario inativo deveria falhar"
+  } catch {
+    if ($_.Exception.Message -notmatch "401|credenciais invalidas") { throw }
+  }
+
+  $reactResp = Invoke-Json -Method "PATCH" -Url "$BaseUrl/users/$script:inactiveUserId/status" -Headers $script:headers -Body @{
+    ativo = $true
+  }
+  if (-not $reactResp.ok) { throw "patch de reativacao sem ok" }
 }
 
 Step "criar emenda" {
@@ -184,6 +220,7 @@ Step "registrar log de exportacao" {
     quantidade_eventos = 2
     filtros_json = "{}"
     modo_headers = "originais"
+    escopo_exportacao = "ATUAIS"
     round_trip_ok = $true
     round_trip_issues = @()
     origem_evento = "EXPORT"
@@ -207,18 +244,16 @@ Step "consultas finais" {
   if ((@($exports | Where-Object { $_.id -eq $script:exportId }).Count) -lt 1) { throw "log de exportacao nao encontrado" }
 }
 
-Write-Host "\n=== Resultado regressao P0 ===" -ForegroundColor Cyan
+Write-Host "`n=== Resultado regressao P0 ===" -ForegroundColor Cyan
 $results | ForEach-Object {
   $color = if ($_.ok) { "Green" } else { "Red" }
   Write-Host ("[{0}] {1} - {2}" -f ($(if ($_.ok) {"OK"} else {"ERRO"}), $_.step, $_.detail)) -ForegroundColor $color
 }
 
 if ($hasFail) {
-  Write-Host "\nRegressao P0: FALHOU" -ForegroundColor Red
+  Write-Host "`nRegressao P0: FALHOU" -ForegroundColor Red
   exit 1
 }
 
-Write-Host "\nRegressao P0: SUCESSO" -ForegroundColor Green
+Write-Host "`nRegressao P0: SUCESSO" -ForegroundColor Green
 exit 0
-
-

@@ -32,7 +32,9 @@ from .schemas import (
     ImportLoteCreate,
     ImportLoteOut,
     ROLES,
+    UserAdminOut,
     UserOut,
+    UserStatusUpdate,
 )
 from .settings import settings
 
@@ -373,6 +375,9 @@ def _ensure_legacy_schema() -> None:
             for st in statements:
                 conn.execute(text(st))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_emendas_parent_id ON emendas(parent_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_emendas_status_oficial ON emendas(status_oficial)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_emendas_updated_at ON emendas(updated_at)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_emendas_is_current ON emendas(is_current)"))
 
     if "historico" in tables:
         cols = {c["name"] for c in insp.get_columns("historico")}
@@ -380,11 +385,15 @@ def _ensure_legacy_schema() -> None:
         if "origem_evento" not in cols:
             statements.append("ALTER TABLE historico ADD COLUMN origem_evento VARCHAR(20) NOT NULL DEFAULT 'API'")
 
-        if statements:
-            with engine.begin() as conn:
-                for st in statements:
-                    conn.execute(text(st))
+        with engine.begin() as conn:
+            for st in statements:
+                conn.execute(text(st))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_historico_data_hora ON historico(data_hora)"))
 
+    if "import_linhas" in tables:
+        with engine.begin() as conn:
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_import_linhas_id_interno ON import_linhas(id_interno)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_import_linhas_ref_key ON import_linhas(ref_key)"))
 
     if "export_logs" in tables:
         cols = {c["name"] for c in insp.get_columns("export_logs")}
@@ -392,10 +401,10 @@ def _ensure_legacy_schema() -> None:
         if "escopo_exportacao" not in cols:
             statements.append("ALTER TABLE export_logs ADD COLUMN escopo_exportacao VARCHAR(20) NOT NULL DEFAULT 'ATUAIS'")
 
-        if statements:
-            with engine.begin() as conn:
-                for st in statements:
-                    conn.execute(text(st))
+        with engine.begin() as conn:
+            for st in statements:
+                conn.execute(text(st))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_export_logs_created_at ON export_logs(created_at)"))
 
 def _versioned_id_interno(base_id: str, version_num: int, db: Session) -> str:
     raw_base = (base_id or "").strip() or "EMENDA"
@@ -434,6 +443,7 @@ def _broadcast_update(entity: str, entity_id: int | None) -> None:
         return
 
     loop.create_task(payload_coro)
+
 @app.on_event("startup")
 def startup() -> None:
     Base.metadata.create_all(bind=engine)
@@ -534,6 +544,50 @@ def auth_logout(actor: dict = Depends(_actor_from_headers), db: Session = Depend
             db.commit()
     return {"ok": True}
 
+
+@app.get("/users", response_model=list[UserAdminOut])
+def listar_usuarios(
+    include_inactive: bool = Query(default=True),
+    _actor: dict = Depends(_require_manager),
+    db: Session = Depends(get_db),
+):
+    query = db.query(Usuario)
+    if not include_inactive:
+        query = query.filter(Usuario.ativo.is_(True))
+    return query.order_by(Usuario.nome.asc(), Usuario.id.asc()).all()
+
+
+@app.patch("/users/{user_id}/status")
+def alterar_status_usuario(
+    user_id: int,
+    payload: UserStatusUpdate,
+    actor: dict = Depends(_require_manager),
+    db: Session = Depends(get_db),
+):
+    user = db.get(Usuario, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="usuario nao encontrado")
+
+    actor_id = actor.get("id")
+    if actor_id is not None and int(actor_id) == int(user.id) and payload.ativo is False:
+        raise HTTPException(status_code=400, detail="nao e permitido desativar o proprio usuario")
+
+    user.ativo = bool(payload.ativo)
+
+    if not user.ativo:
+        now = _utcnow()
+        (
+            db.query(UsuarioSessao)
+            .filter(
+                UsuarioSessao.usuario_id == user.id,
+                UsuarioSessao.revoked_at.is_(None),
+            )
+            .update({UsuarioSessao.revoked_at: now}, synchronize_session=False)
+        )
+
+    db.commit()
+    _broadcast_update("usuario", user.id)
+    return {"ok": True, "id": user.id, "ativo": user.ativo}
 
 @app.get("/emendas", response_model=list[EmendaOut])
 def listar_emendas(
@@ -966,6 +1020,5 @@ async def websocket_updates(websocket: WebSocket):
         await ws_broker.disconnect(websocket)
     except Exception:
         await ws_broker.disconnect(websocket)
-
 
 

@@ -1,4 +1,4 @@
-﻿# CHECKLIST 62 - PRIORIZADO E ENXUTO (SEC EMENDAS)
+# CHECKLIST 62 - PRIORIZADO E ENXUTO (SEC EMENDAS)
 
 Legenda de status:
 - `[x]` Concluido
@@ -17,9 +17,9 @@ Legenda de execucao:
 - `QA` Teste/validacao
 
 ## Resumo geral (62 itens)
-- Concluidos: 22
+- Concluidos: 25
 - Em andamento: 4
-- Pendentes: 36
+- Pendentes: 33
 
 ## P0 - Operacao essencial (codar agora)
 - [~] C01 `[P0][PROC]` Banco como fonte principal oficial
@@ -30,7 +30,7 @@ Legenda de execucao:
 - [x] C06 `[P0][COD]` Cadastro com nome + perfil
 - [x] C07 `[P0][PROC]` Perfis padrao definidos
 - [x] C08 `[P0][COD]` Sessao com token + logout
-- [ ] C09 `[P0][COD]` Bloqueio de usuario inativo
+- [x] C09 `[P0][COD]` Bloqueio de usuario inativo
 - [x] C10 `[P0][COD]` Permissao APG/SUP/PROG para status oficial
 - [x] C11 `[P0][COD]` Motivo obrigatorio em mudanca de status oficial
 - [x] C12 `[P0][PROC]` Workflow de transicao definido
@@ -51,8 +51,8 @@ Legenda de execucao:
 - [ ] C27 `[P0][TI]` Persistir export em pasta oficial
 - [x] C28 `[P0][COD]` Estrutura base usuarios/emendas/historico
 - [x] C29 `[P0][COD]` Estrutura lotes/import/export
-- [ ] C30 `[P0][COD]` Indices e constraints finais
-- [ ] C31 `[P0][COD]` Migracoes Alembic completas
+- [x] C30 `[P0][COD]` Indices e constraints finais
+- [x] C31 `[P0][COD]` Migracoes Alembic completas
 - [x] C32 `[P0][QA]` Testes manuais API documentados
 - [~] C33 `[P0][QA]` Regressao por release
 - [~] C34 `[P0][QA]` Teste de concorrencia (2-5 usuarios)
@@ -90,7 +90,7 @@ Legenda de execucao:
 - [ ] C62 `[P2][PROC]` Aceite: supervisor com governanca em tempo real
 
 ## Ordem pratica (enxuta)
-1. Fechar todos os `P0` pendentes (`C01-C04`, `C09`, `C18`, `C25`, `C27`, `C30-C34`).
+1. Fechar todos os `P0` pendentes (`C01-C04`, `C18`, `C25`, `C27`, `C33-C34`).
 2. Entrar em `P1` com TI (`C35-C43`) e qualidade (`C44`).
 3. Fechar `P1` gestor (`C47-C50`) e depois `P2` (`C53-C62`).
 
