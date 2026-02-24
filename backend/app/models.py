@@ -119,6 +119,7 @@ class ExportLog(Base):
     quantidade_eventos: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     filtros_json: Mapped[str] = mapped_column(Text, default="", nullable=False)
     modo_headers: Mapped[str] = mapped_column(String(30), default="normalizados", nullable=False)
+    escopo_exportacao: Mapped[str] = mapped_column(String(20), default="ATUAIS", nullable=False)
     round_trip_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     round_trip_issues: Mapped[str] = mapped_column(Text, default="", nullable=False)
     origem_evento: Mapped[str] = mapped_column(String(20), default="EXPORT", nullable=False)
@@ -146,3 +147,4 @@ class Historico(Base):
     data_hora: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     emenda: Mapped["Emenda"] = relationship(back_populates="historicos")
+

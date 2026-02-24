@@ -622,3 +622,52 @@ textarea {
   flex-direction: column;
   gap: 10px;
 }
+
+.export-summary-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+}
+
+.export-summary-mode {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid #c7d7ff;
+  background: #edf3ff;
+  color: #1d46ad;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-weight: 700;
+  font-size: 0.82rem;
+}
+
+.export-modal-card {
+  width: min(760px, 96vw);
+}
+
+.export-custom-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.export-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.export-checkbox input[type="checkbox"] {
+  width: auto;
+}
+
+@media (max-width: 900px) {
+  .export-custom-grid {
+    grid-template-columns: 1fr;
+  }
+}
