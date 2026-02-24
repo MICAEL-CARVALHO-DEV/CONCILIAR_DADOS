@@ -40,3 +40,10 @@ powershell -ExecutionPolicy Bypass -File .\scripts\smoke_e2e.ps1
 ## Observacao
 - O script de smoke detecta automaticamente se a API esta usando `Bearer` ou `X-Session-Token`.
 - Se houver banco legado sem historico Alembic, use: `alembic stamp head`.
+
+
+## Configuracao de ambiente (API)
+- `config.js`: base local/desenvolvimento.
+- `config.production.js`: override para producao (Render + Pages).
+
+Ajuste `API_BASE_URL` e `API_BASE_URL_BY_HOST` em `config.production.js` para nao depender de comando no console do navegador.

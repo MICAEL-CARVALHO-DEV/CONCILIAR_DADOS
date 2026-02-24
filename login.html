@@ -55,10 +55,14 @@
   </main>
 
   <script src="config.js"></script>
+  <script src="config.production.js"></script>
   <script>
     (function () {
       const API_BASE_URL_KEY = "SEC_API_BASE_URL";
-      const DEFAULT_API_BASE_URL = ((window.SEC_APP_CONFIG && window.SEC_APP_CONFIG.API_BASE_URL) ? String(window.SEC_APP_CONFIG.API_BASE_URL) : "") || "http://localhost:8000";
+      const CFG = (window.SEC_APP_CONFIG && typeof window.SEC_APP_CONFIG === "object") ? window.SEC_APP_CONFIG : {};
+      const CFG_HOST_MAP = (CFG.API_BASE_URL_BY_HOST && typeof CFG.API_BASE_URL_BY_HOST === "object") ? CFG.API_BASE_URL_BY_HOST : {};
+      const CFG_HOST = (window.location && window.location.hostname) ? String(window.location.hostname) : "";
+      const DEFAULT_API_BASE_URL = (CFG_HOST_MAP[CFG_HOST] ? String(CFG_HOST_MAP[CFG_HOST]) : "") || (CFG.API_BASE_URL ? String(CFG.API_BASE_URL) : "") || "http://localhost:8000";
       const SESSION_TOKEN_KEY = "SEC_SESSION_TOKEN";
       const USER_NAME_KEY = "SEC_USER_NAME";
       const USER_ROLE_KEY = "SEC_USER_ROLE";

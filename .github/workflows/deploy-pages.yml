@@ -34,6 +34,7 @@ jobs:
           cp style.css _site/
           cp app.js _site/
           cp config.js _site/
+          cp config.production.js _site/
           cp LICENSE _site/
           cp -r vendor _site/vendor
           touch _site/.nojekyll
