@@ -198,6 +198,7 @@ let apiRefreshRunning = false;
 let latestImportReport = null;
 let lastImportValidation = null;
 let lastImportedWorkbookTemplate = null;
+let lastImportedPlanilha1Aoa = null;
 const stateChannel = (typeof window !== "undefined" && "BroadcastChannel" in window) ? new BroadcastChannel(CROSS_TAB_CHANNEL_NAME) : null;
 assignMissingIds(state.records, idCountersByYear);
 syncReferenceKeys(state.records);
@@ -510,6 +511,7 @@ btnReset.addEventListener("click", function () {
   render();
   closeModal();
   hideImportReport();
+  lastImportedPlanilha1Aoa = null;
 });
 
 fileCsv.addEventListener("change", async function () {
@@ -1173,6 +1175,7 @@ async function parseInputFile(file) {
   });
   const out = [];
   const knownHeaders = buildKnownHeaderSet();
+  lastImportedPlanilha1Aoa = extractPlanilha1AoaFromWorkbook(wb, xlsxApi);
 
   const preferredSheet = wb.SheetNames.includes("Controle de EPI") ? "Controle de EPI" : null;
   const orderedSheetNames = preferredSheet
@@ -1212,6 +1215,53 @@ async function parseInputFile(file) {
 
   lastImportValidation = buildImportValidationReport(out);
   return out;
+}
+
+
+function extractPlanilha1AoaFromWorkbook(workbook, xlsxApi) {
+  try {
+    if (!workbook || !xlsxApi || !workbook.Sheets) return null;
+    const ws = workbook.Sheets["Planilha1"];
+    if (!ws) return null;
+
+    const matrix = xlsxApi.utils.sheet_to_json(ws, { header: 1, defval: "", raw: false, blankrows: false });
+    if (!Array.isArray(matrix) || !matrix.length) return null;
+
+    let headerIdx = -1;
+    const scanLimit = Math.min(matrix.length, 50);
+    for (let i = 0; i < scanLimit; i += 1) {
+      const row = Array.isArray(matrix[i]) ? matrix[i] : [];
+      const c1 = normalizeHeader(row[0]);
+      const c2 = normalizeHeader(row[1]);
+      const hasRotulo = c1.indexOf("rotulos_de_linha") >= 0 || c1.indexOf("rotulo_de_linha") >= 0;
+      const hasContagem = c2.indexOf("contagem_de_deputado") >= 0;
+      if (hasRotulo && hasContagem) {
+        headerIdx = i;
+        break;
+      }
+    }
+
+    if (headerIdx < 0) return null;
+
+    const headerRow = matrix[headerIdx] || [];
+    const out = [[
+      text(headerRow[0]) || "Rotulos de Linha",
+      text(headerRow[1]) || "Contagem de Deputado"
+    ]];
+
+    for (let i = headerIdx + 1; i < matrix.length; i += 1) {
+      const row = Array.isArray(matrix[i]) ? matrix[i] : [];
+      const label = text(row[0]);
+      const value = text(row[1]);
+      if (!label && !value) continue;
+      out.push([label, value]);
+      if (normalizeLooseText(label) === "total geral") break;
+    }
+
+    return out.length > 1 ? out : null;
+  } catch (_err) {
+    return null;
+  }
 }
 
 
@@ -2425,7 +2475,10 @@ function buildImportSummaryPlaceholderHtml() {
   const last = getRecentChangesForPanel(1)[0] || null;
   const lastAt = last ? fmtDateTime(last.at) : "-";
   const lastBy = last ? (escapeHtml(last.actor_user) + " (" + escapeHtml(last.actor_role) + ")") : "-";
-  const planilha1Html = buildPlanilha1Html(buildPlanilha1Aoa(state.records || []));
+  const planilha1Aoa = (Array.isArray(lastImportedPlanilha1Aoa) && lastImportedPlanilha1Aoa.length)
+    ? lastImportedPlanilha1Aoa
+    : buildPlanilha1Aoa(state.records || []);
+  const planilha1Html = buildPlanilha1Html(planilha1Aoa);
 
   return ""
     + '<h4>Resumo da base atual</h4>'
@@ -2446,7 +2499,9 @@ function buildImportSummaryHtml(report) {
   const sheets = report && report.sheetNames && report.sheetNames.length ? report.sheetNames.join(", ") : "-";
   const fileName = report && report.fileName ? report.fileName : "-";
 
-  const planilha1Aoa = buildPlanilha1Aoa(state.records || []);
+  const planilha1Aoa = (Array.isArray(lastImportedPlanilha1Aoa) && lastImportedPlanilha1Aoa.length)
+    ? lastImportedPlanilha1Aoa
+    : buildPlanilha1Aoa(state.records || []);
   const planilha1Html = buildPlanilha1Html(planilha1Aoa);
 
   return ""
