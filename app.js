@@ -1856,7 +1856,10 @@ function isApiEnabled() {
 function getApiBaseUrl() {
   const raw = localStorage.getItem(API_BASE_URL_KEY);
   const runtimeBase = text(RUNTIME_CONFIG.API_BASE_URL);
-  const base = text(raw) || runtimeBase || DEFAULT_API_BASE_URL;
+  const byHostMap = (RUNTIME_CONFIG && RUNTIME_CONFIG.API_BASE_URL_BY_HOST && typeof RUNTIME_CONFIG.API_BASE_URL_BY_HOST === "object") ? RUNTIME_CONFIG.API_BASE_URL_BY_HOST : {};
+  const host = (typeof window !== "undefined" && window.location && window.location.hostname) ? String(window.location.hostname) : "";
+  const hostBase = text(byHostMap[host]);
+  const base = text(raw) || hostBase || runtimeBase || DEFAULT_API_BASE_URL;
   return base.replace(/\/+$/, "");
 }
 
