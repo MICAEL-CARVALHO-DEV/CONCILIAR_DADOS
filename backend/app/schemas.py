@@ -39,6 +39,24 @@ class UserOut(BaseModel):
     perfil: str
 
 
+
+class UserAdminOut(BaseModel):
+    id: int
+    nome: str
+    perfil: str
+    setor: str
+    ativo: bool
+    ultimo_login: datetime | None = None
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class UserStatusUpdate(BaseModel):
+    ativo: bool
+
+
 class AuthRegisterIn(BaseModel):
     nome: str = Field(min_length=2, max_length=120)
     perfil: str
@@ -281,9 +299,4 @@ class ImportLinhaOut(BaseModel):
 
     class Config:
         from_attributes = True
-
-
-
-
-
 
