@@ -92,13 +92,13 @@ const IMPORT_ALIASES = {
   cod_subfonte: ["cod_subfonte", "codigo_subfonte", "subfonte", "cod subfonte"],
   deputado: ["deputado", "autor", "parlamentar"],
   cod_uo: ["cod_uo", "codigo_uo", "uo", "cod uo"],
-  sigla_uo: ["sigla_uo", "sigla uo", "uo_sigla"],
+  sigla_uo: ["sigla_uo", "sigla uo", "uo_sigla", "sigla da uo", "sigla do uo"],
   cod_orgao: ["cod_orgao", "codigo_orgao", "orgao", "cod orgao"],
-  cod_acao: ["cod_acao", "codigo_acao", "acao", "cod acao"],
-  descricao_acao: ["descricao_acao", "descricao da acao", "acao_descricao", "descricao"],
-  municipio: ["municipio", "cidade"],
-  valor_inicial: ["valor_inicial", "valor inicial", "valor_original", "valor original"],
-  valor_atual: ["valor_atual", "valor atual", "valor", "valor_emenda", "valor emenda"],
+  cod_acao: ["cod_acao", "codigo_acao", "acao", "cod acao", "cod da acao", "cod. da acao", "codigo da acao"],
+  descricao_acao: ["descricao_acao", "descricao da acao", "acao_descricao", "descricao", "descritor da acao"],
+  municipio: ["municipio", "cidade", "municipio / estado", "municipio estado"],
+  valor_inicial: ["valor_inicial", "valor inicial", "valor_original", "valor original", "valor inicial epi"],
+  valor_atual: ["valor_atual", "valor atual", "valor", "valor_emenda", "valor emenda", "valor atual epi"],
   processo_sei: ["processo_sei", "processo sei", "sei", "processo"],
   status_oficial: ["status_oficial", "status oficial", "status"]
 };
@@ -195,6 +195,7 @@ let apiRefreshTimer = null;
 let apiRefreshRunning = false;
 let latestImportReport = null;
 let lastImportValidation = null;
+let lastImportedWorkbookTemplate = null;
 const stateChannel = (typeof window !== "undefined" && "BroadcastChannel" in window) ? new BroadcastChannel(CROSS_TAB_CHANNEL_NAME) : null;
 assignMissingIds(state.records, idCountersByYear);
 syncReferenceKeys(state.records);
@@ -470,12 +471,18 @@ btnExport.addEventListener("click", async function () {
 });
 
 btnExportXlsx.addEventListener("click", async function () {
-  const modeOriginal = confirm("Exportar com headers originais? OK = Originais, Cancelar = Normalizados.");
+  const templateReady = !!(lastImportedWorkbookTemplate && lastImportedWorkbookTemplate.buffer);
+  const templateMode = templateReady
+    ? confirm("Exportar em modo TEMPLATE (mesma estrutura do XLSX original, alterando apenas dados)?")
+    : false;
+
+  const modeOriginal = templateMode ? true : confirm("Exportar com headers originais? OK = Originais, Cancelar = Normalizados.");
   const roundTripCheck = confirm("Executar round-trip check apos exportar? (pode ser mais lento)");
   const filename = "emendas_export_" + dateStamp() + ".xlsx";
   const exportMeta = exportRecordsToXlsx(state.records, filename, {
     useOriginalHeaders: modeOriginal,
-    roundTripCheck: roundTripCheck
+    roundTripCheck: roundTripCheck,
+    templateMode: templateMode
   });
 
   await syncExportLogToApi({
@@ -484,7 +491,7 @@ btnExportXlsx.addEventListener("click", async function () {
     quantidadeRegistros: state.records.length,
     quantidadeEventos: countAuditEvents(state.records),
     filtros: getCurrentFilterSnapshot(),
-    modoHeaders: modeOriginal ? "originais" : "normalizados",
+    modoHeaders: templateMode ? "template_original" : (modeOriginal ? "originais" : "normalizados"),
     roundTripOk: exportMeta && exportMeta.roundTrip ? exportMeta.roundTrip.ok : null,
     roundTripIssues: exportMeta && exportMeta.roundTrip ? (exportMeta.roundTrip.issues || []) : []
   });
@@ -1140,6 +1147,7 @@ async function parseInputFile(file) {
   const name = String(file.name || "").toLowerCase();
 
   if (name.endsWith(".csv")) {
+    lastImportedWorkbookTemplate = null;
     const text = await file.text();
     const rows = parseCsv(text);
     const out = rows.map(function (row, idx) {
@@ -1154,16 +1162,39 @@ async function parseInputFile(file) {
     if (!xlsxApi) throw new Error("Biblioteca XLSX nao carregada.");
 
     const buffer = await file.arrayBuffer();
-    const wb = xlsxApi.read(buffer, { type: "array" });
+    const templateBuffer = buffer.slice(0);
+    const wb = xlsxApi.read(buffer, {
+      type: "array",
+      raw: false,
+      cellFormula: true,
+      cellNF: true,
+      cellStyles: true,
+      cellDates: false
+    });
     const out = [];
+    const knownHeaders = buildKnownHeaderSet();
 
-    wb.SheetNames.forEach(function (sheetName) {
+    const preferredSheet = wb.SheetNames.includes("Controle de EPI") ? "Controle de EPI" : null;
+    const orderedSheetNames = preferredSheet
+      ? [preferredSheet].concat(wb.SheetNames.filter(function (n) { return n !== preferredSheet; }))
+      : wb.SheetNames.slice();
+
+    orderedSheetNames.forEach(function (sheetName) {
       const sheet = wb.Sheets[sheetName];
       const matrix = xlsxApi.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false, blankrows: false });
       const detected = detectHeaderRow(matrix);
       if (!detected) return;
 
       const headers = detected.headers;
+      const recognizedCount = headers.reduce(function (acc, h) {
+        return acc + (knownHeaders.has(normalizeHeader(h)) ? 1 : 0);
+      }, 0);
+
+      if (sheetName === "Controle de EPI" && recognizedCount < 5) {
+        throw new Error("Cabecalho da aba Controle de EPI nao reconhecido. Verifique se a linha de cabecalho esta correta.");
+      }
+      if (sheetName !== "Controle de EPI" && recognizedCount < 3) return;
+
       for (let r = detected.headerRowIndex + 1; r < matrix.length; r += 1) {
         const arr = matrix[r] || [];
         if (isRowEmpty(arr)) continue;
@@ -1171,6 +1202,13 @@ async function parseInputFile(file) {
         out.push({ sheetName: sheetName, rowNumber: r + 1, row: rowObj });
       }
     });
+
+    lastImportedWorkbookTemplate = {
+      fileName: file.name || "template.xlsx",
+      importedAt: isoNow(),
+      preferredSheet: preferredSheet || "",
+      buffer: templateBuffer
+    };
 
     lastImportValidation = buildImportValidationReport(out);
     return out;
@@ -2717,6 +2755,10 @@ function exportRecordsToXlsx(records, filename, options) {
   }
 
   const opts = options || {};
+  if (opts.templateMode) {
+    return exportRecordsToTemplateXlsx(records, filename, opts, xlsxApi);
+  }
+
   const dataTable = buildExportTableData(records, opts);
   const dataAoa = [dataTable.headers].concat(dataTable.rows.map(function (rowObj) {
     return dataTable.headers.map(function (h) { return rowObj[h] == null ? "" : rowObj[h]; });
@@ -2752,6 +2794,253 @@ function exportRecordsToXlsx(records, filename, options) {
     totalEventos: auditTable.rows.length,
     roundTrip: roundTrip
   };
+}
+
+function exportRecordsToTemplateXlsx(records, filename, options, xlsxApi) {
+  const opts = options || {};
+  const template = lastImportedWorkbookTemplate;
+  if (!template || !template.buffer) {
+    alert("Modo template indisponivel: importe um arquivo XLSX original antes de exportar.");
+    return null;
+  }
+
+  const wb = xlsxApi.read(template.buffer.slice(0), {
+    type: "array",
+    raw: false,
+    cellFormula: true,
+    cellNF: true,
+    cellStyles: true,
+    cellDates: false
+  });
+
+  const targetSheetNames = resolveTemplateTargetSheets(wb, records);
+  const summary = { updatedCells: 0, updatedRecords: 0, skippedRecords: 0, missingColumns: [] };
+  const updatedRecordIds = new Set();
+  const roundTripAssertions = [];
+
+  targetSheetNames.forEach(function (sheetName) {
+    const ws = wb.Sheets[sheetName];
+    if (!ws) return;
+
+    const matrix = xlsxApi.utils.sheet_to_json(ws, { header: 1, defval: "", raw: false, blankrows: false });
+    const detected = detectHeaderRow(matrix);
+    if (!detected) return;
+
+    const columnByCanonical = buildCanonicalColumnMap(detected.headers);
+    const missingCols = TEMPLATE_CANONICAL_KEYS.filter(function (key) { return columnByCanonical[key] == null; });
+    if (missingCols.length) {
+      summary.missingColumns.push(sheetName + ": " + missingCols.join(", "));
+    }
+
+    const headerRowNumber = detected.headerRowIndex + 1;
+    records.forEach(function (rec) {
+      if (!rec) return;
+      if (String(rec.source_sheet || "") !== String(sheetName)) return;
+      const rowNumber = Number(rec.source_row || 0);
+      if (!Number.isFinite(rowNumber) || rowNumber <= headerRowNumber) {
+        summary.skippedRecords += 1;
+        return;
+      }
+
+      let changedAny = false;
+      TEMPLATE_CANONICAL_KEYS.forEach(function (key) {
+        const colIndex = columnByCanonical[key];
+        if (colIndex == null) return;
+
+        const nextValue = getRecordValueForTemplate(rec, key);
+        const changed = setWorksheetCellValue(ws, rowNumber, colIndex, nextValue, key, xlsxApi);
+        if (changed) {
+          changedAny = true;
+          summary.updatedCells += 1;
+          roundTripAssertions.push({
+            sheetName: sheetName,
+            rowNumber: rowNumber,
+            colIndex: colIndex,
+            expected: nextValue
+          });
+        }
+      });
+
+      if (changedAny) {
+        updatedRecordIds.add(rec.id || (sheetName + ":" + String(rowNumber)));
+      }
+    });
+  });
+
+  summary.updatedRecords = updatedRecordIds.size;
+
+  let roundTrip = null;
+  if (opts.roundTripCheck) {
+    roundTrip = runTemplateRoundTripCheck(wb, roundTripAssertions);
+    if (!roundTrip.ok) {
+      alert("Round-trip check (template) encontrou divergencias\n" + roundTrip.issues.join("\n"));
+    }
+  }
+
+  xlsxApi.writeFile(wb, filename || ("emendas_export_" + dateStamp() + ".xlsx"));
+
+  const infoMsg = [
+    "Template export concluido.",
+    "Registros atualizados: " + String(summary.updatedRecords),
+    "Celulas atualizadas: " + String(summary.updatedCells),
+    "Registros sem origem de linha/aba: " + String(summary.skippedRecords)
+  ];
+  if (summary.missingColumns.length) {
+    infoMsg.push("Colunas nao mapeadas no template: " + summary.missingColumns.join(" | "));
+  }
+  console.log(infoMsg.join(" "));
+
+  return {
+    totalRegistros: records.length,
+    totalEventos: countAuditEvents(records),
+    roundTrip: roundTrip,
+    templateSummary: summary
+  };
+}
+
+function resolveTemplateTargetSheets(workbook, records) {
+  const preferred = "Controle de EPI";
+  if (workbook.SheetNames.includes(preferred)) return [preferred];
+
+  const used = new Set();
+  (records || []).forEach(function (r) {
+    const n = String((r && r.source_sheet) || "").trim();
+    if (n) used.add(n);
+  });
+
+  const out = workbook.SheetNames.filter(function (name) { return used.has(name); });
+  return out.length ? out : workbook.SheetNames.slice();
+}
+
+const TEMPLATE_CANONICAL_KEYS = [
+  "identificacao",
+  "cod_subfonte",
+  "deputado",
+  "cod_uo",
+  "sigla_uo",
+  "cod_orgao",
+  "cod_acao",
+  "descricao_acao",
+  "municipio",
+  "valor_inicial",
+  "valor_atual",
+  "processo_sei",
+  "status_oficial"
+];
+
+function buildCanonicalColumnMap(headers) {
+  const map = {};
+  TEMPLATE_CANONICAL_KEYS.forEach(function (key) {
+    const idx = findHeaderIndexByAliases(headers, key);
+    if (idx >= 0) map[key] = idx;
+  });
+  return map;
+}
+
+function findHeaderIndexByAliases(headers, canonicalKey) {
+  const list = [];
+  const aliases = IMPORT_ALIASES[canonicalKey] || [];
+  aliases.forEach(function (a) { list.push(a); });
+  if (RAW_PREFERRED_HEADERS[canonicalKey]) list.push(RAW_PREFERRED_HEADERS[canonicalKey]);
+
+  const wanted = new Set(list.map(function (x) { return normalizeHeader(x); }));
+  for (let i = 0; i < (headers || []).length; i += 1) {
+    if (wanted.has(normalizeHeader(headers[i]))) return i;
+  }
+  return -1;
+}
+
+function getRecordValueForTemplate(rec, canonicalKey) {
+  if (!rec) return "";
+  if (canonicalKey === "status_oficial") return rec.status_oficial || "";
+
+  const raw = rec.all_fields && typeof rec.all_fields === "object" ? rec.all_fields : null;
+  if (raw) {
+    const aliases = IMPORT_ALIASES[canonicalKey] || [];
+    const wanted = new Set(aliases.map(function (a) { return normalizeHeader(a); }));
+    const preferred = RAW_PREFERRED_HEADERS[canonicalKey];
+    if (preferred) wanted.add(normalizeHeader(preferred));
+
+    const keys = Object.keys(raw);
+    for (let i = 0; i < keys.length; i += 1) {
+      const k = keys[i];
+      if (wanted.has(normalizeHeader(k))) {
+        const v = raw[k];
+        if (v != null && String(v).trim() !== "") return v;
+      }
+    }
+  }
+
+  return rec[canonicalKey] == null ? "" : rec[canonicalKey];
+}
+
+function setWorksheetCellValue(ws, rowNumber, colIndex, value, canonicalKey, xlsxApi) {
+  const addr = xlsxApi.utils.encode_cell({ r: Math.max(0, Number(rowNumber) - 1), c: Math.max(0, Number(colIndex)) });
+  const previousCell = ws[addr];
+  const prevValue = previousCell && Object.prototype.hasOwnProperty.call(previousCell, "v") ? previousCell.v : "";
+
+  const numericField = canonicalKey === "valor_inicial" || canonicalKey === "valor_atual";
+  const normalizedNext = value == null ? "" : value;
+
+  let nextCell;
+  if (numericField && String(normalizedNext).trim() !== "" && Number.isFinite(toNumber(normalizedNext))) {
+    nextCell = {
+      t: "n",
+      v: toNumber(normalizedNext)
+    };
+  } else {
+    nextCell = {
+      t: "s",
+      v: String(normalizedNext)
+    };
+  }
+
+  const changed = normalizeCompareValue(prevValue) !== normalizeCompareValue(nextCell.v);
+  if (!changed) return false;
+
+  if (previousCell && previousCell.z) nextCell.z = previousCell.z;
+  if (previousCell && previousCell.s) nextCell.s = previousCell.s;
+  ws[addr] = nextCell;
+  return true;
+}
+
+function normalizeCompareValue(v) {
+  if (v == null) return "";
+  if (typeof v === "number") return Number(v).toString();
+  return String(v).trim();
+}
+
+function runTemplateRoundTripCheck(workbook, assertions) {
+  try {
+    const xlsxApi = typeof window !== "undefined" ? window.XLSX : null;
+    if (!xlsxApi) return { ok: true, issues: [] };
+
+    const arr = xlsxApi.write(workbook, { type: "array", bookType: "xlsx" });
+    const wb2 = xlsxApi.read(arr, { type: "array" });
+    const issues = [];
+
+    const checkLimit = Math.min((assertions || []).length, 800);
+    for (let i = 0; i < checkLimit; i += 1) {
+      const a = assertions[i];
+      const ws = wb2.Sheets[a.sheetName];
+      if (!ws) {
+        issues.push("Aba ausente no round-trip: " + a.sheetName);
+        continue;
+      }
+
+      const addr = xlsxApi.utils.encode_cell({ r: Math.max(0, Number(a.rowNumber) - 1), c: Math.max(0, Number(a.colIndex)) });
+      const cell = ws[addr];
+      const got = cell && Object.prototype.hasOwnProperty.call(cell, "v") ? cell.v : "";
+      if (normalizeCompareValue(got) !== normalizeCompareValue(a.expected)) {
+        issues.push("Divergencia em " + a.sheetName + "!" + addr + ": esperado=" + normalizeCompareValue(a.expected) + " recebido=" + normalizeCompareValue(got));
+        if (issues.length >= 25) break;
+      }
+    }
+
+    return { ok: issues.length === 0, issues: issues };
+  } catch (err) {
+    return { ok: false, issues: ["Falha no round-trip (template): " + (err && err.message ? err.message : "erro desconhecido")] };
+  }
 }
 
 function buildExportTableData(records, options) {
