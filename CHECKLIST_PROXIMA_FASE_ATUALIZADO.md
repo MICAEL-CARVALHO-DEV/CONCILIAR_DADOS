@@ -36,7 +36,7 @@ Legenda:
 - [x] Resumo de importacao na tela
 - [x] Deteccao de duplicidade por ID/chave de referencia
 - [x] Registro formal de lote (arquivo, hash, responsavel)
-- [ ] Registro detalhado por linha importada (`import_linhas`)
+- [x] Registro detalhado por linha importada (`import_linhas`)
 
 ## 6. Exportacao (CSV/XLSX)
 - [x] Exportacao CSV/XLSX funcionando
@@ -78,8 +78,8 @@ Legenda:
 
 ## 12. Proximas entregas (ordem recomendada)
 ### Sprint 1 - Controle operacional
-- [ ] Tabela `lotes_importacao` + hash de arquivo
-- [ ] Log `export_logs`
+- [x] Tabela `lotes_importacao` + hash de arquivo
+- [x] Log `export_logs`
 - [ ] Persistencia de arquivo em pasta simulada de rede
 
 ### Sprint 2 - Governanca e seguranca
@@ -97,6 +97,3 @@ Legenda:
 - [ ] 0 dependencia de Excel como fonte principal
 - [ ] Importacao/exportacao com trilha auditavel fim a fim
 - [ ] Supervisor com visao geral e governanca operacional
-
-
-

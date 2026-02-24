@@ -19,6 +19,8 @@ STATUS = {
 
 EVENT_ORIGINS = {"UI", "API", "IMPORT", "EXPORT"}
 
+IMPORT_LINE_STATUS = {"CREATED", "UPDATED", "UNCHANGED", "SKIPPED", "CONFLICT"}
+
 EVENT_TYPES = {
     "IMPORT",
     "OFFICIAL_STATUS",
@@ -225,6 +227,45 @@ class ExportLogOut(BaseModel):
     created_at: datetime
     usuario_nome: str
     setor: str
+
+    class Config:
+        from_attributes = True
+
+
+class ImportLinhaIn(BaseModel):
+    ordem: int = 0
+    sheet_name: str = ""
+    row_number: int = 0
+    status_linha: str = "UNCHANGED"
+    id_interno: str = ""
+    ref_key: str = ""
+    mensagem: str = ""
+
+    @field_validator("status_linha")
+    @classmethod
+    def validate_line_status(cls, value: str) -> str:
+        v = (value or "UNCHANGED").strip().upper()
+        if v not in IMPORT_LINE_STATUS:
+            raise ValueError("status_linha invalido")
+        return v
+
+
+class ImportLinhasBulkCreate(BaseModel):
+    lote_id: int
+    linhas: list[ImportLinhaIn] = Field(default_factory=list)
+
+
+class ImportLinhaOut(BaseModel):
+    id: int
+    lote_id: int
+    ordem: int
+    sheet_name: str
+    row_number: int
+    status_linha: str
+    id_interno: str
+    ref_key: str
+    mensagem: str
+    created_at: datetime
 
     class Config:
         from_attributes = True
