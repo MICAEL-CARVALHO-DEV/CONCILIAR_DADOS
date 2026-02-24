@@ -520,7 +520,10 @@ fileCsv.addEventListener("change", async function () {
     syncYearFilter();
     render();
     showImportReport(report);
-    await syncImportBatchToApi(file, report);
+    const loteId = await syncImportBatchToApi(file, report);
+    if (loteId) {
+      await syncImportLinesToApi(loteId, report.rowDetails || []);
+    }
 
     alert("Importacao concluida. Criados: " + report.created + " | Atualizados: " + report.updated + " | Sem alteracao: " + report.unchanged + " | Linhas lidas: " + report.totalRows);
   } catch (err) {
@@ -864,6 +867,7 @@ function processImportedRows(sourceRows, fileName) {
     duplicateInFile: 0,
     conflictIdVsRef: 0,
     sheetNames: [],
+    rowDetails: [],
     validation: lastImportValidation || null
   };
 
@@ -883,6 +887,15 @@ function processImportedRows(sourceRows, fileName) {
 
     if (!hasUsefulData(incoming)) {
       report.skippedRows += 1;
+      report.rowDetails.push({
+        ordem: report.rowDetails.length + 1,
+        sheet_name: ctx.sheetName || "CSV",
+        row_number: ctx.rowNumber != null ? Number(ctx.rowNumber) : 0,
+        status_linha: "SKIPPED",
+        id_interno: incoming.id || "",
+        ref_key: incoming.ref_key || "",
+        mensagem: "Linha ignorada: sem dados uteis"
+      });
       return;
     }
     report.consideredRows += 1;
@@ -910,12 +923,31 @@ function processImportedRows(sourceRows, fileName) {
       existingById.set(created.id, created);
       if (created.ref_key && !existingByRef.has(created.ref_key)) existingByRef.set(created.ref_key, created);
       report.created += 1;
+      report.rowDetails.push({
+        ordem: report.rowDetails.length + 1,
+        sheet_name: ctx.sheetName || "CSV",
+        row_number: ctx.rowNumber != null ? Number(ctx.rowNumber) : 0,
+        status_linha: "CREATED",
+        id_interno: created.id || "",
+        ref_key: created.ref_key || "",
+        mensagem: "Registro criado"
+      });
       return;
     }
 
     const mergeResult = mergeImportIntoRecord(target, incoming, ctx, fileName);
     if (mergeResult.changedAny) report.updated += 1;
     else report.unchanged += 1;
+
+    report.rowDetails.push({
+      ordem: report.rowDetails.length + 1,
+      sheet_name: ctx.sheetName || "CSV",
+      row_number: ctx.rowNumber != null ? Number(ctx.rowNumber) : 0,
+      status_linha: byId && byRef && byId !== byRef ? "CONFLICT" : (mergeResult.changedAny ? "UPDATED" : "UNCHANGED"),
+      id_interno: target.id || "",
+      ref_key: target.ref_key || incoming.ref_key || "",
+      mensagem: byId && byRef && byId !== byRef ? "Conflito ID x chave referencia; aplicado no ID existente" : (mergeResult.changedAny ? "Registro atualizado" : "Sem alteracao")
+    });
 
     existingById.set(target.id, target);
     if (target.ref_key) existingByRef.set(target.ref_key, target);
@@ -2576,7 +2608,7 @@ function countAuditEvents(records) {
 }
 
 async function syncImportBatchToApi(file, report) {
-  if (!isApiEnabled()) return;
+  if (!isApiEnabled()) return null;
   const payload = {
     arquivo_nome: file && file.name ? file.name : (report.fileName || "importacao"),
     arquivo_hash: quickHashString((file && file.name ? file.name : "") + "|" + (file && file.size ? file.size : 0) + "|" + (file && file.lastModified ? file.lastModified : 0) + "|" + (report.totalRows || 0) + "|" + (report.created || 0) + "|" + (report.updated || 0)),
@@ -2596,13 +2628,51 @@ async function syncImportBatchToApi(file, report) {
   };
 
   try {
-    await apiRequest("POST", "/imports/lotes", payload, "IMPORT");
+    const resp = await apiRequest("POST", "/imports/lotes", payload, "IMPORT");
     apiOnline = true;
     apiLastError = "";
     applyAccessProfile();
+    return resp && resp.id != null ? Number(resp.id) : null;
   } catch (err) {
     handleApiSyncError(err, "lote de importacao");
+    return null;
   }
+}
+
+async function syncImportLinesToApi(loteId, rowDetails) {
+  if (!isApiEnabled()) return;
+  if (!loteId) return;
+  const lines = Array.isArray(rowDetails) ? rowDetails : [];
+  if (!lines.length) return;
+
+  const chunkSize = 300;
+  for (let i = 0; i < lines.length; i += chunkSize) {
+    const chunk = lines.slice(i, i + chunkSize).map(function (ln, idx) {
+      return {
+        ordem: ln && ln.ordem != null ? Number(ln.ordem) : (i + idx + 1),
+        sheet_name: ln && ln.sheet_name ? String(ln.sheet_name) : "",
+        row_number: ln && ln.row_number != null ? Number(ln.row_number) : 0,
+        status_linha: (ln && ln.status_linha ? String(ln.status_linha) : "UNCHANGED").toUpperCase(),
+        id_interno: ln && ln.id_interno ? String(ln.id_interno) : "",
+        ref_key: ln && ln.ref_key ? String(ln.ref_key) : "",
+        mensagem: ln && ln.mensagem ? String(ln.mensagem) : ""
+      };
+    });
+
+    try {
+      await apiRequest("POST", "/imports/linhas/bulk", {
+        lote_id: Number(loteId),
+        linhas: chunk
+      }, "IMPORT");
+      apiOnline = true;
+      apiLastError = "";
+    } catch (err) {
+      handleApiSyncError(err, "linhas de importacao");
+      return;
+    }
+  }
+
+  applyAccessProfile();
 }
 
 async function syncExportLogToApi(meta) {

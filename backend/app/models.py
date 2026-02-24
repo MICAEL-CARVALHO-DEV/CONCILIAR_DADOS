@@ -94,6 +94,21 @@ class ImportLote(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+class ImportLinha(Base):
+    __tablename__ = "import_linhas"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    lote_id: Mapped[int] = mapped_column(ForeignKey("lotes_importacao.id"), index=True, nullable=False)
+    ordem: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    sheet_name: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    row_number: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    status_linha: Mapped[str] = mapped_column(String(30), default="UNCHANGED", nullable=False)
+    id_interno: Mapped[str] = mapped_column(String(60), default="", nullable=False)
+    ref_key: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    mensagem: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 class ExportLog(Base):
     __tablename__ = "export_logs"
 

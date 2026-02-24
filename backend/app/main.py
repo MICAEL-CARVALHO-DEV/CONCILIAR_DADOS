@@ -14,7 +14,7 @@ from sqlalchemy import func, inspect, or_, text
 from sqlalchemy.orm import Session
 
 from .db import Base, SessionLocal, engine, get_db
-from .models import Emenda, ExportLog, Historico, ImportLote, Usuario, UsuarioSessao
+from .models import Emenda, ExportLog, Historico, ImportLinha, ImportLote, Usuario, UsuarioSessao
 from .schemas import (
     AuthLoginIn,
     AuthOut,
@@ -27,6 +27,8 @@ from .schemas import (
     EVENT_ORIGINS,
     ExportLogCreate,
     ExportLogOut,
+    ImportLinhaOut,
+    ImportLinhasBulkCreate,
     ImportLoteCreate,
     ImportLoteOut,
     ROLES,
@@ -800,6 +802,59 @@ def listar_lotes_importacao(
     db: Session = Depends(get_db),
 ):
     return db.query(ImportLote).order_by(ImportLote.created_at.desc(), ImportLote.id.desc()).limit(limit).all()
+
+
+@app.post("/imports/linhas/bulk")
+def criar_linhas_importacao(
+    payload: ImportLinhasBulkCreate,
+    actor: dict = Depends(_require_manager),
+    db: Session = Depends(get_db),
+):
+    lote = db.get(ImportLote, payload.lote_id)
+    if not lote:
+        raise HTTPException(status_code=404, detail="lote de importacao nao encontrado")
+
+    linhas = payload.linhas or []
+    if not linhas:
+        return {"ok": True, "inserted": 0}
+
+    inserted = 0
+    now = _utcnow()
+    for ln in linhas:
+        db.add(
+            ImportLinha(
+                lote_id=lote.id,
+                ordem=max(0, int(ln.ordem or 0)),
+                sheet_name=(ln.sheet_name or "")[:120],
+                row_number=max(0, int(ln.row_number or 0)),
+                status_linha=(ln.status_linha or "UNCHANGED").upper(),
+                id_interno=(ln.id_interno or "")[:60],
+                ref_key=(ln.ref_key or "")[:255],
+                mensagem=ln.mensagem or "",
+                created_at=now,
+            )
+        )
+        inserted += 1
+
+    db.commit()
+    _broadcast_update("import_linha", lote.id)
+    return {"ok": True, "inserted": inserted}
+
+
+@app.get("/imports/linhas", response_model=list[ImportLinhaOut])
+def listar_linhas_importacao(
+    lote_id: int = Query(..., ge=1),
+    limit: int = Query(default=500, ge=1, le=5000),
+    _actor: dict = Depends(_require_manager),
+    db: Session = Depends(get_db),
+):
+    return (
+        db.query(ImportLinha)
+        .filter(ImportLinha.lote_id == lote_id)
+        .order_by(ImportLinha.ordem.asc(), ImportLinha.id.asc())
+        .limit(limit)
+        .all()
+    )
 
 
 @app.post("/exports/logs")
