@@ -134,6 +134,7 @@ loadUserConfig(false);
 
 const DEMO = [
   mkRecord({
+    demo_seed: true,
     id: "EPI-2026-000001",
     ano: 2026,
     identificacao: "EPI 2026 / Fanfarra",
@@ -156,6 +157,7 @@ const DEMO = [
     ]
   }),
   mkRecord({
+    demo_seed: true,
     id: "EPI-2026-000002",
     ano: 2026,
     identificacao: "EPI 2026 / Reforma Escola",
@@ -522,6 +524,11 @@ fileCsv.addEventListener("change", async function () {
       return;
     }
 
+    const removedDemo = purgeDemoBeforeOfficialImport();
+    if (removedDemo > 0) {
+      idCountersByYear = buildIdCounters(state.records || []);
+    }
+
     const report = processImportedRows(sourceRows, file.name);
     saveState();
     syncYearFilter();
@@ -532,7 +539,8 @@ fileCsv.addEventListener("change", async function () {
       await syncImportLinesToApi(loteId, report.rowDetails || []);
     }
 
-    alert("Importacao concluida. Criados: " + report.created + " | Atualizados: " + report.updated + " | Sem alteracao: " + report.unchanged + " | Linhas lidas: " + report.totalRows);
+    const extraDemoInfo = removedDemo > 0 ? (" | Demos removidos: " + String(removedDemo)) : "";
+    alert("Importacao concluida. Criados: " + report.created + " | Atualizados: " + report.updated + " | Sem alteracao: " + report.unchanged + " | Linhas lidas: " + report.totalRows + extraDemoInfo);
   } catch (err) {
     console.error(err);
     const detail = err && err.message ? String(err.message) : "erro desconhecido";
@@ -2070,7 +2078,8 @@ function mkRecord(data) {
     ref_key: "",
     source_sheet: asText(data.source_sheet || "Controle de EPI"),
     source_row: data.source_row != null ? Number(data.source_row) : null,
-    all_fields: data.all_fields && typeof data.all_fields === "object" ? shallowCloneObj(data.all_fields) : {}
+    all_fields: data.all_fields && typeof data.all_fields === "object" ? shallowCloneObj(data.all_fields) : {},
+    demo_seed: !!data.demo_seed
   };
   syncCanonicalToAllFields(rec);
   rec.ref_key = buildReferenceKey(rec);
@@ -2088,11 +2097,48 @@ function normalizeRecordShape(raw) {
   rec.source_sheet = asText((raw && raw.source_sheet) || rec.source_sheet || "Controle de EPI");
   rec.source_row = raw && raw.source_row != null ? Number(raw.source_row) : rec.source_row;
   rec.all_fields = rec.all_fields && typeof rec.all_fields === "object" ? rec.all_fields : {};
+  rec.demo_seed = (raw && raw.demo_seed === true) || inferDemoSeed(raw || rec);
   syncCanonicalToAllFields(rec);
   rec.ref_key = buildReferenceKey(rec);
   return rec;
 }
 
+
+function inferDemoSeed(rec) {
+  if (!rec) return false;
+  if (rec.demo_seed === true) return true;
+
+  const identificacao = normalizeLooseText(rec.identificacao || "");
+  const deputado = normalizeLooseText(rec.deputado || "");
+  const processo = normalizeLooseText(rec.processo_sei || "");
+  const id = normalizeLooseText(rec.id || "");
+  const events = Array.isArray(rec.eventos) ? rec.eventos : [];
+
+  const hasDemoNote = events.some(function (ev) {
+    return normalizeLooseText(ev && ev.note ? ev.note : "").indexOf("demo") >= 0;
+  });
+  if (hasDemoNote) return true;
+
+  if (identificacao === "epi 2026 / fanfarra" && deputado === "dep-alfa") return true;
+  if (identificacao === "epi 2026 / reforma escola" && deputado === "dep-beta") return true;
+
+  if (id === "epi-2026-000001" && processo === "sei-0001/2026") return true;
+  if (id === "epi-2026-000002" && processo === "sei-0002/2026") return true;
+
+  return false;
+}
+
+function purgeDemoBeforeOfficialImport() {
+  const records = Array.isArray(state && state.records) ? state.records : [];
+  const kept = records.filter(function (rec) {
+    return !inferDemoSeed(rec);
+  });
+  const removed = records.length - kept.length;
+  if (removed > 0) {
+    state.records = kept;
+  }
+  return removed;
+}
 
 function migrateLegacyStatusRecords(records) {
   (records || []).forEach(function (rec) {
@@ -2379,16 +2425,21 @@ function buildImportSummaryPlaceholderHtml() {
   const last = getRecentChangesForPanel(1)[0] || null;
   const lastAt = last ? fmtDateTime(last.at) : "-";
   const lastBy = last ? (escapeHtml(last.actor_user) + " (" + escapeHtml(last.actor_role) + ")") : "-";
+  const planilha1Html = buildPlanilha1Html(buildPlanilha1Aoa(state.records || []));
 
   return ""
-    + "<h4>Resumo da base atual</h4>"
-    + "<p class=\"muted small\">Sem importacao nova nesta sessao. Os dados atuais continuam ativos.</p>"
-    + "<div class=\"kv\" style=\"margin-top:8px\">"
-    + "  <div class=\"k\">Registros carregados</div><div class=\"v\">" + String(totalRegistros) + "</div>"
-    + "  <div class=\"k\">Eventos no historico</div><div class=\"v\">" + String(totalEventos) + "</div>"
-    + "  <div class=\"k\">Ultima alteracao</div><div class=\"v\">" + lastAt + "</div>"
-    + "  <div class=\"k\">Responsavel da ultima alteracao</div><div class=\"v\">" + lastBy + "</div>"
-    + "</div>";
+    + '<h4>Resumo da base atual</h4>'
+    + '<p class="muted small">Sem importacao nova nesta sessao. Os dados atuais continuam ativos.</p>'
+    + '<div class="kv" style="margin-top:8px">'
+    + '  <div class="k">Registros carregados</div><div class="v">' + String(totalRegistros) + '</div>'
+    + '  <div class="k">Eventos no historico</div><div class="v">' + String(totalEventos) + '</div>'
+    + '  <div class="k">Ultima alteracao</div><div class="v">' + lastAt + '</div>'
+    + '  <div class="k">Responsavel da ultima alteracao</div><div class="v">' + lastBy + '</div>'
+    + '</div>'
+    + '<div style="margin-top:12px">'
+    + '  <h4 style="margin-bottom:8px">Resumo por deputado (Planilha1)</h4>'
+    + planilha1Html
+    + '</div>';
 }
 
 function buildImportSummaryHtml(report) {
@@ -3209,8 +3260,12 @@ function runRoundTripCheck(workbook, headers) {
 }
 
 function buildPlanilha1Aoa(records) {
+  const safeRecords = (records || []).filter(function (r) {
+    return !inferDemoSeed(r);
+  });
+
   const byDeputado = {};
-  records.forEach(function (r) {
+  safeRecords.forEach(function (r) {
     const nome = (r.deputado || "").trim() || "(Sem deputado)";
     byDeputado[nome] = (byDeputado[nome] || 0) + 1;
   });
@@ -3221,14 +3276,14 @@ function buildPlanilha1Aoa(records) {
 
   const out = [
     ["Rotulos de Linha", "Contagem de Deputado"],
-    ["Indicar escola", records.length]
+    ["Indicar escola", safeRecords.length]
   ];
 
   ordered.forEach(function (nome) {
     out.push([nome, byDeputado[nome]]);
   });
 
-  out.push(["Total Geral", records.length]);
+  out.push(["Total Geral", safeRecords.length]);
   return out;
 }
 
