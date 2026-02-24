@@ -1,4 +1,4 @@
-﻿from datetime import datetime
+from datetime import datetime
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -17,12 +17,15 @@ STATUS = {
     "Cancelado",
 }
 
+EVENT_ORIGINS = {"UI", "API", "IMPORT", "EXPORT"}
+
 EVENT_TYPES = {
     "IMPORT",
     "OFFICIAL_STATUS",
     "MARK_STATUS",
     "EDIT_FIELD",
     "NOTE",
+    "VERSIONAR",
 }
 
 
@@ -53,6 +56,7 @@ class AuthLoginIn(BaseModel):
 
 class AuthOut(BaseModel):
     token: str
+    token_type: str = "bearer"
     usuario: UserOut
 
 
@@ -94,6 +98,7 @@ class EmendaStatusUpdate(BaseModel):
 
 class EventoCreate(BaseModel):
     tipo_evento: str
+    origem_evento: str = ""
     campo_alterado: str = ""
     valor_antigo: str = ""
     valor_novo: str = ""
@@ -107,6 +112,27 @@ class EventoCreate(BaseModel):
             raise ValueError("tipo_evento invalido")
         return v
 
+    @field_validator("origem_evento")
+    @classmethod
+    def validate_event_origin(cls, value: str) -> str:
+        v = (value or "").strip().upper()
+        if not v:
+            return ""
+        if v not in EVENT_ORIGINS:
+            raise ValueError("origem_evento invalida")
+        return v
+
+
+class EmendaVersionarIn(BaseModel):
+    motivo: str = "Nova versao"
+    ano: int | None = None
+    identificacao: str | None = None
+    municipio: str | None = None
+    deputado: str | None = None
+    valor_inicial: float | None = None
+    valor_atual: float | None = None
+    processo_sei: str | None = None
+
 
 class EmendaOut(BaseModel):
     id: int
@@ -114,7 +140,91 @@ class EmendaOut(BaseModel):
     ano: int
     identificacao: str
     status_oficial: str
+    parent_id: int | None = None
+    version: int = 1
+    is_current: bool = True
     updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+class ImportLoteCreate(BaseModel):
+    arquivo_nome: str = Field(min_length=1, max_length=255)
+    arquivo_hash: str = Field(default="", max_length=128)
+    linhas_lidas: int = 0
+    linhas_validas: int = 0
+    linhas_ignoradas: int = 0
+    registros_criados: int = 0
+    registros_atualizados: int = 0
+    sem_alteracao: int = 0
+    duplicidade_id: int = 0
+    duplicidade_ref: int = 0
+    duplicidade_arquivo: int = 0
+    conflito_id_ref: int = 0
+    abas_lidas: list[str] = Field(default_factory=list)
+    observacao: str = ""
+    origem_evento: str = "IMPORT"
+
+    @field_validator("origem_evento")
+    @classmethod
+    def validate_import_origin(cls, value: str) -> str:
+        v = (value or "IMPORT").strip().upper()
+        if v not in EVENT_ORIGINS:
+            raise ValueError("origem_evento invalida")
+        return v
+
+
+class ExportLogCreate(BaseModel):
+    formato: str = Field(min_length=3, max_length=10)
+    arquivo_nome: str = Field(min_length=1, max_length=255)
+    quantidade_registros: int = 0
+    quantidade_eventos: int = 0
+    filtros_json: str = ""
+    modo_headers: str = "normalizados"
+    round_trip_ok: bool | None = None
+    round_trip_issues: list[str] = Field(default_factory=list)
+    origem_evento: str = "EXPORT"
+
+    @field_validator("formato")
+    @classmethod
+    def validate_formato(cls, value: str) -> str:
+        v = (value or "").strip().upper()
+        if v not in {"CSV", "XLSX"}:
+            raise ValueError("formato invalido")
+        return v
+
+    @field_validator("origem_evento")
+    @classmethod
+    def validate_export_origin(cls, value: str) -> str:
+        v = (value or "EXPORT").strip().upper()
+        if v not in EVENT_ORIGINS:
+            raise ValueError("origem_evento invalida")
+        return v
+
+
+class ImportLoteOut(BaseModel):
+    id: int
+    arquivo_nome: str
+    linhas_lidas: int
+    linhas_validas: int
+    linhas_ignoradas: int
+    created_at: datetime
+    usuario_nome: str
+    setor: str
+
+    class Config:
+        from_attributes = True
+
+
+class ExportLogOut(BaseModel):
+    id: int
+    formato: str
+    arquivo_nome: str
+    quantidade_registros: int
+    quantidade_eventos: int
+    created_at: datetime
+    usuario_nome: str
+    setor: str
 
     class Config:
         from_attributes = True

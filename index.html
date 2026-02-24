@@ -11,7 +11,7 @@
     <header class="topbar">
       <div>
         <h1>Prototipo SEC Emendas</h1>
-        <p class="muted">Status oficial, marcacoes por usuario e importacao da planilha real</p>
+        <p class="muted">Andamento por usuario, importacao da planilha real e audit log</p>
       </div>
       <div class="actions">
         <span id="currentUserInfo" class="user-chip"></span>
@@ -27,7 +27,7 @@
 
     <section class="filters card">
       <div class="field">
-        <label for="statusFilter">Status Oficial</label>
+        <label for="statusFilter">Andamento Global</label>
         <select id="statusFilter"></select>
       </div>
 
@@ -52,8 +52,9 @@
             <th>Identificacao</th>
             <th>Municipio</th>
             <th>Deputado</th>
-            <th>Status Oficial</th>
-            <th>Conflitos</th>
+            <th>Progresso</th>
+            <th>Usuarios (status)</th>
+            <th>Parado ha</th>
             <th>Valor Atual</th>
             <th>Atualizado</th>
             <th>Acao</th>
@@ -79,23 +80,6 @@
           <div class="card">
             <h4>Dados principais</h4>
             <div class="kv" id="kv"></div>
-
-            <div class="divider">
-              <h4>Status Oficial</h4>
-
-              <div class="field">
-                <label for="officialStatus">Status Oficial (APG/SUPERVISAO)</label>
-                <select id="officialStatus"></select>
-              </div>
-
-              <div class="field">
-                <label for="officialReason">Motivo (obrigatorio)</label>
-                <textarea id="officialReason" rows="3" placeholder="Ex.: validacao concluida / aprovacao / retorno por pendencia..."></textarea>
-              </div>
-
-              <button id="btnChangeOfficial" class="btn primary">Alterar Status Oficial</button>
-              <p class="muted small">Somente perfis APG/SUPERVISAO (regra demo).</p>
-            </div>
           </div>
 
           <div class="card">
@@ -117,10 +101,15 @@
             </div>
 
             <div id="conflictBox" class="card hidden">
-              <h4>Conflito detectado</h4>
+              <h4>Atencao no andamento</h4>
               <p class="muted small" id="conflictText"></p>
             </div>
           </div>
+        </div>
+
+        <div class="card">
+          <h4>Andamento por usuario (tempo real)</h4>
+          <div id="userProgressBox"></div>
         </div>
 
         <div class="card">
@@ -171,9 +160,3 @@
   </script>
 </body>
 </html>
-
-
-
-
-
-
