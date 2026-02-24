@@ -46,6 +46,7 @@ const STORAGE_MODE_KEY = "SEC_STORAGE_MODE";
 const STORAGE_MODE_LOCAL = "local";
 const STORAGE_MODE_SESSION = "session";
 const DEFAULT_API_BASE_URL = "http://localhost:8000";
+const RUNTIME_CONFIG = (typeof window !== "undefined" && window.SEC_APP_CONFIG && typeof window.SEC_APP_CONFIG === "object") ? window.SEC_APP_CONFIG : {};
 const API_WS_PATH = "/ws";
 const WS_RECONNECT_BASE_MS = 1500;
 const WS_RECONNECT_MAX_MS = 15000;
@@ -1854,7 +1855,8 @@ function isApiEnabled() {
 
 function getApiBaseUrl() {
   const raw = localStorage.getItem(API_BASE_URL_KEY);
-  const base = text(raw) || DEFAULT_API_BASE_URL;
+  const runtimeBase = text(RUNTIME_CONFIG.API_BASE_URL);
+  const base = text(raw) || runtimeBase || DEFAULT_API_BASE_URL;
   return base.replace(/\/+$/, "");
 }
 

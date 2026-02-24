@@ -62,10 +62,11 @@
     </section>
   </main>
 
+  <script src="config.js"></script>
   <script>
     (function () {
       const API_BASE_URL_KEY = "SEC_API_BASE_URL";
-      const DEFAULT_API_BASE_URL = "http://localhost:8000";
+      const DEFAULT_API_BASE_URL = ((window.SEC_APP_CONFIG && window.SEC_APP_CONFIG.API_BASE_URL) ? String(window.SEC_APP_CONFIG.API_BASE_URL) : "") || "http://localhost:8000";
       const SESSION_TOKEN_KEY = "SEC_SESSION_TOKEN";
       const USER_NAME_KEY = "SEC_USER_NAME";
       const USER_ROLE_KEY = "SEC_USER_ROLE";
