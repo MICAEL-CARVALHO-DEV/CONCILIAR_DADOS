@@ -2,7 +2,7 @@
  * Prototipo SEC Emendas - v3
  * - Status oficial controlado por APG/SUPERVISAO
  * - Marcacao por usuario e timeline completa
- * - Importacao de CSV/XLSX (multiplas abas)
+ * - Importacao de XLSX (multiplas abas)
  * - Chave de referencia para duplicidade
  * - Merge de importacao sem perder historico
  ************************/
@@ -441,34 +441,34 @@ btnAddNote.addEventListener("click", async function () {
 btnExportOne.addEventListener("click", async function () {
   const rec = getSelected();
   if (!rec) return;
-  const filename = "emenda_" + rec.id + ".csv";
-  downloadCsv(filename, toCsv([rec]));
+
+  const templateReady = !!(lastImportedWorkbookTemplate && lastImportedWorkbookTemplate.buffer);
+  const templateMode = templateReady
+    ? confirm("Exportar este registro em modo TEMPLATE (mesma estrutura do XLSX original)?")
+    : false;
+  const roundTripCheck = confirm("Executar round-trip check apos exportar? (pode ser mais lento)");
+  const filename = "emenda_" + rec.id + "_" + dateStamp() + ".xlsx";
+
+  const exportMeta = exportRecordsToXlsx([rec], filename, {
+    useOriginalHeaders: true,
+    roundTripCheck: roundTripCheck,
+    templateMode: templateMode
+  });
+
   await syncExportLogToApi({
-    formato: "CSV",
+    formato: "XLSX",
     arquivoNome: filename,
     quantidadeRegistros: 1,
     quantidadeEventos: countAuditEvents([rec]),
     filtros: { single_id: rec.id },
-    modoHeaders: "normalizados",
-    roundTripOk: null,
-    roundTripIssues: []
+    modoHeaders: templateMode ? "template_original" : "originais",
+    roundTripOk: exportMeta && exportMeta.roundTrip ? exportMeta.roundTrip.ok : null,
+    roundTripIssues: exportMeta && exportMeta.roundTrip ? (exportMeta.roundTrip.issues || []) : []
   });
 });
-
-btnExport.addEventListener("click", async function () {
-  const filename = "emendas_export_" + dateStamp() + ".csv";
-  downloadCsv(filename, toCsv(state.records));
-  await syncExportLogToApi({
-    formato: "CSV",
-    arquivoNome: filename,
-    quantidadeRegistros: state.records.length,
-    quantidadeEventos: countAuditEvents(state.records),
-    filtros: getCurrentFilterSnapshot(),
-    modoHeaders: "normalizados",
-    roundTripOk: null,
-    roundTripIssues: []
-  });
-});
+if (btnExport) {
+  btnExport.style.display = "none";
+}
 
 btnExportXlsx.addEventListener("click", async function () {
   const templateReady = !!(lastImportedWorkbookTemplate && lastImportedWorkbookTemplate.buffer);
@@ -889,14 +889,14 @@ function processImportedRows(sourceRows, fileName) {
   });
 
   sourceRows.forEach(function (ctx) {
-    sheetSet.add(ctx.sheetName || "CSV");
+    sheetSet.add(ctx.sheetName || "XLSX");
     const incoming = mapImportRow(ctx);
 
     if (!hasUsefulData(incoming)) {
       report.skippedRows += 1;
       report.rowDetails.push({
         ordem: report.rowDetails.length + 1,
-        sheet_name: ctx.sheetName || "CSV",
+        sheet_name: ctx.sheetName || "XLSX",
         row_number: ctx.rowNumber != null ? Number(ctx.rowNumber) : 0,
         status_linha: "SKIPPED",
         id_interno: incoming.id || "",
@@ -932,7 +932,7 @@ function processImportedRows(sourceRows, fileName) {
       report.created += 1;
       report.rowDetails.push({
         ordem: report.rowDetails.length + 1,
-        sheet_name: ctx.sheetName || "CSV",
+        sheet_name: ctx.sheetName || "XLSX",
         row_number: ctx.rowNumber != null ? Number(ctx.rowNumber) : 0,
         status_linha: "CREATED",
         id_interno: created.id || "",
@@ -948,7 +948,7 @@ function processImportedRows(sourceRows, fileName) {
 
     report.rowDetails.push({
       ordem: report.rowDetails.length + 1,
-      sheet_name: ctx.sheetName || "CSV",
+      sheet_name: ctx.sheetName || "XLSX",
       row_number: ctx.rowNumber != null ? Number(ctx.rowNumber) : 0,
       status_linha: byId && byRef && byId !== byRef ? "CONFLICT" : (mergeResult.changedAny ? "UPDATED" : "UNCHANGED"),
       id_interno: target.id || "",
@@ -1101,7 +1101,7 @@ function mapImportRow(ctx) {
     processo_sei: asText(pickValue(row, IMPORT_ALIASES.processo_sei)),
     status_oficial: "",
     all_fields: rawOriginal,
-    source_sheet: ctx.sheetName || "CSV",
+    source_sheet: ctx.sheetName || "XLSX",
     source_row: ctx.rowNumber != null ? Number(ctx.rowNumber) : null
   };
 
@@ -1140,81 +1140,70 @@ function stringifyFieldValue(value, type) {
 }
 
 function buildImportNote(fileName, ctx) {
-  return "Importado de " + fileName + " | Aba: " + (ctx.sheetName || "CSV") + " | Linha: " + String(ctx.rowNumber || "-");
+  return "Importado de " + fileName + " | Aba: " + (ctx.sheetName || "XLSX") + " | Linha: " + String(ctx.rowNumber || "-");
 }
 
 async function parseInputFile(file) {
   const name = String(file.name || "").toLowerCase();
 
-  if (name.endsWith(".csv")) {
-    lastImportedWorkbookTemplate = null;
-    const text = await file.text();
-    const rows = parseCsv(text);
-    const out = rows.map(function (row, idx) {
-      return { sheetName: "CSV", rowNumber: idx + 2, row: row };
-    });
-    lastImportValidation = buildImportValidationReport(out);
-    return out;
+  if (!name.endsWith(".xlsx")) {
+    throw new Error("Formato nao suportado. Use apenas XLSX.");
   }
 
-  if (name.endsWith(".xlsx") || name.endsWith(".xls")) {
-    const xlsxApi = typeof window !== "undefined" ? window.XLSX : null;
-    if (!xlsxApi) throw new Error("Biblioteca XLSX nao carregada.");
+  const xlsxApi = typeof window !== "undefined" ? window.XLSX : null;
+  if (!xlsxApi) throw new Error("Biblioteca XLSX nao carregada.");
 
-    const buffer = await file.arrayBuffer();
-    const templateBuffer = buffer.slice(0);
-    const wb = xlsxApi.read(buffer, {
-      type: "array",
-      raw: false,
-      cellFormula: true,
-      cellNF: true,
-      cellStyles: true,
-      cellDates: false
-    });
-    const out = [];
-    const knownHeaders = buildKnownHeaderSet();
+  const buffer = await file.arrayBuffer();
+  const templateBuffer = buffer.slice(0);
+  const wb = xlsxApi.read(buffer, {
+    type: "array",
+    raw: false,
+    cellFormula: true,
+    cellNF: true,
+    cellStyles: true,
+    cellDates: false
+  });
+  const out = [];
+  const knownHeaders = buildKnownHeaderSet();
 
-    const preferredSheet = wb.SheetNames.includes("Controle de EPI") ? "Controle de EPI" : null;
-    const orderedSheetNames = preferredSheet
-      ? [preferredSheet].concat(wb.SheetNames.filter(function (n) { return n !== preferredSheet; }))
-      : wb.SheetNames.slice();
+  const preferredSheet = wb.SheetNames.includes("Controle de EPI") ? "Controle de EPI" : null;
+  const orderedSheetNames = preferredSheet
+    ? [preferredSheet].concat(wb.SheetNames.filter(function (n) { return n !== preferredSheet; }))
+    : wb.SheetNames.slice();
 
-    orderedSheetNames.forEach(function (sheetName) {
-      const sheet = wb.Sheets[sheetName];
-      const matrix = xlsxApi.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false, blankrows: false });
-      const detected = detectHeaderRow(matrix);
-      if (!detected) return;
+  orderedSheetNames.forEach(function (sheetName) {
+    const sheet = wb.Sheets[sheetName];
+    const matrix = xlsxApi.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false, blankrows: false });
+    const detected = detectHeaderRow(matrix);
+    if (!detected) return;
 
-      const headers = detected.headers;
-      const recognizedCount = headers.reduce(function (acc, h) {
-        return acc + (knownHeaders.has(normalizeHeader(h)) ? 1 : 0);
-      }, 0);
+    const headers = detected.headers;
+    const recognizedCount = headers.reduce(function (acc, h) {
+      return acc + (knownHeaders.has(normalizeHeader(h)) ? 1 : 0);
+    }, 0);
 
-      if (sheetName === "Controle de EPI" && recognizedCount < 5) {
-        throw new Error("Cabecalho da aba Controle de EPI nao reconhecido. Verifique se a linha de cabecalho esta correta.");
-      }
-      if (sheetName !== "Controle de EPI" && recognizedCount < 3) return;
+    if (sheetName === "Controle de EPI" && recognizedCount < 5) {
+      throw new Error("Cabecalho da aba Controle de EPI nao reconhecido. Verifique se a linha de cabecalho esta correta.");
+    }
+    if (sheetName !== "Controle de EPI" && recognizedCount < 3) return;
 
-      for (let r = detected.headerRowIndex + 1; r < matrix.length; r += 1) {
-        const arr = matrix[r] || [];
-        if (isRowEmpty(arr)) continue;
-        const rowObj = rowArrayToObject(arr, headers);
-        out.push({ sheetName: sheetName, rowNumber: r + 1, row: rowObj });
-      }
-    });
+    for (let r = detected.headerRowIndex + 1; r < matrix.length; r += 1) {
+      const arr = matrix[r] || [];
+      if (isRowEmpty(arr)) continue;
+      const rowObj = rowArrayToObject(arr, headers);
+      out.push({ sheetName: sheetName, rowNumber: r + 1, row: rowObj });
+    }
+  });
 
-    lastImportedWorkbookTemplate = {
-      fileName: file.name || "template.xlsx",
-      importedAt: isoNow(),
-      preferredSheet: preferredSheet || "",
-      buffer: templateBuffer
-    };
+  lastImportedWorkbookTemplate = {
+    fileName: file.name || "template.xlsx",
+    importedAt: isoNow(),
+    preferredSheet: preferredSheet || "",
+    buffer: templateBuffer
+  };
 
-    lastImportValidation = buildImportValidationReport(out);
-    return out;
-  }
-
-  throw new Error("Formato nao suportado. Use CSV ou XLSX.");
+  lastImportValidation = buildImportValidationReport(out);
+  return out;
 }
 
 
@@ -1229,7 +1218,7 @@ function buildImportValidationReport(sourceRows) {
 
   rows.slice(0, 5).forEach(function (ctx) {
     preview.push({
-      aba: ctx && ctx.sheetName ? ctx.sheetName : "CSV",
+      aba: ctx && ctx.sheetName ? ctx.sheetName : "XLSX",
       linha: ctx && ctx.rowNumber != null ? Number(ctx.rowNumber) : null,
       dados: shallowCloneObj((ctx && ctx.row) || {})
     });
@@ -2378,7 +2367,7 @@ function renderImportDashboard() {
     + "</div>";
 
   if (latestImportReport) {
-    wireImportReportTabs("resumo");
+    wireImportReportTabs("planilha1");
   }
 }
 
@@ -2716,7 +2705,7 @@ async function syncImportLinesToApi(loteId, rowDetails) {
 async function syncExportLogToApi(meta) {
   if (!isApiEnabled()) return;
   const payload = {
-    formato: String(meta && meta.formato ? meta.formato : "CSV").toUpperCase(),
+    formato: String(meta && meta.formato ? meta.formato : "XLSX").toUpperCase(),
     arquivo_nome: meta && meta.arquivoNome ? meta.arquivoNome : "exportacao",
     quantidade_registros: meta && Number.isFinite(Number(meta.quantidadeRegistros)) ? Number(meta.quantidadeRegistros) : 0,
     quantidade_eventos: meta && Number.isFinite(Number(meta.quantidadeEventos)) ? Number(meta.quantidadeEventos) : 0,
@@ -2735,16 +2724,6 @@ async function syncExportLogToApi(meta) {
   } catch (err) {
     handleApiSyncError(err, "log de exportacao");
   }
-}
-
-function toCsv(records) {
-  const table = buildExportTableData(records);
-  const headers = table.headers;
-  const lines = [headers.join(",")];
-  table.rows.forEach(function (rowObj) {
-    lines.push(headers.map(function (h) { return csvCell(rowObj[h]); }).join(","));
-  });
-  return lines.join("\n");
 }
 
 function exportRecordsToXlsx(records, filename, options) {
@@ -3253,127 +3232,6 @@ function buildPlanilha1Aoa(records) {
   return out;
 }
 
-function csvCell(v) {
-  const s = v == null ? "" : String(v);
-  if (/[,"\n]/.test(s)) return "\"" + s.replace(/"/g, "\"\"") + "\"";
-  return s;
-}
-
-function downloadCsv(filename, content) {
-  const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  URL.revokeObjectURL(url);
-}
-
-function parseCsv(text) {
-  const delimiter = detectDelimiter(text);
-  return parseDelimited(text, delimiter);
-}
-
-function detectDelimiter(text) {
-  const lines = String(text || "").split(/\r?\n/).filter(function (ln) {
-    return ln.trim() !== "";
-  });
-  if (!lines.length) return ",";
-
-  const sample = lines[0];
-  const countComma = (sample.match(/,/g) || []).length;
-  const countSemi = (sample.match(/;/g) || []).length;
-  const countTab = (sample.match(/\t/g) || []).length;
-
-  if (countSemi > countComma && countSemi >= countTab) return ";";
-  if (countTab > countComma && countTab > countSemi) return "\t";
-  return ",";
-}
-
-function parseDelimited(text, delimiter) {
-  const rows = [];
-  let i = 0;
-  let field = "";
-  let row = [];
-  let inQuotes = false;
-
-  function pushField() {
-    row.push(field);
-    field = "";
-  }
-
-  function pushRow() {
-    rows.push(row);
-    row = [];
-  }
-
-  while (i < text.length) {
-    const ch = text[i];
-
-    if (inQuotes) {
-      if (ch === "\"") {
-        const next = text[i + 1];
-        if (next === "\"") {
-          field += "\"";
-          i += 2;
-          continue;
-        }
-        inQuotes = false;
-        i += 1;
-        continue;
-      }
-      field += ch;
-      i += 1;
-      continue;
-    }
-
-    if (ch === "\"") {
-      inQuotes = true;
-      i += 1;
-      continue;
-    }
-    if (ch === delimiter) {
-      pushField();
-      i += 1;
-      continue;
-    }
-    if (ch === "\n") {
-      pushField();
-      pushRow();
-      i += 1;
-      continue;
-    }
-    if (ch === "\r") {
-      i += 1;
-      continue;
-    }
-
-    field += ch;
-    i += 1;
-  }
-
-  pushField();
-  pushRow();
-
-  const header = (rows.shift() || []).map(function (h) {
-    return String(h || "").trim();
-  });
-
-  return rows.filter(function (r) {
-    return r.some(function (cell) {
-      return String(cell || "").trim() !== "";
-    });
-  }).map(function (r) {
-    const obj = {};
-    header.forEach(function (h, idx) {
-      obj[h] = String(r[idx] || "").trim();
-    });
-    return obj;
-  });
-}
-
 function fmtMoney(n) {
   const x = toNumber(n);
   return x.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -3454,18 +3312,3 @@ function debounce(fn, ms) {
 function deepClone(obj) {
   return JSON.parse(JSON.stringify(obj));
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
