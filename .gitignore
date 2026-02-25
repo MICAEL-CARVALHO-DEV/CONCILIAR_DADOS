@@ -1,4 +1,4 @@
-﻿# Python cache/artifacts
+# Python cache/artifacts
 __pycache__/
 *.py[cod]
 
@@ -16,3 +16,6 @@ anotacoes/snapshots/
 # OS/editor noise
 .DS_Store
 Thumbs.db
+
+# Private notes (local only)
+anotacoes/
