@@ -1,14 +1,22 @@
 # Python cache/artifacts
 __pycache__/
 *.py[cod]
+.pytest_cache/
+.mypy_cache/
 
 # Local environment files
 .env
+.env.*
+!.env.example
+!backend/.env.example
 .venv/
 venv/
 
 # Local database
 backend/test.db
+*.sqlite
+*.sqlite3
+*.db
 
 # Generated handoff snapshots
 anotacoes/snapshots/
@@ -16,6 +24,26 @@ anotacoes/snapshots/
 # OS/editor noise
 .DS_Store
 Thumbs.db
+.vscode/
 
 # Private notes (local only)
 anotacoes/
+
+# Secrets and credentials
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+id_rsa
+id_ed25519
+secrets/
+**/secrets/
+*.kdbx
+
+# Local backups / temp files
+*.bak
+*.tmp
+*.temp
+*.bundle
