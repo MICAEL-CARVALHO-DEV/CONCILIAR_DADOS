@@ -1,7 +1,7 @@
 ﻿
 param(
   [int]$ApiPort = 8000,
-  [int]$FrontPort = 8081
+  [int]$FrontPort = 5500
 )
 
 $ErrorActionPreference = "Stop"
@@ -25,7 +25,18 @@ function Get-LocalIPv4 {
 }
 
 $lanIp = Get-LocalIPv4
-$cors = "http://127.0.0.1:${FrontPort},http://localhost:${FrontPort},http://${lanIp}:${FrontPort}"
+$corsOrigins = @(
+  "http://127.0.0.1:5500",
+  "http://localhost:5500",
+  "http://127.0.0.1:8081",
+  "http://localhost:8081",
+  "http://127.0.0.1:${FrontPort}",
+  "http://localhost:${FrontPort}",
+  "http://${lanIp}:5500",
+  "http://${lanIp}:8081",
+  "http://${lanIp}:${FrontPort}"
+) | Select-Object -Unique
+$cors = ($corsOrigins -join ",")
 
 $apiCmd = @"
 Set-Location '$backend'
@@ -54,5 +65,7 @@ Start-Process "http://127.0.0.1:$FrontPort/login.html"
 
 Write-Host "Pronto. Dois terminais foram abertos (API + Front)." -ForegroundColor Cyan
 Write-Host "Deixe os dois terminais abertos durante o uso."
+
+
 
 
