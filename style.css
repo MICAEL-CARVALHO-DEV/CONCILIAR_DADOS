@@ -242,6 +242,38 @@ textarea {
   gap: 10px;
 }
 
+.modal-guard {
+  margin-right: auto;
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: 10px;
+  color: #a30f2d;
+  background: #ffe8ee;
+  border: 1px solid #ffbfd0;
+}
+
+.modal-feedback {
+  margin-right: auto;
+  font-size: 0.83rem;
+  font-weight: 600;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+
+.modal-feedback.success {
+  color: #0f6b3e;
+  background: #eafaf1;
+  border-color: #bfead3;
+}
+
+.modal-feedback.error {
+  color: #a30f2d;
+  background: #ffe8ee;
+  border-color: #ffbfd0;
+}
+
 .modal-body {
   overflow: auto;
   padding: 14px;
@@ -704,3 +736,9 @@ textarea {
   outline-offset: 1px;
 }
 
+
+
+
+.save-only-hint {
+  margin-top: 8px;
+}
