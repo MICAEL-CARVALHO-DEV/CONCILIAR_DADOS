@@ -46,6 +46,10 @@
       </form>
 
       <div class="auth-links">
+        <button type="button" class="btn" id="btnQuickLogin">Entrar rapido (teste)</button>
+      </div>
+
+      <div class="auth-links">
         <a class="btn" id="linkCadastro" href="cadastro.html">Criar cadastro</a>
         <a class="btn" href="index.html">Voltar</a>
       </div>
@@ -73,11 +77,11 @@
       const nome = document.getElementById("nome");
       const senha = document.getElementById("senha");
       const msg = document.getElementById("msg");
+      const btnQuickLogin = document.getElementById("btnQuickLogin");
       if (sessionStorage.getItem(SESSION_TOKEN_KEY)) {
         window.location.href = next;
         return;
       }
-
 
       const linkCadastro = document.getElementById("linkCadastro");
 
@@ -108,6 +112,12 @@
         return json;
       }
 
+      function persistSession(data, fallbackName, fallbackRole) {
+        sessionStorage.setItem(SESSION_TOKEN_KEY, String(data.token || ""));
+        localStorage.setItem(USER_NAME_KEY, String(data.usuario && data.usuario.nome || fallbackName || ""));
+        localStorage.setItem(USER_ROLE_KEY, String(data.usuario && data.usuario.perfil || fallbackRole || "CONTABIL"));
+      }
+
       form.addEventListener("submit", async function (e) {
         e.preventDefault();
         const n = String(nome.value || "").trim();
@@ -123,12 +133,39 @@
 
         try {
           const data = await apiRequest("/auth/login", { nome: n, senha: s });
-          sessionStorage.setItem(SESSION_TOKEN_KEY, String(data.token || ""));
-          localStorage.setItem(USER_NAME_KEY, String(data.usuario && data.usuario.nome || n));
-          localStorage.setItem(USER_ROLE_KEY, String(data.usuario && data.usuario.perfil || "CONTABIL"));
+          persistSession(data, n, "CONTABIL");
           window.location.href = next;
         } catch (err) {
           msg.textContent = err && err.message ? err.message : "Falha no login.";
+          msg.style.color = "#b4233d";
+        }
+      });
+
+      btnQuickLogin.addEventListener("click", async function () {
+        const quickName = "teste_" + String(Date.now()).slice(-6);
+        const quickPass = "123456";
+        const quickRole = "CONTABIL";
+
+        msg.textContent = "Criando acesso de teste...";
+        msg.style.color = "";
+
+        try {
+          let loginData = null;
+          try {
+            const reg = await apiRequest("/auth/register", { nome: quickName, perfil: quickRole, senha: quickPass });
+            if (reg && reg.token) loginData = reg;
+          } catch (_) {
+            // segue para tentativa de login
+          }
+
+          if (!loginData) {
+            loginData = await apiRequest("/auth/login", { nome: quickName, senha: quickPass });
+          }
+
+          persistSession(loginData, quickName, quickRole);
+          window.location.href = next;
+        } catch (err) {
+          msg.textContent = err && err.message ? err.message : "Falha no acesso rapido.";
           msg.style.color = "#b4233d";
         }
       });
@@ -136,5 +173,3 @@
   </script>
 </body>
 </html>
-
-
