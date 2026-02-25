@@ -162,6 +162,8 @@ let CURRENT_ROLE = "CONTABIL";
 let lastFocusedElement = null;
 let modalDraftState = null;
 let modalCloseInProgress = false;
+let modalSaveFeedbackTimer = null;
+let modalAutoCloseTimer = null;
 
 loadUserConfig(false);
 
@@ -252,6 +254,8 @@ const modalClose2 = document.getElementById("modalClose2");
 const kv = document.getElementById("kv");
 const kvDraftHint = document.getElementById("kvDraftHint");
 const btnKvSave = document.getElementById("btnKvSave");
+const modalSaveGuard = document.getElementById("modalSaveGuard");
+const modalSaveFeedback = document.getElementById("modalSaveFeedback");
 const historyEl = document.getElementById("history");
 const userProgressBox = document.getElementById("userProgressBox");
 
@@ -310,9 +314,9 @@ initializeAuthFlow();
 function initSelects() {
   setSelectOptions(statusFilter, STATUS_FILTERS);
 
-  setSelectOptions(markStatus, STATUS.map(function (s) {
+  setSelectOptions(markStatus, [{ label: "Selecione um status", value: "" }].concat(STATUS.map(function (s) {
     return { label: s, value: s };
-  }));
+  })));
 
   syncYearFilter();
   syncCustomExportFilters();
@@ -451,12 +455,36 @@ modal.addEventListener("click", function (e) {
   if (e.target === modal) requestCloseModal();
 });
 if (btnKvSave) {
-  btnKvSave.addEventListener("click", async function () {
-    await saveModalDraftChanges(true);
+  btnKvSave.addEventListener("click", async function (e) { if (e) { e.preventDefault(); e.stopPropagation(); }
+    clearModalAutoCloseTimer();
+    const ok = await saveModalDraftChanges(false);
+    if (ok) {
+      modalAutoCloseTimer = setTimeout(function () {
+        forceCloseModal();
+      }, 1100);
+    }
   });
+}
+if (markStatus) markStatus.addEventListener("change", function () { clearModalAutoCloseTimer(); updateModalDraftUi(); });
+if (markReason) markReason.addEventListener("input", function () { clearModalAutoCloseTimer(); updateModalDraftUi(); });
+
+function isUnsafeReloadShortcut(e) {
+  if (!e) return false;
+  var key = String(e.key || "").toLowerCase();
+  if (key === "f5") return true;
+  var accel = !!(e.ctrlKey || e.metaKey);
+  return accel && key === "r";
 }
 
 document.addEventListener("keydown", function (e) {
+  if (modal.classList.contains("show") && isModalDraftDirty() && isUnsafeReloadShortcut(e)) {
+    e.preventDefault();
+    e.stopPropagation();
+    showModalSaveFeedback("ATENCAO: salve as edicoes antes de recarregar a pagina.", true);
+    if (btnKvSave && typeof btnKvSave.focus === "function") btnKvSave.focus();
+    return;
+  }
+
   if (e.key !== "Escape") return;
   if (modal.classList.contains("show")) {
     requestCloseModal();
@@ -468,65 +496,57 @@ document.addEventListener("keydown", function (e) {
 });
 window.addEventListener("beforeunload", function (e) {
   if (!modal.classList.contains("show")) return;
-  if (!isModalDraftDirty()) return;
+  if (!isModalDraftDirty() && !hasPendingModalAction()) return;
   e.preventDefault();
   e.returnValue = "";
 });
 
-btnMarkStatus.addEventListener("click", async function () {
+btnMarkStatus.addEventListener("click", function (e) { if (e) { e.preventDefault(); e.stopPropagation(); }
+  clearModalAutoCloseTimer();
   const rec = getSelected();
-  if (!rec) return;
+  if (!rec || !modalDraftState) return;
 
-  const next = normalizeStatus(markStatus.value);
-  const why = (markReason.value || "").trim();
-  if (!why) {
-    alert("Motivo/observacao e obrigatorio para registrar marcacao.");
+  const selectedStatus = markStatus ? (markStatus.value || "").trim() : "";
+  if (!selectedStatus) {
+    showModalSaveFeedback("ATENCAO: selecione um status para preparar a marcacao.", true);
+    if (markStatus) markStatus.focus();
+    updateModalDraftUi();
     return;
   }
 
-  rec.updated_at = isoNow();
-  rec.eventos.unshift(mkEvent("MARK_STATUS", { to: next, note: why }));
-
-  try {
-    await syncGenericEventToApi(rec, {
-      tipo_evento: "MARK_STATUS",
-      valor_novo: next,
-      motivo: why
-    });
-  } catch (err) {
-    handleApiSyncError(err, "marcacao");
+  const next = normalizeStatus(selectedStatus);
+  const why = (markReason.value || "").trim();
+  if (!why) {
+    showModalSaveFeedback("ATENCAO: informe motivo/observacao para preparar a marcacao.", true);
+    return;
   }
 
-  saveState();
-  render();
-  openModal(rec.id, true);
+  modalDraftState.pendingAction = {
+    type: "MARK_STATUS",
+    status: next,
+    reason: why
+  };
+  updateModalDraftUi();
+  showModalSaveFeedback("Marcacao preparada. Agora clique em Salvar edicoes para gravar.", false);
 });
 
-btnAddNote.addEventListener("click", async function () {
+btnAddNote.addEventListener("click", function (e) { if (e) { e.preventDefault(); e.stopPropagation(); }
+  clearModalAutoCloseTimer();
   const rec = getSelected();
-  if (!rec) return;
+  if (!rec || !modalDraftState) return;
 
   const why = (markReason.value || "").trim();
   if (!why) {
-    alert("Escreva uma observacao para registrar no historico.");
+    showModalSaveFeedback("ATENCAO: escreva uma observacao para preparar a nota.", true);
     return;
   }
 
-  rec.updated_at = isoNow();
-  rec.eventos.unshift(mkEvent("NOTE", { note: why }));
-
-  try {
-    await syncGenericEventToApi(rec, {
-      tipo_evento: "NOTE",
-      motivo: why
-    });
-  } catch (err) {
-    handleApiSyncError(err, "nota");
-  }
-
-  saveState();
-  render();
-  openModal(rec.id, true);
+  modalDraftState.pendingAction = {
+    type: "NOTE",
+    reason: why
+  };
+  updateModalDraftUi();
+  showModalSaveFeedback("Nota preparada. Agora clique em Salvar edicoes para gravar.", false);
 });
 
 if (btnExportOne) {
@@ -731,10 +751,87 @@ function isModalDraftDirty() {
   return Object.keys(modalDraftState.dirty).length > 0;
 }
 
+function hasPendingModalAction() {
+  return !!(modalDraftState && modalDraftState.pendingAction && modalDraftState.pendingAction.type);
+}
+
+function canSaveDraftNow() {
+  if (hasPendingModalAction()) return true;
+  if (!isModalDraftDirty()) return false;
+  const selectedStatus = markStatus ? (markStatus.value || "").trim() : "";
+  const reason = (markReason ? (markReason.value || "") : "").trim();
+  return selectedStatus.length > 0 && reason.length > 0;
+}
+
+function getDraftSaveBlockReason() {
+  if (hasPendingModalAction()) return "";
+  if (!isModalDraftDirty()) return "";
+  const selectedStatus = markStatus ? (markStatus.value || "").trim() : "";
+  if (!selectedStatus) {
+    return "ATENCAO: nao e permitido salvar alteracoes de campos sem marcar status na secao de Marcacao de Status.";
+  }
+  const reason = (markReason ? (markReason.value || "") : "").trim();
+  if (!reason) {
+    return "ATENCAO: informe o motivo/observacao na Marcacao de Status para concluir o salvamento.";
+  }
+  return "";
+}
+
+function clearModalAutoCloseTimer() {
+  if (modalAutoCloseTimer) {
+    clearTimeout(modalAutoCloseTimer);
+    modalAutoCloseTimer = null;
+  }
+}
+
+function clearModalSaveFeedback() {
+  if (!modalSaveFeedback) return;
+  if (modalSaveFeedbackTimer) {
+    clearTimeout(modalSaveFeedbackTimer);
+    modalSaveFeedbackTimer = null;
+  }
+  modalSaveFeedback.textContent = "";
+  modalSaveFeedback.classList.add("hidden");
+  modalSaveFeedback.classList.remove("success", "error");
+}
+
+function showModalSaveFeedback(message, isError) {
+  if (!modalSaveFeedback) return;
+  clearModalSaveFeedback();
+  modalSaveFeedback.textContent = message;
+  modalSaveFeedback.classList.remove("hidden");
+  modalSaveFeedback.classList.add(isError ? "error" : "success");
+  modalSaveFeedbackTimer = setTimeout(function () {
+    clearModalSaveFeedback();
+  }, 2600);
+}
+
 function updateModalDraftUi() {
   const dirty = isModalDraftDirty();
-  if (kvDraftHint) kvDraftHint.classList.toggle("hidden", !dirty);
-  if (btnKvSave) btnKvSave.disabled = !dirty;
+  const pending = hasPendingModalAction();
+  const hasDraft = dirty || pending;
+  const canSave = canSaveDraftNow();
+  const blockReason = getDraftSaveBlockReason();
+
+  if (kvDraftHint) {
+    kvDraftHint.classList.toggle("hidden", !hasDraft);
+    if (hasDraft) {
+      if (pending) {
+        kvDraftHint.textContent = "Marcacao/nota pronta: somente Salvar edicoes grava no historico.";
+      } else if (canSave) {
+        kvDraftHint.textContent = "Edicao pendente: pronta para salvar.";
+      } else {
+        kvDraftHint.textContent = "Edicao pendente: informe status e motivo na marcacao para salvar.";
+      }
+    }
+  }
+
+  if (modalSaveGuard) {
+    modalSaveGuard.classList.toggle("hidden", !hasDraft || !blockReason);
+    modalSaveGuard.textContent = blockReason || "";
+  }
+
+  if (btnKvSave) btnKvSave.disabled = !canSave;
 
   if (!kv) return;
   const inputs = kv.querySelectorAll("[data-kv-field]");
@@ -744,9 +841,9 @@ function updateModalDraftUi() {
     el.classList.toggle("kv-dirty", isDirty);
   });
 }
-
 function onModalFieldInput(e) {
   if (!modalDraftState) return;
+  clearModalSaveFeedback();
   const el = e.target;
   const key = el.getAttribute("data-kv-field");
   const type = el.getAttribute("data-kv-type") || "string";
@@ -796,8 +893,12 @@ function renderKvEditor(rec) {
 }
 
 async function saveModalDraftChanges(keepOpen) {
+  clearModalAutoCloseTimer();
   if (!modalDraftState) return true;
-  if (!isModalDraftDirty()) return true;
+
+  const hasDirty = isModalDraftDirty();
+  const pendingAction = modalDraftState.pendingAction || null;
+  if (!hasDirty && !pendingAction) return true;
 
   const rec = getSelected();
   if (!rec || rec.id !== modalDraftState.recordId) return false;
@@ -833,14 +934,66 @@ async function saveModalDraftChanges(keepOpen) {
     }));
   }
 
-  if (!changedEvents.length) {
+  let action = pendingAction;
+  if (!action && changedEvents.length) {
+    const selectedStatus = markStatus ? (markStatus.value || "").trim() : "";
+    const reasonForSave = (markReason ? (markReason.value || "") : "").trim();
+    if (!selectedStatus) {
+      showModalSaveFeedback("ERRO: nao pode salvar alteracoes sem marcar status.", true);
+      if (markStatus) markStatus.focus();
+      updateModalDraftUi();
+      return false;
+    }
+    if (!reasonForSave) {
+      showModalSaveFeedback("ERRO: informe motivo/observacao para salvar alteracoes.", true);
+      if (markReason) markReason.focus();
+      updateModalDraftUi();
+      return false;
+    }
+    action = { type: "MARK_STATUS", status: normalizeStatus(selectedStatus), reason: reasonForSave };
+  }
+
+  if (!action && !changedEvents.length) {
     modalDraftState.dirty = {};
     updateModalDraftUi();
     return true;
   }
 
+  const prependEvents = [];
+  if (action && action.type === "MARK_STATUS") {
+    prependEvents.push(mkEvent("MARK_STATUS", { to: normalizeStatus(action.status || ""), note: String(action.reason || "") }));
+  } else if (action && action.type === "NOTE") {
+    prependEvents.push(mkEvent("NOTE", { note: String(action.reason || "") }));
+  }
+
+  prependEvents.push.apply(prependEvents, changedEvents);
+  if (!prependEvents.length) return true;
+
   rec.updated_at = isoNow();
-  rec.eventos = changedEvents.concat(rec.eventos || []);
+  rec.eventos = prependEvents.concat(rec.eventos || []);
+
+  if (action && action.type === "MARK_STATUS") {
+    try {
+      await syncGenericEventToApi(rec, {
+        tipo_evento: "MARK_STATUS",
+        valor_novo: normalizeStatus(action.status || ""),
+        motivo: String(action.reason || "")
+      });
+    } catch (err) {
+      handleApiSyncError(err, "marcacao de status para salvar");
+      return false;
+    }
+  } else if (action && action.type === "NOTE") {
+    try {
+      await syncGenericEventToApi(rec, {
+        tipo_evento: "NOTE",
+        motivo: String(action.reason || "")
+      });
+    } catch (err) {
+      handleApiSyncError(err, "nota para salvar");
+      return false;
+    }
+  }
 
   for (let i = 0; i < changedEvents.length; i += 1) {
     const ev = changedEvents[i];
@@ -859,18 +1012,22 @@ async function saveModalDraftChanges(keepOpen) {
   }
 
   saveState();
+  if (typeof notifyStateUpdated === "function") notifyStateUpdated();
   render();
 
   if (keepOpen) {
     openModal(rec.id, true);
+    setTimeout(function () {
+      showModalSaveFeedback("Registro salvo com sucesso.", false);
+    }, 80);
   } else {
     modalDraftState = null;
     updateModalDraftUi();
+    showModalSaveFeedback("Registro salvo com sucesso.", false);
   }
 
   return true;
 }
-
 function discardModalDraftChanges(keepOpen) {
   if (keepOpen) {
     const rec = getSelected();
@@ -888,8 +1045,7 @@ async function requestCloseModal() {
   if (modalCloseInProgress) return;
   modalCloseInProgress = true;
   try {
-    if (isModalDraftDirty()) {
-      // Fechar atua como descarte das alteracoes pendentes sem popup nativo.
+    if (isModalDraftDirty() || hasPendingModalAction()) {
       discardModalDraftChanges(false);
       forceCloseModal();
       return;
@@ -901,6 +1057,8 @@ async function requestCloseModal() {
   }
 }
 function openModal(id, keepReasons) {
+  clearModalAutoCloseTimer();
+  clearModalSaveFeedback();
   lastFocusedElement = document.activeElement;
   selectedId = id;
   const rec = getSelected();
@@ -910,6 +1068,7 @@ function openModal(id, keepReasons) {
   modalSub.textContent = rec.identificacao + " | " + rec.municipio + " | " + rec.deputado;
 
   if (!keepReasons) {
+    if (markStatus) markStatus.value = "";
     markReason.value = "";
   }
 
@@ -1186,6 +1345,8 @@ function closeModal() {
 }
 
 function forceCloseModal() {
+  clearModalAutoCloseTimer();
+  clearModalSaveFeedback();
   modal.classList.remove("show");
   modal.setAttribute("aria-hidden", "true");
   selectedId = null;
@@ -3957,35 +4118,3 @@ function debounce(fn, ms) {
 function deepClone(obj) {
   return JSON.parse(JSON.stringify(obj));
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

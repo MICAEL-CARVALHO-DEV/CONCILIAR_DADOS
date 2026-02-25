@@ -81,7 +81,7 @@
           <div class="card">
             <h4>Dados principais</h4>
             <div class="kv" id="kv"></div>
-            <p id="kvDraftHint" class="muted small hidden">Edicao pendente: Salve ou Feche para descartar.</p>
+            <p id="kvDraftHint" class="muted small hidden">Edicao pendente: informe status e motivo para salvar, ou Feche para descartar.</p>
           </div>
 
           <div class="card">
@@ -98,8 +98,8 @@
             </div>
 
             <div class="row">
-              <button id="btnMarkStatus" class="btn primary">Registrar minha marcacao</button>
-              <button id="btnAddNote" class="btn">Adicionar nota</button>
+              <button type="button" id="btnMarkStatus" class="btn primary">Preparar minha marcacao</button>
+              <button type="button" id="btnAddNote" class="btn">Preparar nota</button>
             </div>
 
             <div id="conflictBox" class="card hidden">
@@ -131,8 +131,10 @@
       </div>
 
       <div class="modal-foot compact-actions" id="recordModalFoot">
-        <button id="btnKvSave" class="btn primary">Salvar edicoes</button>
-        <button id="modalClose2" class="btn">Fechar</button>
+        <span id="modalSaveGuard" class="modal-guard hidden" aria-live="polite"></span>
+        <span id="modalSaveFeedback" class="modal-feedback hidden" aria-live="polite"></span>
+        <button type="button" id="btnKvSave" class="btn primary">Salvar edicoes</button>
+        <button type="button" id="modalClose2" class="btn">Fechar</button>
       </div>
     </div>
   </div>
@@ -205,6 +207,10 @@
   </script>
 </body>
 </html>
+
+
+
+
 
 
 
