@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
@@ -81,6 +81,7 @@
           <div class="card">
             <h4>Dados principais</h4>
             <div class="kv" id="kv"></div>
+            <p id="kvDraftHint" class="muted small hidden">Edicao pendente: Salve ou Feche para descartar.</p>
           </div>
 
           <div class="card">
@@ -129,8 +130,8 @@
         </div>
       </div>
 
-      <div class="modal-foot">
-        <button id="btnExportOne" class="btn">Exportar este registro (XLSX)</button>
+      <div class="modal-foot compact-actions" id="recordModalFoot">
+        <button id="btnKvSave" class="btn primary">Salvar edicoes</button>
         <button id="modalClose2" class="btn">Fechar</button>
       </div>
     </div>
@@ -157,7 +158,7 @@
           </div>
           <div class="field">
             <label for="exportCustomDeputado">Deputado</label>
-            <input id="exportCustomDeputado" placeholder="Ex.: Fabíola Mansur" />
+            <input id="exportCustomDeputado" placeholder="Ex.: Fabiola Mansur" />
           </div>
           <div class="field">
             <label for="exportCustomMunicipio">Municipio</label>
@@ -204,3 +205,7 @@
   </script>
 </body>
 </html>
+
+
+
+

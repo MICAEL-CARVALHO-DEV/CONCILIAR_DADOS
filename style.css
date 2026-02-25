@@ -237,6 +237,11 @@ textarea {
   border-top: 1px solid var(--line);
 }
 
+.modal-foot.compact-actions {
+  justify-content: flex-end;
+  gap: 10px;
+}
+
 .modal-body {
   overflow: auto;
   padding: 14px;
@@ -671,3 +676,31 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+
+.kv-input,
+.kv-textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
+  font: inherit;
+  background: #fff;
+  color: inherit;
+}
+
+.kv-textarea {
+  min-height: 72px;
+  resize: vertical;
+}
+
+.kv-input[readonly],
+.kv-textarea[readonly] {
+  background: #f5f7fb;
+  color: var(--muted);
+}
+
+.kv-dirty {
+  outline: 2px solid #f39c12;
+  outline-offset: 1px;
+}
+

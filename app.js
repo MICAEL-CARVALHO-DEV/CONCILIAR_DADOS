@@ -95,6 +95,27 @@ const TRACKED_FIELDS = [
   { key: "processo_sei", label: "Processo SEI", type: "string" }
 ];
 
+const TRACKED_FIELD_BY_KEY = TRACKED_FIELDS.reduce(function (acc, def) {
+  acc[def.key] = def;
+  return acc;
+}, {});
+
+const MODAL_FIELD_ORDER = [
+  { key: "ano", label: "Ano", editable: true },
+  { key: "identificacao", label: "Identificacao", editable: true },
+  { key: "cod_subfonte", label: "Cod Subfonte", editable: true },
+  { key: "cod_acao", label: "Cod Acao", editable: true },
+  { key: "descricao_acao", label: "Descricao Acao", editable: true },
+  { key: "municipio", label: "Municipio", editable: true },
+  { key: "deputado", label: "Deputado", editable: true },
+  { key: "cod_uo", label: "Cod UO", editable: true },
+  { key: "sigla_uo", label: "Sigla UO", editable: true },
+  { key: "cod_orgao", label: "Cod Orgao", editable: true },
+  { key: "valor_inicial", label: "Valor Inicial", editable: true },
+  { key: "valor_atual", label: "Valor Atual", editable: true },
+  { key: "processo_sei", label: "Processo SEI", editable: true },
+  { key: "ref_key", label: "Ref Key", editable: false }
+];
 const IMPORT_ALIASES = {
   id: ["id", "id_interno", "id interno", "codigo_interno", "codigo interno"],
   ano: ["ano", "exercicio"],
@@ -139,6 +160,8 @@ const RAW_PREFERRED_HEADERS = {
 let CURRENT_USER = "USER01";
 let CURRENT_ROLE = "CONTABIL";
 let lastFocusedElement = null;
+let modalDraftState = null;
+let modalCloseInProgress = false;
 
 loadUserConfig(false);
 
@@ -227,6 +250,8 @@ const modalClose = document.getElementById("modalClose");
 const modalClose2 = document.getElementById("modalClose2");
 
 const kv = document.getElementById("kv");
+const kvDraftHint = document.getElementById("kvDraftHint");
+const btnKvSave = document.getElementById("btnKvSave");
 const historyEl = document.getElementById("history");
 const userProgressBox = document.getElementById("userProgressBox");
 
@@ -420,20 +445,32 @@ if (btnDemo4Users) {
   });
 }
 
-modalClose.addEventListener("click", closeModal);
-modalClose2.addEventListener("click", closeModal);
+modalClose.addEventListener("click", function () { requestCloseModal(); });
+modalClose2.addEventListener("click", function () { requestCloseModal(); });
 modal.addEventListener("click", function (e) {
-  if (e.target === modal) closeModal();
+  if (e.target === modal) requestCloseModal();
 });
+if (btnKvSave) {
+  btnKvSave.addEventListener("click", async function () {
+    await saveModalDraftChanges(true);
+  });
+}
+
 document.addEventListener("keydown", function (e) {
   if (e.key !== "Escape") return;
   if (modal.classList.contains("show")) {
-    closeModal();
+    requestCloseModal();
     return;
   }
   if (exportCustomModal && exportCustomModal.classList.contains("show")) {
     closeExportCustomModal();
   }
+});
+window.addEventListener("beforeunload", function (e) {
+  if (!modal.classList.contains("show")) return;
+  if (!isModalDraftDirty()) return;
+  e.preventDefault();
+  e.returnValue = "";
 });
 
 btnMarkStatus.addEventListener("click", async function () {
@@ -492,47 +529,49 @@ btnAddNote.addEventListener("click", async function () {
   openModal(rec.id, true);
 });
 
-btnExportOne.addEventListener("click", async function () {
-  const rec = getSelected();
-  if (!rec) return;
+if (btnExportOne) {
+  btnExportOne.addEventListener("click", async function () {
+    const rec = getSelected();
+    if (!rec) return;
 
-  const templateReady = !!(lastImportedWorkbookTemplate && lastImportedWorkbookTemplate.buffer);
-  const templateMode = templateReady
-    ? confirm("Exportar este registro em modo TEMPLATE (mesma estrutura do XLSX original)?")
-    : false;
-  const roundTripCheck = confirm("Executar round-trip check apos exportar? (pode ser mais lento)");
-  const filename = "emenda_" + rec.id + "_" + dateStamp() + ".xlsx";
+    const templateReady = !!(lastImportedWorkbookTemplate && lastImportedWorkbookTemplate.buffer);
+    const templateMode = templateReady
+      ? confirm("Exportar este registro em modo TEMPLATE (mesma estrutura do XLSX original)?")
+      : false;
+    const roundTripCheck = confirm("Executar round-trip check apos exportar? (pode ser mais lento)");
+    const filename = "emenda_" + rec.id + "_" + dateStamp() + ".xlsx";
 
-  const exportMeta = exportRecordsToXlsx([rec], filename, {
-    useOriginalHeaders: true,
-    roundTripCheck: roundTripCheck,
-    templateMode: templateMode,
-    exportScope: EXPORT_SCOPE.ATUAIS,
-    exportFilters: { single_id: rec.id }
+    const exportMeta = exportRecordsToXlsx([rec], filename, {
+      useOriginalHeaders: true,
+      roundTripCheck: roundTripCheck,
+      templateMode: templateMode,
+      exportScope: EXPORT_SCOPE.ATUAIS,
+      exportFilters: { single_id: rec.id }
+    });
+    if (!exportMeta) return;
+
+    latestExportReport = {
+      escopo: EXPORT_SCOPE.ATUAIS,
+      arquivoNome: filename,
+      quantidadeRegistros: 1,
+      filtros: { single_id: rec.id },
+      geradoEm: isoNow()
+    };
+    renderImportDashboard();
+
+    await syncExportLogToApi({
+      formato: "XLSX",
+      arquivoNome: filename,
+      quantidadeRegistros: 1,
+      quantidadeEventos: countAuditEvents([rec]),
+      filtros: { single_id: rec.id },
+      modoHeaders: templateMode ? "template_original" : "originais",
+      escopoExportacao: EXPORT_SCOPE.ATUAIS,
+      roundTripOk: exportMeta && exportMeta.roundTrip ? exportMeta.roundTrip.ok : null,
+      roundTripIssues: exportMeta && exportMeta.roundTrip ? (exportMeta.roundTrip.issues || []) : []
+    });
   });
-  if (!exportMeta) return;
-
-  latestExportReport = {
-    escopo: EXPORT_SCOPE.ATUAIS,
-    arquivoNome: filename,
-    quantidadeRegistros: 1,
-    filtros: { single_id: rec.id },
-    geradoEm: isoNow()
-  };
-  renderImportDashboard();
-
-  await syncExportLogToApi({
-    formato: "XLSX",
-    arquivoNome: filename,
-    quantidadeRegistros: 1,
-    quantidadeEventos: countAuditEvents([rec]),
-    filtros: { single_id: rec.id },
-    modoHeaders: templateMode ? "template_original" : "originais",
-    escopoExportacao: EXPORT_SCOPE.ATUAIS,
-    roundTripOk: exportMeta && exportMeta.roundTrip ? exportMeta.roundTrip.ok : null,
-    roundTripIssues: exportMeta && exportMeta.roundTrip ? (exportMeta.roundTrip.issues || []) : []
-  });
-});
+}
 if (btnExportAtuais) {
   btnExportAtuais.addEventListener("click", async function () {
     await runExportByScope(EXPORT_SCOPE.ATUAIS);
@@ -636,6 +675,231 @@ fileCsv.addEventListener("change", async function () {
   }
 });
 
+function getModalFieldType(fieldKey) {
+  const def = TRACKED_FIELD_BY_KEY[fieldKey];
+  return def && def.type ? def.type : "string";
+}
+
+function getModalFieldLabel(fieldKey, fallback) {
+  const def = TRACKED_FIELD_BY_KEY[fieldKey];
+  return def && def.label ? def.label : (fallback || fieldKey);
+}
+
+function normalizeDraftFieldValue(value, type) {
+  if (type === "money") return toNumber(value);
+  if (type === "number") return toInt(value);
+  return String(value == null ? "" : value).trim();
+}
+
+function formatDraftInputValue(value, type) {
+  if (type === "money") return fmtMoney(value || 0);
+  if (type === "number") return String(toInt(value));
+  return String(value == null ? "" : value);
+}
+
+function parseDraftFieldValue(raw, type) {
+  const v = String(raw == null ? "" : raw);
+  if (type === "money") return toNumber(v);
+  if (type === "number") return toInt(v);
+  return v.trim();
+}
+
+function initModalDraftForRecord(rec) {
+  const draft = {};
+  const original = {};
+
+  MODAL_FIELD_ORDER.forEach(function (field) {
+    if (!field.editable) return;
+    const type = getModalFieldType(field.key);
+    const normalized = normalizeDraftFieldValue(rec[field.key], type);
+    draft[field.key] = normalized;
+    original[field.key] = normalized;
+  });
+
+  modalDraftState = {
+    recordId: rec.id,
+    draft: draft,
+    original: original,
+    dirty: {}
+  };
+
+  updateModalDraftUi();
+}
+
+function isModalDraftDirty() {
+  if (!modalDraftState || !modalDraftState.dirty) return false;
+  return Object.keys(modalDraftState.dirty).length > 0;
+}
+
+function updateModalDraftUi() {
+  const dirty = isModalDraftDirty();
+  if (kvDraftHint) kvDraftHint.classList.toggle("hidden", !dirty);
+  if (btnKvSave) btnKvSave.disabled = !dirty;
+
+  if (!kv) return;
+  const inputs = kv.querySelectorAll("[data-kv-field]");
+  inputs.forEach(function (el) {
+    const key = el.getAttribute("data-kv-field");
+    const isDirty = !!(modalDraftState && modalDraftState.dirty && modalDraftState.dirty[key]);
+    el.classList.toggle("kv-dirty", isDirty);
+  });
+}
+
+function onModalFieldInput(e) {
+  if (!modalDraftState) return;
+  const el = e.target;
+  const key = el.getAttribute("data-kv-field");
+  const type = el.getAttribute("data-kv-type") || "string";
+  if (!key) return;
+
+  const parsed = parseDraftFieldValue(el.value, type);
+  modalDraftState.draft[key] = parsed;
+
+  const original = modalDraftState.original[key];
+  if (hasFieldChanged(original, parsed, type)) modalDraftState.dirty[key] = true;
+  else delete modalDraftState.dirty[key];
+
+  updateModalDraftUi();
+}
+
+function renderKvEditor(rec) {
+  kv.innerHTML = "";
+
+  MODAL_FIELD_ORDER.forEach(function (field) {
+    const k = document.createElement("div");
+    k.className = "k";
+    k.textContent = field.label;
+
+    const v = document.createElement("div");
+    v.className = "v";
+
+    if (field.editable) {
+      const type = getModalFieldType(field.key);
+      const isLongText = field.key === "descricao_acao";
+      const input = document.createElement(isLongText ? "textarea" : "input");
+      input.className = isLongText ? "kv-textarea" : "kv-input";
+      if (!isLongText) input.type = "text";
+      input.setAttribute("data-kv-field", field.key);
+      input.setAttribute("data-kv-type", type);
+      input.value = formatDraftInputValue(modalDraftState && modalDraftState.draft ? modalDraftState.draft[field.key] : rec[field.key], type);
+      input.addEventListener("input", onModalFieldInput);
+      v.appendChild(input);
+    } else {
+      v.textContent = String(rec[field.key] == null ? "-" : rec[field.key]);
+    }
+
+    kv.appendChild(k);
+    kv.appendChild(v);
+  });
+
+  updateModalDraftUi();
+}
+
+async function saveModalDraftChanges(keepOpen) {
+  if (!modalDraftState) return true;
+  if (!isModalDraftDirty()) return true;
+
+  const rec = getSelected();
+  if (!rec || rec.id !== modalDraftState.recordId) return false;
+
+  const changedEvents = [];
+  const dirtyKeys = Object.keys(modalDraftState.dirty || {});
+
+  dirtyKeys.forEach(function (key) {
+    const type = getModalFieldType(key);
+    const label = getModalFieldLabel(key, key);
+    const prev = rec[key];
+    const next = normalizeDraftFieldValue(modalDraftState.draft[key], type);
+    if (!hasFieldChanged(prev, next, type)) return;
+
+    rec[key] = next;
+    changedEvents.push(mkEvent("EDIT_FIELD", {
+      field: label,
+      from: stringifyFieldValue(prev, type),
+      to: stringifyFieldValue(next, type),
+      note: "Edicao manual confirmada."
+    }));
+  });
+
+  const oldRef = rec.ref_key || "";
+  syncCanonicalToAllFields(rec);
+  rec.ref_key = buildReferenceKey(rec);
+  if (oldRef !== rec.ref_key) {
+    changedEvents.push(mkEvent("EDIT_FIELD", {
+      field: "Chave Referencia",
+      from: oldRef,
+      to: rec.ref_key,
+      note: "Recalculada apos edicao manual."
+    }));
+  }
+
+  if (!changedEvents.length) {
+    modalDraftState.dirty = {};
+    updateModalDraftUi();
+    return true;
+  }
+
+  rec.updated_at = isoNow();
+  rec.eventos = changedEvents.concat(rec.eventos || []);
+
+  for (let i = 0; i < changedEvents.length; i += 1) {
+    const ev = changedEvents[i];
+    try {
+      await syncGenericEventToApi(rec, {
+        tipo_evento: "EDIT_FIELD",
+        campo_alterado: ev.field || "",
+        valor_antigo: String(ev.from == null ? "" : ev.from),
+        valor_novo: String(ev.to == null ? "" : ev.to),
+        motivo: ev.note || "Edicao manual confirmada."
+      });
+    } catch (err) {
+      handleApiSyncError(err, "edicao de campo");
+      return false;
+    }
+  }
+
+  saveState();
+  render();
+
+  if (keepOpen) {
+    openModal(rec.id, true);
+  } else {
+    modalDraftState = null;
+    updateModalDraftUi();
+  }
+
+  return true;
+}
+
+function discardModalDraftChanges(keepOpen) {
+  if (keepOpen) {
+    const rec = getSelected();
+    if (rec) {
+      openModal(rec.id, true);
+      return;
+    }
+  }
+
+  modalDraftState = null;
+  updateModalDraftUi();
+}
+
+async function requestCloseModal() {
+  if (modalCloseInProgress) return;
+  modalCloseInProgress = true;
+  try {
+    if (isModalDraftDirty()) {
+      // Fechar atua como descarte das alteracoes pendentes sem popup nativo.
+      discardModalDraftChanges(false);
+      forceCloseModal();
+      return;
+    }
+
+    forceCloseModal();
+  } finally {
+    modalCloseInProgress = false;
+  }
+}
 function openModal(id, keepReasons) {
   lastFocusedElement = document.activeElement;
   selectedId = id;
@@ -649,29 +913,8 @@ function openModal(id, keepReasons) {
     markReason.value = "";
   }
 
-  kv.innerHTML = "";
-  const pairs = [
-    ["Ano", rec.ano],
-    ["Identificacao", rec.identificacao],
-    ["Cod Subfonte", rec.cod_subfonte || "-"],
-    ["Cod Acao", rec.cod_acao || "-"],
-    ["Descricao Acao", rec.descricao_acao || "-"],
-    ["Municipio", rec.municipio],
-    ["Deputado", rec.deputado],
-    ["Cod UO", rec.cod_uo || "-"],
-    ["Sigla UO", rec.sigla_uo || "-"],
-    ["Cod Orgao", rec.cod_orgao || "-"],
-    ["Valor Inicial", "R$ " + fmtMoney(rec.valor_inicial)],
-    ["Valor Atual", "R$ " + fmtMoney(rec.valor_atual)],
-    ["Processo SEI", rec.processo_sei || "-"],
-    ["Ref Key", rec.ref_key || "-"]
-  ];
-  pairs.forEach(function (pair) {
-    const item = document.createElement("div");
-    item.className = "item";
-    item.innerHTML = "<div class=\"k\">" + escapeHtml(pair[0]) + "</div><div class=\"v\">" + escapeHtml(String(pair[1])) + "</div>";
-    kv.appendChild(item);
-  });
+  initModalDraftForRecord(rec);
+  renderKvEditor(rec);
 
   const users = getActiveUsersWithLastMark(rec);
   const progress = calcProgress(users);
@@ -939,9 +1182,15 @@ function whoIsDelaying(users) {
 }
 
 function closeModal() {
+  requestCloseModal();
+}
+
+function forceCloseModal() {
   modal.classList.remove("show");
   modal.setAttribute("aria-hidden", "true");
   selectedId = null;
+  modalDraftState = null;
+  updateModalDraftUi();
   if (lastFocusedElement && typeof lastFocusedElement.focus === "function") {
     lastFocusedElement.focus();
   }
@@ -3708,6 +3957,16 @@ function debounce(fn, ms) {
 function deepClone(obj) {
   return JSON.parse(JSON.stringify(obj));
 }
+
+
+
+
+
+
+
+
+
+
 
 
 
