@@ -32,7 +32,7 @@ Permitir que qualquer nova conta do Codex continue o projeto sem perder contexto
 ## Comandos padrao (ambiente local)
 Subir tudo:
 ```powershell
-cd "C:\Users\micae\OneDrive\Area de Trabalho\conciliar Copia"
+cd "C:\Users\micae\OneDrive\Area de Trabalho\conciliardados"
 powershell -ExecutionPolicy Bypass -File .\scripts\start_tudo.ps1
 ```
 
@@ -59,6 +59,11 @@ Fechar P0 pendente no checklist:
 - Em reuniao com TI, usar tambem:
   - `TERMO_DE_OPERACAO_E_RESPONSABILIDADES.md`
   - `ESCOPO_FLUXO_COMPARATIVO_SEC_EMENDAS.md`
+
+## Pasta isolada de estudos IA (fora do projeto)
+- Caminho padrao: `C:\Users\micae\OneDrive\Area de Trabalho\ESTUDOS_IA_ISOLADO`
+- Esta pasta e separada do repo `conciliardados` para evitar publicacao acidental.
+- Conteudo de estudo nao entra no Git do sistema.
 
 ## Observacao de seguranca
 - Nao versionar senha/token/chaves no Git.
