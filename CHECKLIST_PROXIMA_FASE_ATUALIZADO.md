@@ -1,4 +1,4 @@
-# CHECKLIST 62 - PRIORIZADO E ENXUTO (SEC EMENDAS)
+﻿# CHECKLIST 62 - PRIORIZADO E ENXUTO (SEC EMENDAS)
 
 Legenda de status:
 - `[x]` Concluido
@@ -17,8 +17,8 @@ Legenda de execucao:
 - `QA` Teste/validacao
 
 ## Resumo geral (62 itens)
-- Concluidos: 25
-- Em andamento: 4
+- Concluidos: 27
+- Em andamento: 2
 - Pendentes: 33
 
 ## P0 - Operacao essencial (codar agora)
@@ -47,6 +47,7 @@ Legenda de execucao:
 - [x] C23 `[P0][COD]` Detalhe por linha importada (`import_linhas`)
 - [x] C24 `[P0][COD]` Exportacao operacional (`.xlsx`)
 - [~] C25 `[P0][COD]` Exportacao pelo estado consolidado
+- [ ] C25-A [P1][COD] (proxima apos C25) Edicao em rascunho no modal (.v) com confirmacao Salvar ou Descartar antes de persistir
 - [x] C26 `[P0][COD]` Log formal de exportacao
 - [ ] C27 `[P0][TI]` Persistir export em pasta oficial
 - [x] C28 `[P0][COD]` Estrutura base usuarios/emendas/historico
@@ -54,8 +55,8 @@ Legenda de execucao:
 - [x] C30 `[P0][COD]` Indices e constraints finais
 - [x] C31 `[P0][COD]` Migracoes Alembic completas
 - [x] C32 `[P0][QA]` Testes manuais API documentados
-- [~] C33 `[P0][QA]` Regressao por release
-- [~] C34 `[P0][QA]` Teste de concorrencia (2-5 usuarios)
+- [x] C33 `[P0][QA]` Regressao por release
+- [x] C34 `[P0][QA]` Teste de concorrencia (2-5 usuarios)
 
 ## P1 - Producao controlada (codigo + TI)
 - [ ] C35 `[P1][TI]` Servidor API na intranet
@@ -90,11 +91,13 @@ Legenda de execucao:
 - [ ] C62 `[P2][PROC]` Aceite: supervisor com governanca em tempo real
 
 ## Ordem pratica (enxuta)
-1. Fechar todos os `P0` pendentes (`C01-C04`, `C18`, `C25`, `C27`, `C33-C34`).
+1. Fechar todos os `P0` pendentes (`C01-C04`, `C18`, `C25`, `C27`).
 2. Entrar em `P1` com TI (`C35-C43`) e qualidade (`C44`).
 3. Fechar `P1` gestor (`C47-C50`) e depois `P2` (`C53-C62`).
 
 ## Regra de foco
 - Nao iniciar item `P1/P2` enquanto houver `P0` pendente que impacta operacao.
 - Toda entrega fecha com teste + registro em `LOG_ALTERACOES.md` + commit.
+
+
 

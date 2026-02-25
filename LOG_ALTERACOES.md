@@ -1,4 +1,4 @@
-# LOG ALTERACOES - SEC Emendas
+﻿# LOG ALTERACOES - SEC Emendas
 
 Use este arquivo para rastrear alteracoes operacionais e tecnicas.
 
@@ -60,3 +60,15 @@ Use este arquivo para rastrear alteracoes operacionais e tecnicas.
 - Validacao realizada: `regressao_p0.ps1` = sucesso (incluindo passo "bloqueio de usuario inativo"), `concorrencia_c34.ps1 -Users 4` = sucesso, `alembic upgrade head` = aplicado ate `20260224_0006`
 - Rollback (se necessario): `alembic downgrade -1` para voltar migration de indices + revert do commit
 - Status final: ok
+
+### 2026-02-24 (etapa 3 - C33/C34)
+- Data: 2026-02-24
+- Responsavel: Micael
+- Tipo: melhoria
+- Contexto: fechar QA de release e concorrencia com evidencias repetiveis
+- Alteracao executada: criado `scripts/validacao_release_c33_c34.ps1` para rodar `regressao_p0` + matriz de concorrencia C34 (`2,3,4,5` usuarios) e gerar evidencias em `anotacoes/evidencias/`
+- Impacto esperado: padronizar gate de release e reduzir regressao silenciosa antes de publicar
+- Validacao realizada: `validacao_release_c33_c34.ps1` = sucesso; evidencia gerada `VALIDACAO_RELEASE_C33_C34_20260224_203013.md`
+- Rollback (se necessario): remover script de validacao e manter execucao manual dos scripts antigos
+- Status final: ok
+

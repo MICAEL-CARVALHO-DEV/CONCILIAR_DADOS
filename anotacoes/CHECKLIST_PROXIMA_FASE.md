@@ -1,4 +1,4 @@
-# CHECKLIST - PROXIMA FASE (SEC EMENDAS)
+﻿# CHECKLIST - PROXIMA FASE (SEC EMENDAS)
 
 ## 1. Governanca do dado (Excel x Sistema)
 - [ ] Definir oficialmente que o banco e a fonte principal
@@ -84,6 +84,7 @@
 ### Fase 2 - Operacao controlada
 - [ ] Banco PostgreSQL central na rede
 - [ ] Exportacao auditada
+- [ ] (apos C25) Edicao em rascunho no modal com Salvar/Descartar antes de gravar
 - [ ] Painel de supervisao
 
 ### Fase 3 - Escala e BI
@@ -96,3 +97,4 @@
 - [ ] 0 dependencia de Excel como fonte principal
 - [ ] Importacao/exportacao com log auditavel
 - [ ] Supervisor com visao geral e conflitos em tempo real
+
