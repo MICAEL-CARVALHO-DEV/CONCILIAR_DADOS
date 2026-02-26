@@ -12,7 +12,9 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Always use app settings, including env override.
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# Alembic's underlying ConfigParser treats "%" as interpolation markers.
+# URLs with encoded credentials (e.g. "%23", "%40") must escape "%" as "%%".
+config.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
 
 target_metadata = Base.metadata
 
