@@ -4,13 +4,17 @@
 Garantir que nada passe sem rastreio: anotacao, observacao, alteracao e exportacao.
 
 ## Fluxo padrao
-1. Importar arquivo `.xlsx` oficial.
-2. Sistema registra lote/importacao.
-3. Usuario analisa e altera dados necessarios.
-4. Cada alteracao gera evento (quem, quando, o que, motivo).
-5. Supervisao revisa andamento e pendencias.
-6. Exportar `.xlsx` para compartilhamento.
-7. Registrar entrega no `LOG_ALTERACOES.md`.
+1. Usuario faz login individual.
+2. Usuario escolhe cenario de trabalho:
+   - `LOA ANO/MES`, ou
+   - `IMPORT_RAIZ`.
+3. Importar arquivo `.xlsx` oficial (somente perfil autorizado).
+4. Sistema registra lote/importacao por competencia.
+5. Usuario analisa e altera dados necessarios.
+6. Cada alteracao gera evento (quem, quando, o que, motivo).
+7. Supervisao revisa andamento e pendencias.
+8. Exportar `.xlsx` para compartilhamento quando necessario.
+9. Registrar entrega no `LOG_ALTERACOES.md`.
 
 ## O que sempre registrar
 - Arquivo de origem.
@@ -24,6 +28,14 @@ Garantir que nada passe sem rastreio: anotacao, observacao, alteracao e exportac
 - Historico append-only (sem apagar passado).
 - Revisao por perfil quando necessario.
 - Validacao antes de exportar.
+- Importacao restrita a `PROGRAMADOR` e `SUPERVISAO`.
+- Registro de competencia (`ANO/MES`) em toda entrada oficial.
+- `IMPORT_RAIZ` preservado como referencia oficial.
+
+## Diretriz de dependencia de Excel/rede
+- Excel e formato de troca (entrada/saida), nao base de operacao diaria.
+- Operacao da equipe acontece dentro do sistema.
+- Rede corporativa guarda arquivo oficial e exportacoes finais.
 
 ## Padrao de observacao
 Use texto curto e objetivo:

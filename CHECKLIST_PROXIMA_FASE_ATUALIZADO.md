@@ -99,5 +99,19 @@ Legenda de execucao:
 - Nao iniciar item `P1/P2` enquanto houver `P0` pendente que impacta operacao.
 - Toda entrega fecha com teste + registro em `LOG_ALTERACOES.md` + commit.
 
+## Adendos aprovados com Supervisao (pos-checklist 62)
+Legenda:
+- `[ ]` Pendente
+- `[~]` Em andamento
+- `[x]` Concluido
+
+- [ ] A01 `[P0][PROC]` LOA recebido 1 vez ao ano via SEPLAN com lote oficial unico por competencia
+- [ ] A02 `[P0][PROC]` Encerramento anual: backup final do ciclo LOA + arquivamento + abertura do novo ciclo
+- [ ] A03 `[P1][COD]` Pos-login obrigatorio: selecionar cenario de trabalho (`LOA ANO/MES` ou `IMPORT_RAIZ`)
+- [ ] A04 `[P1][COD]` Dashboard da supervisao por deputado: total emendas, concluidas, pendentes, em execucao
+- [ ] A05 `[P1][COD]` Consulta rapida para supervisao (deputado liga): resposta imediata por deputado e situacao
+- [ ] A06 `[P1][TI]` Piloto de 3 meses em ambiente estavel (preferencia nuvem de baixo custo) com monitoramento
+- [ ] A07 `[P1][TI]` Gate de decisao TI apos 3 meses: manter nuvem, migrar para interno ou hibrido (com plano B documentado)
+
 
 
