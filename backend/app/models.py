@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+from typing import Optional
 
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -18,7 +19,7 @@ class Usuario(Base):
     senha_salt: Mapped[str] = mapped_column(String(255), default="", nullable=False)
     senha_hash: Mapped[str] = mapped_column(String(255), default="", nullable=False)
     ativo: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    ultimo_login: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    ultimo_login: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     sessoes: Mapped[list["UsuarioSessao"]] = relationship(back_populates="usuario", cascade="all, delete-orphan")
@@ -32,7 +33,7 @@ class UsuarioSessao(Base):
     token_hash: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
     usuario: Mapped["Usuario"] = relationship(back_populates="sessoes")
 
@@ -57,14 +58,14 @@ class Emenda(Base):
     processo_sei: Mapped[str] = mapped_column(String(120), default="")
     status_oficial: Mapped[str] = mapped_column(String(60), default="Recebido", nullable=False)
 
-    parent_id: Mapped[int | None] = mapped_column(ForeignKey("emendas.id"), index=True, nullable=True)
+    parent_id: Mapped[Optional[int]] = mapped_column(ForeignKey("emendas.id"), index=True, nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     is_current: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
-    parent: Mapped["Emenda | None"] = relationship("Emenda", remote_side="Emenda.id", back_populates="children")
+    parent: Mapped[Optional["Emenda"]] = relationship("Emenda", remote_side="Emenda.id", back_populates="children")
     children: Mapped[list["Emenda"]] = relationship("Emenda", back_populates="parent")
     historicos: Mapped[list["Historico"]] = relationship(back_populates="emenda", cascade="all, delete-orphan")
 
@@ -88,7 +89,7 @@ class ImportLote(Base):
     abas_lidas: Mapped[str] = mapped_column(Text, default="", nullable=False)
     observacao: Mapped[str] = mapped_column(Text, default="", nullable=False)
     origem_evento: Mapped[str] = mapped_column(String(20), default="IMPORT", nullable=False)
-    usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
+    usuario_id: Mapped[Optional[int]] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
     usuario_nome: Mapped[str] = mapped_column(String(120), default="", nullable=False)
     setor: Mapped[str] = mapped_column(String(40), default="", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
@@ -120,10 +121,10 @@ class ExportLog(Base):
     filtros_json: Mapped[str] = mapped_column(Text, default="", nullable=False)
     modo_headers: Mapped[str] = mapped_column(String(30), default="normalizados", nullable=False)
     escopo_exportacao: Mapped[str] = mapped_column(String(20), default="ATUAIS", nullable=False)
-    round_trip_ok: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    round_trip_ok: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
     round_trip_issues: Mapped[str] = mapped_column(Text, default="", nullable=False)
     origem_evento: Mapped[str] = mapped_column(String(20), default="EXPORT", nullable=False)
-    usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
+    usuario_id: Mapped[Optional[int]] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
     usuario_nome: Mapped[str] = mapped_column(String(120), default="", nullable=False)
     setor: Mapped[str] = mapped_column(String(40), default="", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
@@ -134,7 +135,7 @@ class Historico(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     emenda_id: Mapped[int] = mapped_column(ForeignKey("emendas.id"), index=True, nullable=False)
-    usuario_id: Mapped[int | None] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
+    usuario_id: Mapped[Optional[int]] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
 
     usuario_nome: Mapped[str] = mapped_column(String(120), default="")
     setor: Mapped[str] = mapped_column(String(40), default="")
