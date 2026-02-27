@@ -52,9 +52,7 @@ app.add_middleware(
 ALLOWED_ROLES = set(ROLES)
 MANAGER_ROLES = {"APG", "SUPERVISAO", "PROGRAMADOR"}
 OWNER_ROLE = "PROGRAMADOR"
-SUPERVISOR_ROLE = "SUPERVISAO"
-PUBLIC_REGISTER_ROLES = {"CONTABIL"}
-SUPERVISOR_CREATE_ROLES = {"APG", "CONTABIL", "POWERBI"}
+PUBLIC_REGISTER_ROLES = {"APG", "SUPERVISAO", "CONTABIL", "POWERBI"}
 SESSION_HOURS = max(int(settings.JWT_EXPIRE_HOURS or 12), 1)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 VERSIONED_ID_RE = re.compile(r"^(?P<base>.+)-v(?P<num>\d+)$", re.IGNORECASE)
@@ -368,6 +366,12 @@ def _require_manager(actor: dict = Depends(_actor_from_headers)) -> dict:
     return actor
 
 
+def _require_owner(actor: dict = Depends(_actor_from_headers)) -> dict:
+    if actor["role"] != OWNER_ROLE:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="apenas PROGRAMADOR pode aprovar perfis")
+    return actor
+
+
 def _ensure_legacy_schema() -> None:
     insp = inspect(engine)
     tables = set(insp.get_table_names())
@@ -508,35 +512,37 @@ def auth_register(
         raise HTTPException(status_code=409, detail="usuario ja existe")
 
     actor = _actor_optional_from_headers(authorization, x_session_token, db)
-    manager_exists = (
+    owner_exists = (
         db.query(Usuario.id)
-        .filter(Usuario.ativo.is_(True), Usuario.perfil.in_([OWNER_ROLE, SUPERVISOR_ROLE]))
+        .filter(Usuario.ativo.is_(True), Usuario.perfil == OWNER_ROLE)
         .first()
         is not None
     )
 
-    # Bootstrap inicial: se nao existir nenhum gestor ativo, permite criar qualquer perfil.
-    if actor is None and manager_exists:
+    activate_now = True
+    pending_approval = False
+
+    # Sem PROGRAMADOR ativo, permitimos bootstrap do primeiro dono.
+    if not owner_exists and actor is None:
+        if role != OWNER_ROLE:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="primeiro cadastro deve ser PROGRAMADOR",
+            )
+    elif actor is None:
         if role not in PUBLIC_REGISTER_ROLES:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="cadastro publico permite apenas perfil CONTABIL",
+                detail="cadastro publico nao permite este perfil",
             )
-
-    if actor is not None:
+        activate_now = False
+        pending_approval = True
+    else:
         actor_role = actor.get("role")
-        if actor_role == OWNER_ROLE:
-            pass
-        elif actor_role == SUPERVISOR_ROLE:
-            if role not in SUPERVISOR_CREATE_ROLES:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="SUPERVISAO pode criar apenas APG, CONTABIL ou POWERBI",
-                )
-        else:
+        if actor_role != OWNER_ROLE:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="apenas PROGRAMADOR ou SUPERVISAO podem criar perfis",
+                detail="apenas PROGRAMADOR pode criar/aprovar perfis",
             )
 
     pwd_hash = _hash_password(payload.senha)
@@ -546,11 +552,19 @@ def auth_register(
         perfil=role,
         senha_salt="",
         senha_hash=pwd_hash,
-        ativo=True,
+        ativo=activate_now,
     )
     db.add(user)
     db.commit()
     db.refresh(user)
+
+    if pending_approval:
+        return {
+            "token": None,
+            "token_type": "bearer",
+            "usuario": {"id": user.id, "nome": user.nome, "perfil": user.perfil},
+            "pending_approval": True,
+        }
 
     token = _create_jwt_session(db, user)
     return {
@@ -564,8 +578,10 @@ def auth_register(
 def auth_login(payload: AuthLoginIn, db: Session = Depends(get_db)):
     nome = payload.nome.strip()
     user = db.query(Usuario).filter(func.lower(Usuario.nome) == nome.lower()).first()
-    if not user or not user.ativo:
+    if not user:
         raise HTTPException(status_code=401, detail="credenciais invalidas")
+    if not user.ativo:
+        raise HTTPException(status_code=403, detail="usuario pendente de aprovacao")
 
     valid, used_legacy = _verify_user_password(user, payload.senha)
     if not valid:
@@ -615,7 +631,7 @@ def auth_logout(actor: dict = Depends(_actor_from_headers), db: Session = Depend
 @app.get("/users", response_model=list[UserAdminOut])
 def listar_usuarios(
     include_inactive: bool = Query(default=True),
-    _actor: dict = Depends(_require_manager),
+    _actor: dict = Depends(_require_owner),
     db: Session = Depends(get_db),
 ):
     query = db.query(Usuario)
@@ -628,7 +644,7 @@ def listar_usuarios(
 def alterar_status_usuario(
     user_id: int,
     payload: UserStatusUpdate,
-    actor: dict = Depends(_require_manager),
+    actor: dict = Depends(_require_owner),
     db: Session = Depends(get_db),
 ):
     user = db.get(Usuario, user_id)
@@ -638,6 +654,10 @@ def alterar_status_usuario(
     actor_id = actor.get("id")
     if actor_id is not None and int(actor_id) == int(user.id) and payload.ativo is False:
         raise HTTPException(status_code=400, detail="nao e permitido desativar o proprio usuario")
+
+    if payload.perfil is not None:
+        user.perfil = payload.perfil
+        user.setor = payload.perfil
 
     user.ativo = bool(payload.ativo)
 
@@ -654,7 +674,7 @@ def alterar_status_usuario(
 
     db.commit()
     _broadcast_update("usuario", user.id)
-    return {"ok": True, "id": user.id, "ativo": user.ativo}
+    return {"ok": True, "id": user.id, "ativo": user.ativo, "perfil": user.perfil}
 
 @app.get("/emendas", response_model=list[EmendaOut])
 def listar_emendas(

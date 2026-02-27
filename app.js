@@ -44,6 +44,7 @@ const LOCAL_TAB_ID = "tab_" + Math.random().toString(36).slice(2) + "_" + Date.n
 const SYSTEM_MIGRATION_USER = "sistema";
 const SYSTEM_MIGRATION_ROLE = "PROGRAMADOR";
 const USER_ROLE_OPTIONS = ["APG", "SUPERVISAO", "CONTABIL", "POWERBI", "PROGRAMADOR"];
+const PUBLIC_SELF_REGISTER_ROLE_OPTIONS = ["APG", "SUPERVISAO", "CONTABIL", "POWERBI"];
 const USER_NAME_KEY = "SEC_USER_NAME";
 const USER_ROLE_KEY = "SEC_USER_ROLE";
 const API_BASE_URL_KEY = "SEC_API_BASE_URL";
@@ -279,6 +280,7 @@ const importReport = document.getElementById("importReport");
 const importLabel = document.querySelector("label[for='fileCsv']");
 const currentUserInfo = document.getElementById("currentUserInfo");
 const btnProfile = document.getElementById("btnProfile");
+const btnPendingApprovals = document.getElementById("btnPendingApprovals");
 const btnCreateProfile = document.getElementById("btnCreateProfile");
 const btnLogout = document.getElementById("btnLogout");
 const btnDemo4Users = document.getElementById("btnDemo4Users");
@@ -301,6 +303,12 @@ const profileName = document.getElementById("profileName");
 const profileRole = document.getElementById("profileRole");
 const profileMode = document.getElementById("profileMode");
 const profileApi = document.getElementById("profileApi");
+const pendingUsersModal = document.getElementById("pendingUsersModal");
+const btnPendingUsersClose = document.getElementById("btnPendingUsersClose");
+const btnPendingUsersCloseX = document.getElementById("btnPendingUsersCloseX");
+const btnPendingUsersRefresh = document.getElementById("btnPendingUsersRefresh");
+const pendingUsersTableWrap = document.getElementById("pendingUsersTableWrap");
+const pendingUsersFeedback = document.getElementById("pendingUsersFeedback");
 
 const authGate = document.getElementById("authGate");
 const authTabLogin = document.getElementById("authTabLogin");
@@ -506,6 +514,10 @@ document.addEventListener("keydown", function (e) {
   }
   if (profileModal && profileModal.classList.contains("show")) {
     closeProfileModal();
+    return;
+  }
+  if (pendingUsersModal && pendingUsersModal.classList.contains("show")) {
+    closePendingUsersModal();
   }
 });
 window.addEventListener("beforeunload", function (e) {
@@ -660,6 +672,35 @@ if (btnProfileCloseX) btnProfileCloseX.addEventListener("click", closeProfileMod
 if (profileModal) {
   profileModal.addEventListener("click", function (e) {
     if (e.target === profileModal) closeProfileModal();
+  });
+}
+if (btnPendingApprovals) {
+  btnPendingApprovals.addEventListener("click", function () {
+    openPendingUsersModal();
+  });
+}
+if (btnPendingUsersClose) btnPendingUsersClose.addEventListener("click", closePendingUsersModal);
+if (btnPendingUsersCloseX) btnPendingUsersCloseX.addEventListener("click", closePendingUsersModal);
+if (btnPendingUsersRefresh) {
+  btnPendingUsersRefresh.addEventListener("click", function () {
+    refreshPendingUsersModal();
+  });
+}
+if (pendingUsersModal) {
+  pendingUsersModal.addEventListener("click", function (e) {
+    if (e.target === pendingUsersModal) closePendingUsersModal();
+  });
+}
+if (pendingUsersTableWrap) {
+  pendingUsersTableWrap.addEventListener("click", function (e) {
+    const btn = e.target && e.target.closest ? e.target.closest("button[data-pending-action='approve']") : null;
+    if (!btn) return;
+    const userId = Number(btn.getAttribute("data-user-id") || 0);
+    if (!userId) return;
+    approvePendingUser(userId).catch(function (err) {
+      const msg = extractApiError(err, "Falha ao aprovar cadastro.");
+      setPendingUsersFeedback(msg, true);
+    });
   });
 }
 
@@ -2071,6 +2112,11 @@ function setupAuthUi() {
           perfil: perfil,
           senha: senha1
         });
+        if (resp && resp.pending_approval) {
+          setAuthMessage("Cadastro enviado. Aguarde aprovacao do PROGRAMADOR.");
+          switchAuthMode("login");
+          return;
+        }
         onAuthSuccess(resp);
       } catch (err) {
         setAuthMessage(extractApiError(err, "Falha no cadastro."), true);
@@ -2082,7 +2128,7 @@ function setupAuthUi() {
 function syncRegisterRoles() {
   if (!authRegisterRole) return;
   authRegisterRole.innerHTML = "";
-  USER_ROLE_OPTIONS.forEach(function (role) {
+  PUBLIC_SELF_REGISTER_ROLE_OPTIONS.forEach(function (role) {
     const opt = document.createElement("option");
     opt.value = role;
     opt.textContent = role;
@@ -2232,7 +2278,7 @@ function applyAccessProfile() {
   const isOwner = CURRENT_ROLE === "PROGRAMADOR";
   const isSupervisor = CURRENT_ROLE === "SUPERVISAO";
   const canManageData = isOwner || isSupervisor || CURRENT_ROLE === "APG";
-  const canCreateProfiles = isOwner || isSupervisor;
+  const canCreateProfiles = isOwner;
   const apiTag = apiOnline ? "API online" : "modo local";
   const storageTag = getStorageMode() === STORAGE_MODE_LOCAL ? "persistencia local" : "sessao";
   const viewTag = isOwner ? " (dono)" : (isSupervisor ? " (supervisao)" : "");
@@ -2244,6 +2290,7 @@ function applyAccessProfile() {
   if (btnExportAtuais) btnExportAtuais.style.display = "inline-block";
   if (btnExportHistorico) btnExportHistorico.style.display = "inline-block";
   if (btnExportCustom) btnExportCustom.style.display = "inline-block";
+  if (btnPendingApprovals) btnPendingApprovals.style.display = isOwner ? "inline-block" : "none";
   if (btnCreateProfile) btnCreateProfile.style.display = canCreateProfiles ? "inline-block" : "none";
   if (importLabel) importLabel.style.display = canManageData ? "inline-block" : "none";
   if (btnReset) btnReset.style.display = isOwner ? "inline-block" : "none";
@@ -2271,6 +2318,120 @@ function closeProfileModal() {
   if (!profileModal) return;
   profileModal.classList.remove("show");
   profileModal.setAttribute("aria-hidden", "true");
+}
+
+function isOwnerUser() {
+  return CURRENT_ROLE === "PROGRAMADOR";
+}
+
+function setPendingUsersFeedback(msg, isError) {
+  if (!pendingUsersFeedback) return;
+  pendingUsersFeedback.textContent = msg || "";
+  pendingUsersFeedback.style.color = isError ? "#b4233d" : "";
+}
+
+function closePendingUsersModal() {
+  if (!pendingUsersModal) return;
+  pendingUsersModal.classList.remove("show");
+  pendingUsersModal.setAttribute("aria-hidden", "true");
+}
+
+function renderPendingUsersTable(items) {
+  if (!pendingUsersTableWrap) return;
+
+  if (!Array.isArray(items) || items.length === 0) {
+    pendingUsersTableWrap.innerHTML = "<p class=\"muted small\">Nao ha cadastros em analise no momento.</p>";
+    return;
+  }
+
+  const head = ""
+    + "<table class=\"table\">"
+    + "<thead><tr>"
+    + "<th>Usuario</th>"
+    + "<th>Perfil solicitado</th>"
+    + "<th>Criado em</th>"
+    + "<th>Status</th>"
+    + "<th>Acao</th>"
+    + "</tr></thead><tbody>";
+
+  const rows = items.map(function (u) {
+    const id = Number(u.id || 0);
+    const nome = escapeHtml(text(u.nome));
+    const perfil = normalizeUserRole(u.perfil || "CONTABIL");
+    const createdAt = u.created_at ? fmtDateTime(u.created_at) : "-";
+    const options = USER_ROLE_OPTIONS.map(function (role) {
+      const selected = role === perfil ? " selected" : "";
+      return "<option value=\"" + escapeHtml(role) + "\"" + selected + ">" + escapeHtml(role) + "</option>";
+    }).join("");
+
+    return ""
+      + "<tr data-pending-user-id=\"" + id + "\">"
+      + "<td><b>" + nome + "</b></td>"
+      + "<td><select data-pending-role=\"" + id + "\">" + options + "</select></td>"
+      + "<td class=\"muted small\">" + escapeHtml(createdAt) + "</td>"
+      + "<td><span class=\"badge pending\">Em analise</span></td>"
+      + "<td><button class=\"btn primary\" data-pending-action=\"approve\" data-user-id=\"" + id + "\">Aprovar</button></td>"
+      + "</tr>";
+  }).join("");
+
+  pendingUsersTableWrap.innerHTML = head + rows + "</tbody></table>";
+}
+
+async function refreshPendingUsersModal() {
+  if (!isApiEnabled()) {
+    setPendingUsersFeedback("Aprovacao de cadastro exige API ativa.", true);
+    renderPendingUsersTable([]);
+    return;
+  }
+  if (!isOwnerUser()) {
+    setPendingUsersFeedback("Apenas PROGRAMADOR pode aprovar cadastros.", true);
+    renderPendingUsersTable([]);
+    return;
+  }
+
+  setPendingUsersFeedback("Carregando cadastros em analise...");
+  try {
+    const users = await apiRequest("GET", "/users?include_inactive=true", undefined, "UI");
+    const pending = (Array.isArray(users) ? users : []).filter(function (u) {
+      if (u && u.ativo) return false;
+      const lastLogin = u && u.ultimo_login ? String(u.ultimo_login).trim() : "";
+      return lastLogin === "";
+    });
+    renderPendingUsersTable(pending);
+    setPendingUsersFeedback("Pendentes: " + String(pending.length));
+  } catch (err) {
+    renderPendingUsersTable([]);
+    setPendingUsersFeedback(extractApiError(err, "Falha ao carregar cadastros pendentes."), true);
+  }
+}
+
+async function approvePendingUser(userId) {
+  if (!userId) return;
+  if (!isOwnerUser()) {
+    setPendingUsersFeedback("Apenas PROGRAMADOR pode aprovar cadastros.", true);
+    return;
+  }
+
+  const roleSelect = pendingUsersTableWrap ? pendingUsersTableWrap.querySelector("select[data-pending-role='" + String(userId) + "']") : null;
+  const selectedRole = normalizeUserRole(roleSelect ? roleSelect.value : "CONTABIL");
+
+  setPendingUsersFeedback("Aprovando usuario #" + String(userId) + "...");
+  await apiRequest("PATCH", "/users/" + String(userId) + "/status", {
+    ativo: true,
+    perfil: selectedRole
+  }, "UI");
+
+  setPendingUsersFeedback("Usuario aprovado com sucesso.");
+  await refreshPendingUsersModal();
+}
+
+function openPendingUsersModal() {
+  if (!pendingUsersModal) return;
+  pendingUsersModal.classList.add("show");
+  pendingUsersModal.setAttribute("aria-hidden", "false");
+  refreshPendingUsersModal().catch(function (err) {
+    setPendingUsersFeedback(extractApiError(err, "Falha ao abrir cadastros pendentes."), true);
+  });
 }
 
 async function bootstrapApiIntegration() {
