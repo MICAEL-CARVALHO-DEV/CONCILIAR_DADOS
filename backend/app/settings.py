@@ -1,4 +1,5 @@
 import re
+from urllib.parse import urlsplit
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -24,9 +25,27 @@ class Settings(BaseSettings):
         if not raw:
             return []
 
-        # Aceita origens separadas por virgula, quebra de linha ou espacos.
-        parts = re.split(r"[,\r\n\t ]+", raw)
-        return [x.strip() for x in parts if x.strip() and x.strip().lower() != "null"]
+        # Aceita origens separadas por virgula, quebra de linha, ponto-e-virgula ou espacos.
+        parts = re.split(r"[,\r\n\t; ]+", raw)
+        origins: list[str] = []
+        seen: set[str] = set()
+
+        for item in parts:
+            candidate = (item or "").strip().strip("'\"").rstrip("/")
+            if not candidate or candidate.lower() == "null":
+                continue
+
+            # Se vier URL completa (com path), mantem apenas a origin.
+            if "://" in candidate:
+                parsed = urlsplit(candidate)
+                if parsed.scheme and parsed.netloc:
+                    candidate = f"{parsed.scheme}://{parsed.netloc}"
+
+            if candidate and candidate not in seen:
+                seen.add(candidate)
+                origins.append(candidate)
+
+        return origins
 
 
 settings = Settings()
