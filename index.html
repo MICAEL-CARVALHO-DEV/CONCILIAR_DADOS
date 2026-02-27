@@ -15,7 +15,9 @@
       </div>
       <div class="actions">
         <span id="currentUserInfo" class="user-chip"></span>
-        <button id="btnSwitchUser" class="btn">Trocar usuario</button>
+        <button id="btnProfile" class="btn">Meu perfil</button>
+        <a id="btnCreateProfile" class="btn" href="cadastro.html?next=index.html">Criar perfil</a>
+        <button id="btnLogout" class="btn danger">Sair</button>
         <button id="btnExportAtuais" class="btn primary">Exportar (Atuais)</button>
         <button id="btnExportHistorico" class="btn">Exportar (Com historico)</button>
         <button id="btnExportCustom" class="btn">Exportar (Personalizado)</button>
@@ -181,6 +183,42 @@
     </div>
   </div>
 
+  <div class="modal" id="profileModal" aria-hidden="true">
+    <div class="modal-card export-modal-card" role="dialog" aria-modal="true" aria-labelledby="profileTitle">
+      <div class="modal-head">
+        <div>
+          <h3 id="profileTitle">Meu perfil</h3>
+          <p class="muted">Dados da sessao atual</p>
+        </div>
+        <button id="btnProfileCloseX" class="icon-btn" title="Fechar" aria-label="Fechar modal">x</button>
+      </div>
+      <div class="modal-body">
+        <div class="grid export-custom-grid">
+          <div class="field">
+            <label>Nome</label>
+            <input id="profileName" readonly />
+          </div>
+          <div class="field">
+            <label>Perfil</label>
+            <input id="profileRole" readonly />
+          </div>
+          <div class="field">
+            <label>Modo</label>
+            <input id="profileMode" readonly />
+          </div>
+          <div class="field">
+            <label>API</label>
+            <input id="profileApi" readonly />
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot">
+        <a class="btn" href="cadastro.html?next=index.html">Criar perfil</a>
+        <button id="btnProfileClose" class="btn primary">Fechar</button>
+      </div>
+    </div>
+  </div>
+
   <script src="config.js"></script>
   <script src="config.production.js"></script>
   <script>
@@ -208,7 +246,6 @@
   </script>
 </body>
 </html>
-
 
 
 

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Cadastro - Prototipo SEC Emendas</title>
+  <title>Criar Perfil - Prototipo SEC Emendas</title>
   <link rel="stylesheet" href="style.css" />
   <style>
     .auth-page {
@@ -30,8 +30,8 @@
 <body>
   <main class="auth-page">
     <section class="auth-shell">
-      <h1>Cadastrar usuario</h1>
-      <p class="muted small">Informe nome, funcao e senha.</p>
+      <h1>Criar perfil</h1>
+      <p class="muted small">Informe nome, perfil e senha.</p>
 
       <form id="cadastroForm" class="auth-form">
         <div class="field">
@@ -39,7 +39,7 @@
           <input id="nome" autocomplete="username" required />
         </div>
         <div class="field">
-          <label for="perfil">Funcao</label>
+          <label for="perfil">Perfil</label>
           <select id="perfil" required></select>
         </div>
         <div class="field">
@@ -50,7 +50,7 @@
           <label for="senha2">Confirmar senha</label>
           <input id="senha2" type="password" autocomplete="new-password" required />
         </div>
-        <button type="submit" class="btn primary">Cadastrar e entrar</button>
+        <button type="submit" class="btn primary">Criar perfil e entrar</button>
       </form>
 
       <div class="auth-links">
