@@ -72,3 +72,14 @@ Use este arquivo para rastrear alteracoes operacionais e tecnicas.
 - Rollback (se necessario): remover script de validacao e manter execucao manual dos scripts antigos
 - Status final: ok
 
+### 2026-02-27 (checklist de autenticacao/seguranca/design)
+- Data: 2026-02-27
+- Responsavel: Micael
+- Tipo: documentacao
+- Contexto: consolidar trilha de estudo e evolucao para login, validacao, seguranca e UX
+- Alteracao executada: adicionados novos itens no `CHECKLIST_PROXIMA_FASE.md` e no `CHECKLIST_PROXIMA_FASE_ATUALIZADO.md` (cadastro em analise, aprovacao por PROGRAMADOR, senha forte, lock por tentativa, logout global, CORS restrito e UX de autenticacao)
+- Impacto esperado: orientar implementacao por prioridade e apoiar estudo continuo do time
+- Validacao realizada: revisao manual dos itens e prioridades (P0/P1)
+- Rollback (se necessario): remover secoes adicionadas no checklist e este registro
+- Status final: ok
+

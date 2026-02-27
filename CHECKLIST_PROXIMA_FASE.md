@@ -9,15 +9,21 @@
 ## 2. Autenticacao, usuarios e perfis
 - [ ] Login obrigatorio para uso do sistema
 - [ ] Cadastro de usuario com nome + perfil
+- [ ] Cadastro publico entra em analise (sem acesso imediato)
+- [ ] Aprovacao de cadastro somente por PROGRAMADOR
 - [ ] Perfis ativos: APG, SUPERVISAO, CONTABIL, POWERBI, PROGRAMADOR
 - [ ] Sessao com expiracao e logout
+- [ ] Logout de todos os dispositivos (revogar sessoes ativas)
 - [ ] Bloqueio de usuario inativo
+- [ ] Bloqueio temporario apos tentativas invalidas (rate limit)
+- [ ] Senha forte obrigatoria (minimo 10 + maiuscula + minuscula + numero + simbolo)
 
 ## 3. Regras de permissao
 - [ ] Somente APG/SUPERVISAO/PROGRAMADOR alteram status oficial
 - [ ] Motivo obrigatorio para mudanca de status oficial
 - [ ] Regra de transicao de status documentada (workflow)
 - [ ] Visao geral de supervisor/programador habilitada
+- [ ] Aba "Cadastros em analise" para PROGRAMADOR aprovar usuarios
 
 ## 4. Historico e linha do tempo (audit log)
 - [ ] Todo evento gravado com: data/hora, usuario, perfil, acao, motivo
@@ -25,6 +31,7 @@
 - [ ] Proibir exclusao de historico (somente append)
 - [ ] Timeline por emenda no detalhe
 - [ ] Painel na tela inicial com ultimas alteracoes e autores
+- [ ] Evento de aprovacao/reprovacao de usuario no audit log
 
 ## 5. Importacao (CSV/XLSX)
 - [ ] Registrar lote de importacao (arquivo, hash, usuario, horario)
@@ -59,7 +66,15 @@
 - [ ] Teste de restauracao mensal
 - [ ] Politica de senha minima e rotacao
 - [ ] Log de acesso e tentativas de login
+- [ ] CORS restrito ao dominio oficial de producao
 - [ ] Plano de contingencia (operacao offline temporaria)
+
+## 13. UX de login e design operacional
+- [ ] Tela de login com feedback claro de erro/sucesso
+- [ ] Estado visual para cadastro em analise (badge/alerta)
+- [ ] Painel de aprovacao com filtros (pendentes/ativos/inativos)
+- [ ] Mensagens operacionais padronizadas (sem erro generico)
+- [ ] Fluxo de autenticacao documentado para treinamento da equipe
 
 ## 10. Qualidade e testes
 - [ ] Testes de API (health, auth, import, status, eventos)

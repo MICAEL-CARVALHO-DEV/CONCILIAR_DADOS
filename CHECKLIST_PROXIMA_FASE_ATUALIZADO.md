@@ -113,5 +113,15 @@ Legenda:
 - [ ] A06 `[P1][TI]` Piloto de 3 meses em ambiente estavel (preferencia nuvem de baixo custo) com monitoramento
 - [ ] A07 `[P1][TI]` Gate de decisao TI apos 3 meses: manter nuvem, migrar para interno ou hibrido (com plano B documentado)
 
+## Adendos - Login, validacao, seguranca e design (trilha de estudo/evolucao)
+- [ ] A08 `[P0][COD]` Cadastro publico cria usuario em analise (sem token/sessao ativa)
+- [ ] A09 `[P0][COD]` Aprovacao de usuario somente por PROGRAMADOR (painel dedicado)
+- [ ] A10 `[P0][COD]` Evento auditavel para aprovacao/reprovacao de usuario
+- [ ] A11 `[P1][COD]` Senha forte obrigatoria (min 10 + maiuscula + minuscula + numero + simbolo)
+- [ ] A12 `[P1][COD]` Bloqueio temporario por tentativas invalidas de login (anti brute-force)
+- [ ] A13 `[P1][COD]` Logout global (revogar todas as sessoes do usuario)
+- [ ] A14 `[P1][TI]` CORS restrito ao dominio oficial (remover origens locais em producao)
+- [ ] A15 `[P1][COD]` UX de autenticacao: feedback claro, estado "em analise" e mensagens padronizadas
+
 
 
