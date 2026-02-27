@@ -46,11 +46,7 @@
       </form>
 
       <div class="auth-links">
-        <button type="button" class="btn" id="btnQuickLogin">Entrar rapido (teste)</button>
-      </div>
-
-      <div class="auth-links">
-        <a class="btn" id="linkCadastro" href="cadastro.html">Criar cadastro</a>
+        <a class="btn" id="linkCadastro" href="cadastro.html">Criar perfil</a>
         <a class="btn" href="index.html">Voltar</a>
       </div>
 
@@ -77,7 +73,6 @@
       const nome = document.getElementById("nome");
       const senha = document.getElementById("senha");
       const msg = document.getElementById("msg");
-      const btnQuickLogin = document.getElementById("btnQuickLogin");
       if (sessionStorage.getItem(SESSION_TOKEN_KEY)) {
         window.location.href = next;
         return;
@@ -141,34 +136,6 @@
         }
       });
 
-      btnQuickLogin.addEventListener("click", async function () {
-        const quickName = "teste_" + String(Date.now()).slice(-6);
-        const quickPass = "123456";
-        const quickRole = "CONTABIL";
-
-        msg.textContent = "Criando acesso de teste...";
-        msg.style.color = "";
-
-        try {
-          let loginData = null;
-          try {
-            const reg = await apiRequest("/auth/register", { nome: quickName, perfil: quickRole, senha: quickPass });
-            if (reg && reg.token) loginData = reg;
-          } catch (_) {
-            // segue para tentativa de login
-          }
-
-          if (!loginData) {
-            loginData = await apiRequest("/auth/login", { nome: quickName, senha: quickPass });
-          }
-
-          persistSession(loginData, quickName, quickRole);
-          window.location.href = next;
-        } catch (err) {
-          msg.textContent = err && err.message ? err.message : "Falha no acesso rapido.";
-          msg.style.color = "#b4233d";
-        }
-      });
     })();
   </script>
 </body>

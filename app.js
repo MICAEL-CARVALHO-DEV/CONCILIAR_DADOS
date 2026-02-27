@@ -278,7 +278,8 @@ const fileCsv = document.getElementById("fileCsv");
 const importReport = document.getElementById("importReport");
 const importLabel = document.querySelector("label[for='fileCsv']");
 const currentUserInfo = document.getElementById("currentUserInfo");
-const btnSwitchUser = document.getElementById("btnSwitchUser");
+const btnProfile = document.getElementById("btnProfile");
+const btnLogout = document.getElementById("btnLogout");
 const btnDemo4Users = document.getElementById("btnDemo4Users");
 
 const exportCustomModal = document.getElementById("exportCustomModal");
@@ -291,6 +292,14 @@ const exportCustomDeputado = document.getElementById("exportCustomDeputado");
 const exportCustomMunicipio = document.getElementById("exportCustomMunicipio");
 const exportCustomIncludeOld = document.getElementById("exportCustomIncludeOld");
 const exportCustomSummary = document.getElementById("exportCustomSummary");
+
+const profileModal = document.getElementById("profileModal");
+const btnProfileClose = document.getElementById("btnProfileClose");
+const btnProfileCloseX = document.getElementById("btnProfileCloseX");
+const profileName = document.getElementById("profileName");
+const profileRole = document.getElementById("profileRole");
+const profileMode = document.getElementById("profileMode");
+const profileApi = document.getElementById("profileApi");
 
 const authGate = document.getElementById("authGate");
 const authTabLogin = document.getElementById("authTabLogin");
@@ -432,17 +441,17 @@ function getFiltered() {
 statusFilter.addEventListener("change", render);
 yearFilter.addEventListener("change", render);
 searchInput.addEventListener("input", debounce(render, 120));
-btnSwitchUser.addEventListener("click", async function () {
-  if (isApiEnabled()) {
+if (btnProfile) {
+  btnProfile.addEventListener("click", function () {
+    openProfileModal();
+  });
+}
+if (btnLogout) {
+  btnLogout.addEventListener("click", async function () {
     await logoutCurrentUser();
     redirectToAuth(AUTH_LOGIN_PAGE, "logout=1");
-    return;
-  }
-
-  loadUserConfig(true);
-  applyAccessProfile();
-  render();
-});
+  });
+}
 if (btnDemo4Users) {
   btnDemo4Users.addEventListener("click", function () {
     generateRandomMultiUserDemo();
@@ -492,6 +501,10 @@ document.addEventListener("keydown", function (e) {
   }
   if (exportCustomModal && exportCustomModal.classList.contains("show")) {
     closeExportCustomModal();
+    return;
+  }
+  if (profileModal && profileModal.classList.contains("show")) {
+    closeProfileModal();
   }
 });
 window.addEventListener("beforeunload", function (e) {
@@ -641,6 +654,13 @@ if (exportCustomStatus) exportCustomStatus.addEventListener("change", refreshCus
 if (exportCustomDeputado) exportCustomDeputado.addEventListener("input", debounce(refreshCustomExportSummary, 120));
 if (exportCustomMunicipio) exportCustomMunicipio.addEventListener("input", debounce(refreshCustomExportSummary, 120));
 if (exportCustomIncludeOld) exportCustomIncludeOld.addEventListener("change", refreshCustomExportSummary);
+if (btnProfileClose) btnProfileClose.addEventListener("click", closeProfileModal);
+if (btnProfileCloseX) btnProfileCloseX.addEventListener("click", closeProfileModal);
+if (profileModal) {
+  profileModal.addEventListener("click", function (e) {
+    if (e.target === profileModal) closeProfileModal();
+  });
+}
 
 btnReset.addEventListener("click", function () {
   if (!confirm("Resetar para dados DEMO? Isso apaga alteracoes locais.")) return;
@@ -2223,6 +2243,29 @@ function applyAccessProfile() {
   if (importLabel) importLabel.style.display = canManageData ? "inline-block" : "none";
   if (btnReset) btnReset.style.display = canManageData ? "inline-block" : "none";
   if (btnDemo4Users) btnDemo4Users.style.display = canManageData ? "inline-block" : "none";
+  if (btnProfile) btnProfile.style.display = "inline-block";
+  if (btnLogout) btnLogout.style.display = "inline-block";
+  refreshProfileModal();
+}
+
+function refreshProfileModal() {
+  if (profileName) profileName.value = CURRENT_USER || "-";
+  if (profileRole) profileRole.value = CURRENT_ROLE || "-";
+  if (profileMode) profileMode.value = isApiEnabled() ? "Nuvem/API" : "Local";
+  if (profileApi) profileApi.value = apiOnline ? "Conectada" : "Indisponivel";
+}
+
+function openProfileModal() {
+  if (!profileModal) return;
+  refreshProfileModal();
+  profileModal.classList.add("show");
+  profileModal.setAttribute("aria-hidden", "false");
+}
+
+function closeProfileModal() {
+  if (!profileModal) return;
+  profileModal.classList.remove("show");
+  profileModal.setAttribute("aria-hidden", "true");
 }
 
 async function bootstrapApiIntegration() {
