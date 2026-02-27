@@ -51,6 +51,10 @@ app.add_middleware(
 
 ALLOWED_ROLES = set(ROLES)
 MANAGER_ROLES = {"APG", "SUPERVISAO", "PROGRAMADOR"}
+OWNER_ROLE = "PROGRAMADOR"
+SUPERVISOR_ROLE = "SUPERVISAO"
+PUBLIC_REGISTER_ROLES = {"CONTABIL"}
+SUPERVISOR_CREATE_ROLES = {"APG", "CONTABIL", "POWERBI"}
 SESSION_HOURS = max(int(settings.JWT_EXPIRE_HOURS or 12), 1)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 VERSIONED_ID_RE = re.compile(r"^(?P<base>.+)-v(?P<num>\d+)$", re.IGNORECASE)
@@ -335,6 +339,29 @@ def _actor_from_headers(
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="nao autenticado")
 
 
+def _actor_optional_from_headers(
+    authorization: str | None,
+    x_session_token: str | None,
+    db: Session,
+) -> dict | None:
+    auth_value = (authorization or "").strip()
+    if auth_value.lower().startswith("bearer "):
+        bearer_token = auth_value[7:].strip()
+        actor = _actor_from_bearer_token(bearer_token, db)
+        if actor:
+            return actor
+
+    token = (x_session_token or "").strip()
+    if not token:
+        return None
+
+    actor = _actor_from_bearer_token(token, db)
+    if actor:
+        return actor
+
+    return _actor_from_legacy_session(token, db)
+
+
 def _require_manager(actor: dict = Depends(_actor_from_headers)) -> dict:
     if actor["role"] not in MANAGER_ROLES:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="perfil sem permissao")
@@ -467,17 +494,56 @@ def roles() -> dict:
 
 
 @app.post("/auth/register", response_model=AuthOut)
-def auth_register(payload: AuthRegisterIn, db: Session = Depends(get_db)):
+def auth_register(
+    payload: AuthRegisterIn,
+    authorization: Annotated[str | None, Header(alias="Authorization")] = None,
+    x_session_token: Annotated[str | None, Header(alias="X-Session-Token")] = None,
+    db: Session = Depends(get_db),
+):
     nome = payload.nome.strip()
+    role = payload.perfil
+
     exists = db.query(Usuario).filter(func.lower(Usuario.nome) == nome.lower()).first()
     if exists:
         raise HTTPException(status_code=409, detail="usuario ja existe")
 
+    actor = _actor_optional_from_headers(authorization, x_session_token, db)
+    manager_exists = (
+        db.query(Usuario.id)
+        .filter(Usuario.ativo.is_(True), Usuario.perfil.in_([OWNER_ROLE, SUPERVISOR_ROLE]))
+        .first()
+        is not None
+    )
+
+    # Bootstrap inicial: se nao existir nenhum gestor ativo, permite criar qualquer perfil.
+    if actor is None and manager_exists:
+        if role not in PUBLIC_REGISTER_ROLES:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="cadastro publico permite apenas perfil CONTABIL",
+            )
+
+    if actor is not None:
+        actor_role = actor.get("role")
+        if actor_role == OWNER_ROLE:
+            pass
+        elif actor_role == SUPERVISOR_ROLE:
+            if role not in SUPERVISOR_CREATE_ROLES:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="SUPERVISAO pode criar apenas APG, CONTABIL ou POWERBI",
+                )
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="apenas PROGRAMADOR ou SUPERVISAO podem criar perfis",
+            )
+
     pwd_hash = _hash_password(payload.senha)
     user = Usuario(
         nome=nome,
-        setor=payload.perfil,
-        perfil=payload.perfil,
+        setor=role,
+        perfil=role,
         senha_salt="",
         senha_hash=pwd_hash,
         ativo=True,
