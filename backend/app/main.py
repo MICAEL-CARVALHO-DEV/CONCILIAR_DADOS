@@ -5,7 +5,7 @@ import re
 import secrets
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, WebSocket, WebSocketDisconnect, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -490,6 +490,21 @@ def health() -> dict:
         "auth_mode": "jwt_bearer_with_legacy_fallback",
         "roles": ROLES,
     }
+
+
+@app.get("/", include_in_schema=False)
+def root() -> dict:
+    return {
+        "ok": True,
+        "service": "sec-emendas-api",
+        "health": "/health",
+        "docs": "/docs",
+    }
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+def favicon() -> Response:
+    return Response(status_code=204)
 
 
 @app.get("/roles")
