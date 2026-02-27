@@ -55,6 +55,17 @@ class UserAdminOut(BaseModel):
 
 class UserStatusUpdate(BaseModel):
     ativo: bool
+    perfil: str | None = None
+
+    @field_validator("perfil")
+    @classmethod
+    def validate_optional_role(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        v = (value or "").strip().upper()
+        if v not in ROLE_SET:
+            raise ValueError("perfil invalido")
+        return v
 
 
 class AuthRegisterIn(BaseModel):
@@ -77,9 +88,10 @@ class AuthLoginIn(BaseModel):
 
 
 class AuthOut(BaseModel):
-    token: str
+    token: str | None = None
     token_type: str = "bearer"
     usuario: UserOut
+    pending_approval: bool = False
 
 
 class EmendaCreate(BaseModel):
