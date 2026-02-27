@@ -6,7 +6,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+psycopg://emendas:emendas123@localhost:5432/emendas_db"
-    CORS_ORIGINS: str = "http://127.0.0.1:5500,http://localhost:5500,http://127.0.0.1:5501,http://localhost:5501"
+    CORS_ORIGINS: str = (
+        "https://micael-carvalho-dev.github.io,"
+        "http://127.0.0.1:5500,http://localhost:5500,"
+        "http://127.0.0.1:5501,http://localhost:5501"
+    )
+    CORS_ALLOW_ORIGIN_REGEX: str = r"^https://([a-z0-9-]+)\.github\.io$|^http://(localhost|127\.0\.0\.1)(:\d+)?$"
     API_AUTH_ENABLED: bool = True
     API_SHARED_KEY: str = "troque-esta-chave"
     JWT_SECRET_KEY: str = "troque-esta-chave-jwt"
