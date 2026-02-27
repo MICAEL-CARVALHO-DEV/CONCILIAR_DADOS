@@ -1,3 +1,5 @@
+import re
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -18,11 +20,13 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins_list(self) -> list[str]:
-        return [
-            x.strip()
-            for x in self.CORS_ORIGINS.split(",")
-            if x.strip() and x.strip().lower() != "null"
-        ]
+        raw = (self.CORS_ORIGINS or "").strip()
+        if not raw:
+            return []
+
+        # Aceita origens separadas por virgula, quebra de linha ou espacos.
+        parts = re.split(r"[,\r\n\t ]+", raw)
+        return [x.strip() for x in parts if x.strip() and x.strip().lower() != "null"]
 
 
 settings = Settings()
