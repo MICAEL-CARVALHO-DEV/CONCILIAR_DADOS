@@ -279,6 +279,7 @@ const importReport = document.getElementById("importReport");
 const importLabel = document.querySelector("label[for='fileCsv']");
 const currentUserInfo = document.getElementById("currentUserInfo");
 const btnProfile = document.getElementById("btnProfile");
+const btnCreateProfile = document.getElementById("btnCreateProfile");
 const btnLogout = document.getElementById("btnLogout");
 const btnDemo4Users = document.getElementById("btnDemo4Users");
 
@@ -2228,21 +2229,25 @@ function loadUserConfig(forcePrompt) {
 }
 
 function applyAccessProfile() {
-  const isSupervisor = CURRENT_ROLE === "SUPERVISAO" || CURRENT_ROLE === "PROGRAMADOR";
-  const canManageData = isSupervisor || CURRENT_ROLE === "APG";
+  const isOwner = CURRENT_ROLE === "PROGRAMADOR";
+  const isSupervisor = CURRENT_ROLE === "SUPERVISAO";
+  const canManageData = isOwner || isSupervisor || CURRENT_ROLE === "APG";
+  const canCreateProfiles = isOwner || isSupervisor;
   const apiTag = apiOnline ? "API online" : "modo local";
   const storageTag = getStorageMode() === STORAGE_MODE_LOCAL ? "persistencia local" : "sessao";
+  const viewTag = isOwner ? " (dono)" : (isSupervisor ? " (supervisao)" : "");
 
   if (currentUserInfo) {
-    currentUserInfo.textContent = "Usuario: " + CURRENT_USER + " / " + CURRENT_ROLE + (isSupervisor ? " (visao geral)" : "") + " | " + apiTag + " | " + storageTag;
+    currentUserInfo.textContent = "Usuario: " + CURRENT_USER + " / " + CURRENT_ROLE + viewTag + " | " + apiTag + " | " + storageTag;
   }
 
   if (btnExportAtuais) btnExportAtuais.style.display = "inline-block";
   if (btnExportHistorico) btnExportHistorico.style.display = "inline-block";
   if (btnExportCustom) btnExportCustom.style.display = "inline-block";
+  if (btnCreateProfile) btnCreateProfile.style.display = canCreateProfiles ? "inline-block" : "none";
   if (importLabel) importLabel.style.display = canManageData ? "inline-block" : "none";
-  if (btnReset) btnReset.style.display = canManageData ? "inline-block" : "none";
-  if (btnDemo4Users) btnDemo4Users.style.display = canManageData ? "inline-block" : "none";
+  if (btnReset) btnReset.style.display = isOwner ? "inline-block" : "none";
+  if (btnDemo4Users) btnDemo4Users.style.display = isOwner ? "inline-block" : "none";
   if (btnProfile) btnProfile.style.display = "inline-block";
   if (btnLogout) btnLogout.style.display = "inline-block";
   refreshProfileModal();

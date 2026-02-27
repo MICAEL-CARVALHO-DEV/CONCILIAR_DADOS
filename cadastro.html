@@ -58,6 +58,7 @@
         <a class="btn" href="index.html">Voltar</a>
       </div>
 
+      <p id="cadastroModeHint" class="muted small"></p>
       <p id="msg" class="muted small"></p>
     </section>
   </main>
@@ -75,6 +76,10 @@
       const USER_NAME_KEY = "SEC_USER_NAME";
       const USER_ROLE_KEY = "SEC_USER_ROLE";
       const ROLE_FALLBACK = ["APG", "SUPERVISAO", "CONTABIL", "POWERBI", "PROGRAMADOR"];
+      const OWNER_ROLE = "PROGRAMADOR";
+      const SUPERVISOR_ROLE = "SUPERVISAO";
+      const SUPERVISOR_ALLOWED = ["APG", "CONTABIL", "POWERBI"];
+      const PUBLIC_ALLOWED = ["CONTABIL"];
       const next = new URLSearchParams(window.location.search).get("next") || "index.html";
 
       const form = document.getElementById("cadastroForm");
@@ -82,15 +87,13 @@
       const perfil = document.getElementById("perfil");
       const senha = document.getElementById("senha");
       const senha2 = document.getElementById("senha2");
+      const cadastroModeHint = document.getElementById("cadastroModeHint");
       const msg = document.getElementById("msg");
-      if (sessionStorage.getItem(SESSION_TOKEN_KEY)) {
-        window.location.href = next;
-        return;
-      }
-
+      let creatorMode = "public";
+      let creatorName = "";
+      let creatorRole = "";
 
       const linkLogin = document.getElementById("linkLogin");
-
       linkLogin.href = "login.html?next=" + encodeURIComponent(next);
 
       function getBaseUrl() {
@@ -99,8 +102,12 @@
         return base.replace(/\/+$/, "");
       }
 
-      async function request(path, method, body) {
+      async function request(path, method, body, withAuth) {
         const opts = { method: method || "GET", headers: {} };
+        if (withAuth) {
+          const token = String(sessionStorage.getItem(SESSION_TOKEN_KEY) || "").trim();
+          if (token) opts.headers["Authorization"] = "Bearer " + token;
+        }
         if (body !== undefined) {
           opts.headers["Content-Type"] = "application/json";
           opts.body = JSON.stringify(body);
@@ -118,14 +125,64 @@
         return json;
       }
 
+      function getAllowedRoles() {
+        if (creatorMode === "owner") return ROLE_FALLBACK.slice();
+        if (creatorMode === "supervisor") return SUPERVISOR_ALLOWED.slice();
+        return PUBLIC_ALLOWED.slice();
+      }
+
+      function updateModeHint() {
+        if (!cadastroModeHint) return;
+        if (creatorMode === "owner") {
+          cadastroModeHint.textContent = "Modo gestor: " + creatorName + " (" + creatorRole + ") pode criar qualquer perfil.";
+          return;
+        }
+        if (creatorMode === "supervisor") {
+          cadastroModeHint.textContent = "Modo supervisao: pode criar APG, CONTABIL e POWERBI.";
+          return;
+        }
+        cadastroModeHint.textContent = "Cadastro publico: apenas perfil CONTABIL.";
+      }
+
+      async function detectCreatorMode() {
+        const token = String(sessionStorage.getItem(SESSION_TOKEN_KEY) || "").trim();
+        if (!token) {
+          creatorMode = "public";
+          creatorName = "";
+          creatorRole = "";
+          return;
+        }
+
+        try {
+          const me = await request("/auth/me", "GET", undefined, true);
+          creatorName = String(me && me.nome || "");
+          creatorRole = String(me && me.perfil || "").toUpperCase();
+          if (creatorRole === OWNER_ROLE) {
+            creatorMode = "owner";
+          } else if (creatorRole === SUPERVISOR_ROLE) {
+            creatorMode = "supervisor";
+          } else {
+            creatorMode = "public";
+          }
+        } catch (_) {
+          creatorMode = "public";
+          creatorName = "";
+          creatorRole = "";
+        }
+      }
+
       async function loadRoles() {
+        let roles = ROLE_FALLBACK.slice();
         try {
           const data = await request("/roles", "GET");
-          const roles = Array.isArray(data && data.roles) ? data.roles : ROLE_FALLBACK;
-          fillRoleSelect(roles);
-        } catch (_err) {
-          fillRoleSelect(ROLE_FALLBACK);
-        }
+          const got = Array.isArray(data && data.roles) ? data.roles : [];
+          if (got.length) roles = got.map(function (r) { return String(r || "").toUpperCase(); });
+        } catch (_) {}
+
+        const allowed = getAllowedRoles();
+        const filtered = roles.filter(function (r) { return allowed.indexOf(r) >= 0; });
+        fillRoleSelect(filtered.length ? filtered : allowed);
+        updateModeHint();
       }
 
       function fillRoleSelect(roles) {
@@ -144,6 +201,7 @@
         const p = String(perfil.value || "").trim().toUpperCase();
         const s1 = String(senha.value || "").trim();
         const s2 = String(senha2.value || "").trim();
+        const allowed = getAllowedRoles();
 
         if (!n || !p || !s1 || !s2) {
           msg.textContent = "Preencha todos os campos.";
@@ -155,23 +213,41 @@
           msg.style.color = "#b4233d";
           return;
         }
+        if (allowed.indexOf(p) < 0) {
+          msg.textContent = "Perfil nao permitido para este tipo de cadastro.";
+          msg.style.color = "#b4233d";
+          return;
+        }
 
         msg.textContent = "Cadastrando...";
         msg.style.color = "";
 
         try {
-          const data = await request("/auth/register", "POST", { nome: n, perfil: p, senha: s1 });
-          sessionStorage.setItem(SESSION_TOKEN_KEY, String(data.token || ""));
-          localStorage.setItem(USER_NAME_KEY, String(data.usuario && data.usuario.nome || n));
-          localStorage.setItem(USER_ROLE_KEY, String(data.usuario && data.usuario.perfil || p));
-          window.location.href = next;
+          const data = await request("/auth/register", "POST", { nome: n, perfil: p, senha: s1 }, creatorMode !== "public");
+
+          if (creatorMode === "public") {
+            sessionStorage.setItem(SESSION_TOKEN_KEY, String(data.token || ""));
+            localStorage.setItem(USER_NAME_KEY, String(data.usuario && data.usuario.nome || n));
+            localStorage.setItem(USER_ROLE_KEY, String(data.usuario && data.usuario.perfil || p));
+            window.location.href = next;
+            return;
+          }
+
+          msg.textContent = "Perfil criado com sucesso: " + n + " (" + p + ").";
+          msg.style.color = "#1f7a42";
+          nome.value = "";
+          senha.value = "";
+          senha2.value = "";
         } catch (err) {
           msg.textContent = err && err.message ? err.message : "Falha no cadastro.";
           msg.style.color = "#b4233d";
         }
       });
 
-      loadRoles();
+      (async function init() {
+        await detectCreatorMode();
+        await loadRoles();
+      })();
     })();
   </script>
 </body>
