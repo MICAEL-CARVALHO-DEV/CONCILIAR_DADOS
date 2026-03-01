@@ -83,7 +83,7 @@ class AuthRegisterIn(BaseModel):
 
 
 class AuthLoginIn(BaseModel):
-    nome: str = Field(min_length=2, max_length=120)
+    nome: str = Field(min_length=2, max_length=255)
     senha: str = Field(min_length=4, max_length=120)
 
 

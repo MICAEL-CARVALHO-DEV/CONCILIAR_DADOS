@@ -40,7 +40,7 @@
             <div class="field login-field">
               <div class="login-input-wrap">
                 <span class="login-input-icon" aria-hidden="true">👤</span>
-                <input id="nome" autocomplete="username" placeholder="Nome" aria-label="Nome" required />
+                <input id="nome" autocomplete="username" placeholder="Nome de usuario ou Gmail" aria-label="Nome de usuario ou Gmail" required />
               </div>
             </div>
             <div class="field login-field">
@@ -259,7 +259,7 @@
         const n = String(nome.value || "").trim();
         const s = String(senha.value || "").trim();
         if (!n || !s) {
-          msg.textContent = "Informe nome e senha.";
+          msg.textContent = "Informe nome de usuario ou Gmail e senha.";
           msg.style.color = "#b4233d";
           return;
         }
