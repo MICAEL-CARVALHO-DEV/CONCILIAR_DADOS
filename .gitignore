@@ -47,3 +47,9 @@ secrets/
 *.tmp
 *.temp
 *.bundle
+
+# Design scratch / backup assets
+assets/ChatGPT Image *.png
+assets/177222*.jpg
+assets/*.full.png
+assets/*.prev-before-swap.png
