@@ -2668,6 +2668,15 @@ function connectApiSocket() {
   };
 }
 function isApiEnabled() {
+  const host = (typeof window !== "undefined" && window.location && window.location.hostname) ? String(window.location.hostname) : "";
+  const isHostedUi = !!host && host !== "localhost" && host !== "127.0.0.1";
+  if (isHostedUi) {
+    const saved = localStorage.getItem(API_ENABLED_KEY);
+    if (saved != null && String(saved).trim().toLowerCase() === "false") {
+      localStorage.removeItem(API_ENABLED_KEY);
+    }
+    return true;
+  }
   const raw = localStorage.getItem(API_ENABLED_KEY);
   if (raw == null || raw === "") return true;
   return String(raw).trim().toLowerCase() !== "false";
@@ -2679,7 +2688,14 @@ function getApiBaseUrl() {
   const byHostMap = (RUNTIME_CONFIG && RUNTIME_CONFIG.API_BASE_URL_BY_HOST && typeof RUNTIME_CONFIG.API_BASE_URL_BY_HOST === "object") ? RUNTIME_CONFIG.API_BASE_URL_BY_HOST : {};
   const host = (typeof window !== "undefined" && window.location && window.location.hostname) ? String(window.location.hostname) : "";
   const hostBase = text(byHostMap[host]);
-  const base = text(raw) || hostBase || runtimeBase || DEFAULT_API_BASE_URL;
+  const isHostedUi = !!host && host !== "localhost" && host !== "127.0.0.1";
+  const storedBase = text(raw);
+  const hasLoopbackOverride = /^https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?::\d+)?(?:\/|$)/i.test(storedBase);
+  if (isHostedUi && hasLoopbackOverride) {
+    localStorage.removeItem(API_BASE_URL_KEY);
+  }
+  const safeStoredBase = (isHostedUi && hasLoopbackOverride) ? "" : storedBase;
+  const base = safeStoredBase || hostBase || runtimeBase || DEFAULT_API_BASE_URL;
   return base.replace(/\/+$/, "");
 }
 

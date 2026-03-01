@@ -24,8 +24,13 @@
         </div>
       </div>
       <div class="cadastro-brand-copy">
-        <p class="cadastro-kicker">Acesso institucional</p>
-        <h1 class="cadastro-title">Criar perfil</h1>
+        <div class="login-title-shell cadastro-title-shell">
+          <h1 class="cadastro-title">
+            <span class="login-title-line cadastro-title-line" data-text="CRIAR PERFIL">
+              <span class="login-title-line-core">CRIAR PERFIL</span>
+            </span>
+          </h1>
+        </div>
         <p class="cadastro-copy">Solicite seu acesso e aguarde aprovacao quando o cadastro for publico.</p>
       </div>
     </section>
@@ -67,8 +72,6 @@
           <div class="login-links auth-links">
             <a class="btn login-link" id="linkLogin" href="login.html">Ja tenho conta</a>
           </div>
-
-          <p id="cadastroModeHint" class="login-msg muted small auth-inline-note"></p>
           <p id="msg" class="login-msg muted small auth-inline-note"></p>
         </div>
       </div>
@@ -83,6 +86,7 @@
       const CFG = (window.SEC_APP_CONFIG && typeof window.SEC_APP_CONFIG === "object") ? window.SEC_APP_CONFIG : {};
       const CFG_HOST_MAP = (CFG.API_BASE_URL_BY_HOST && typeof CFG.API_BASE_URL_BY_HOST === "object") ? CFG.API_BASE_URL_BY_HOST : {};
       const CFG_HOST = (window.location && window.location.hostname) ? String(window.location.hostname) : "";
+      const IS_LOCAL_FRONTEND = !CFG_HOST || CFG_HOST === "localhost" || CFG_HOST === "127.0.0.1";
       const DEFAULT_API_BASE_URL = (CFG_HOST_MAP[CFG_HOST] ? String(CFG_HOST_MAP[CFG_HOST]) : "") || (CFG.API_BASE_URL ? String(CFG.API_BASE_URL) : "") || "http://localhost:8000";
       const SESSION_TOKEN_KEY = "SEC_SESSION_TOKEN";
       const USER_NAME_KEY = "SEC_USER_NAME";
@@ -97,10 +101,8 @@
       const perfil = document.getElementById("perfil");
       const senha = document.getElementById("senha");
       const senha2 = document.getElementById("senha2");
-      const cadastroModeHint = document.getElementById("cadastroModeHint");
       const msg = document.getElementById("msg");
       let creatorMode = "public";
-      let creatorName = "";
       let creatorRole = "";
 
       const linkLogin = document.getElementById("linkLogin");
@@ -111,9 +113,16 @@
 
       updateNavLinks();
 
+      function isLoopbackApiBase(value) {
+        return /^https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?::\d+)?(?:\/|$)/i.test(String(value || "").trim());
+      }
+
       function getBaseUrl() {
         const raw = String(localStorage.getItem(API_BASE_URL_KEY) || "").trim();
-        const base = raw || DEFAULT_API_BASE_URL;
+        if (!IS_LOCAL_FRONTEND && raw && isLoopbackApiBase(raw)) {
+          localStorage.removeItem(API_BASE_URL_KEY);
+        }
+        const base = (!IS_LOCAL_FRONTEND && isLoopbackApiBase(raw)) ? DEFAULT_API_BASE_URL : (raw || DEFAULT_API_BASE_URL);
         return base.replace(/\/+$/, "");
       }
 
@@ -145,28 +154,16 @@
         return PUBLIC_ALLOWED.slice();
       }
 
-      function updateModeHint() {
-        updateNavLinks();
-        if (!cadastroModeHint) return;
-        if (creatorMode === "owner") {
-          cadastroModeHint.textContent = "Modo gestor: " + creatorName + " (" + creatorRole + ") pode criar qualquer perfil.";
-          return;
-        }
-        cadastroModeHint.textContent = "Cadastro publico: perfil fica em analise e o PROGRAMADOR aprova.";
-      }
-
       async function detectCreatorMode() {
         const token = String(sessionStorage.getItem(SESSION_TOKEN_KEY) || "").trim();
         if (!token) {
           creatorMode = "public";
-          creatorName = "";
           creatorRole = "";
           return;
         }
 
         try {
           const me = await request("/auth/me", "GET", undefined, true);
-          creatorName = String(me && me.nome || "");
           creatorRole = String(me && me.perfil || "").toUpperCase();
           if (creatorRole === OWNER_ROLE) {
             creatorMode = "owner";
@@ -175,7 +172,6 @@
           }
         } catch (_) {
           creatorMode = "public";
-          creatorName = "";
           creatorRole = "";
         }
       }
@@ -191,7 +187,6 @@
         const allowed = getAllowedRoles();
         const filtered = roles.filter(function (r) { return allowed.indexOf(r) >= 0; });
         fillRoleSelect(filtered.length ? filtered : allowed);
-        updateModeHint();
       }
 
       function fillRoleSelect(roles) {

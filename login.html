@@ -71,6 +71,7 @@
       const CFG = (window.SEC_APP_CONFIG && typeof window.SEC_APP_CONFIG === "object") ? window.SEC_APP_CONFIG : {};
       const CFG_HOST_MAP = (CFG.API_BASE_URL_BY_HOST && typeof CFG.API_BASE_URL_BY_HOST === "object") ? CFG.API_BASE_URL_BY_HOST : {};
       const CFG_HOST = (window.location && window.location.hostname) ? String(window.location.hostname) : "";
+      const IS_LOCAL_FRONTEND = !CFG_HOST || CFG_HOST === "localhost" || CFG_HOST === "127.0.0.1";
       const DEFAULT_API_BASE_URL = (CFG_HOST_MAP[CFG_HOST] ? String(CFG_HOST_MAP[CFG_HOST]) : "") || (CFG.API_BASE_URL ? String(CFG.API_BASE_URL) : "") || "http://localhost:8000";
       const SESSION_TOKEN_KEY = "SEC_SESSION_TOKEN";
       const USER_NAME_KEY = "SEC_USER_NAME";
@@ -92,9 +93,16 @@
       linkCadastro.href = "cadastro.html?next=" + encodeURIComponent(next);
       if (incomingMsg && incomingMsg !== "Entre para continuar.") msg.textContent = incomingMsg;
 
+      function isLoopbackApiBase(value) {
+        return /^https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?::\d+)?(?:\/|$)/i.test(String(value || "").trim());
+      }
+
       function getBaseUrl() {
         const raw = String(localStorage.getItem(API_BASE_URL_KEY) || "").trim();
-        const base = raw || DEFAULT_API_BASE_URL;
+        if (!IS_LOCAL_FRONTEND && raw && isLoopbackApiBase(raw)) {
+          localStorage.removeItem(API_BASE_URL_KEY);
+        }
+        const base = (!IS_LOCAL_FRONTEND && isLoopbackApiBase(raw)) ? DEFAULT_API_BASE_URL : (raw || DEFAULT_API_BASE_URL);
         return base.replace(/\/+$/, "");
       }
 
