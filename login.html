@@ -61,7 +61,7 @@
             <a class="btn login-link" id="linkCadastro" href="cadastro.html">Cadastrar</a>
           </div>
 
-          <p class="login-help-text muted small">Esqueceu a senha ?</p>
+          <button type="button" id="btnForgotPassword" class="login-help-link muted small">Esqueceu a senha?</button>
           <p id="msg" class="login-msg muted small"></p>
         </div>
       </div>
@@ -90,6 +90,8 @@
       const nome = document.getElementById("nome");
       const senha = document.getElementById("senha");
       const msg = document.getElementById("msg");
+      const submitBtn = form.querySelector(".login-submit");
+      const forgotBtn = document.getElementById("btnForgotPassword");
       const googleAuthBlock = document.getElementById("googleAuthBlock");
       const googleLoginButton = document.getElementById("googleLoginButton");
 
@@ -191,6 +193,19 @@
         localStorage.setItem(USER_ROLE_KEY, String(data.usuario && data.usuario.perfil || fallbackRole || "CONTABIL"));
       }
 
+      function setBusy(isBusy, busyLabel) {
+        nome.disabled = isBusy;
+        senha.disabled = isBusy;
+        submitBtn.disabled = isBusy;
+        forgotBtn.disabled = isBusy;
+        submitBtn.textContent = isBusy ? (busyLabel || "Processando...") : "Acessar";
+
+        if (googleAuthBlock) {
+          googleAuthBlock.style.pointerEvents = isBusy ? "none" : "";
+          googleAuthBlock.style.opacity = isBusy ? "0.6" : "";
+        }
+      }
+
       async function onGoogleCredential(response) {
         const credential = String(response && response.credential || "").trim();
         if (!credential) {
@@ -199,13 +214,14 @@
           return;
         }
 
+        setBusy(true, "Aguardando...");
         msg.textContent = "Validando conta Google...";
         msg.style.color = "";
 
         try {
           const data = await apiRequest("/auth/google", { credential: credential });
           if (data && data.pending_approval) {
-            msg.textContent = "Perfil criado com Google e enviado para aprovacao.";
+            msg.textContent = (data && data.detail) || "Perfil criado com Google e enviado para aprovacao.";
             msg.style.color = "#e8f7ef";
             return;
           }
@@ -215,6 +231,8 @@
         } catch (err) {
           msg.textContent = err && err.message ? err.message : "Falha no login com Google.";
           msg.style.color = "#b4233d";
+        } finally {
+          setBusy(false);
         }
       }
 
@@ -264,6 +282,7 @@
           return;
         }
 
+        setBusy(true, "Entrando...");
         msg.textContent = "Autenticando...";
         msg.style.color = "";
 
@@ -274,6 +293,33 @@
         } catch (err) {
           msg.textContent = err && err.message ? err.message : "Falha no login.";
           msg.style.color = "#b4233d";
+        } finally {
+          setBusy(false);
+        }
+      });
+
+      forgotBtn.addEventListener("click", async function () {
+        const identificador = String(nome.value || "").trim();
+        if (!identificador) {
+          msg.textContent = "Informe nome de usuario ou Gmail para recuperar o acesso.";
+          msg.style.color = "#b4233d";
+          nome.focus();
+          return;
+        }
+
+        setBusy(true, "Aguardando...");
+        msg.textContent = "Registrando solicitacao...";
+        msg.style.color = "";
+
+        try {
+          const data = await apiRequest("/auth/recovery-request", { identificador: identificador });
+          msg.textContent = (data && data.detail) || "Solicitacao registrada.";
+          msg.style.color = "#e8f7ef";
+        } catch (err) {
+          msg.textContent = err && err.message ? err.message : "Falha ao registrar solicitacao.";
+          msg.style.color = "#b4233d";
+        } finally {
+          setBusy(false);
         }
       });
 

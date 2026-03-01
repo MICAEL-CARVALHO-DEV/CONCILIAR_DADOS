@@ -46,6 +46,22 @@ class UsuarioSessao(Base):
     usuario: Mapped["Usuario"] = relationship(back_populates="sessoes")
 
 
+class AuthAuditLog(Base):
+    __tablename__ = "auth_audit_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[Optional[int]] = mapped_column(ForeignKey("usuarios.id"), index=True, nullable=True)
+    user_nome: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    login_identificador: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    event_type: Mapped[str] = mapped_column(String(50), index=True, nullable=False)
+    provider: Mapped[str] = mapped_column(String(20), default="LOCAL", nullable=False)
+    success: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    detail: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    ip_origem: Mapped[str] = mapped_column(String(64), default="", nullable=False)
+    user_agent: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 class Emenda(Base):
     __tablename__ = "emendas"
 
