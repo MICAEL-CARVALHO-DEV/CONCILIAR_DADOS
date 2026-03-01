@@ -1276,6 +1276,13 @@ textarea {
   box-shadow: 0 5px 12px rgba(24, 74, 54, 0.18);
 }
 
+.btn.primary.login-submit:disabled {
+  cursor: wait;
+  opacity: 0.76;
+  box-shadow: 0 6px 14px rgba(24, 74, 54, 0.14);
+  transform: none;
+}
+
 .login-links {
   display: flex;
   gap: 10px;
@@ -1338,11 +1345,28 @@ textarea {
   margin: 2px 0 0;
 }
 
-.login-help-text {
+.login-help-link {
   min-height: 20px;
   margin: 10px 0 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: #f3fbff;
   font-size: 0.95rem;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-thickness: 0.06em;
+  text-underline-offset: 0.16em;
+}
+
+.login-help-link:hover {
+  color: #ffffff;
+}
+
+.login-help-link:disabled {
+  cursor: wait;
+  opacity: 0.72;
 }
 
 .login-msg {

@@ -9,7 +9,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import urlopen
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response, WebSocket, WebSocketDisconnect, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -19,11 +19,13 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .db import Base, SessionLocal, engine, get_db
-from .models import Emenda, ExportLog, Historico, ImportLinha, ImportLote, Usuario, UsuarioSessao
+from .models import AuthAuditLog, Emenda, ExportLog, Historico, ImportLinha, ImportLote, Usuario, UsuarioSessao
 from .schemas import (
     AuthGoogleIn,
+    AuthAuditLogOut,
     AuthLoginIn,
     AuthOut,
+    AuthRecoveryRequestIn,
     AuthRegisterIn,
     EmendaCreate,
     EmendaOut,
@@ -64,6 +66,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 VERSIONED_ID_RE = re.compile(r"^(?P<base>.+)-v(?P<num>\d+)$", re.IGNORECASE)
 GOOGLE_ISSUERS = {"accounts.google.com", "https://accounts.google.com"}
 GOOGLE_USERNAME_SANITIZE_RE = re.compile(r"\s+")
+AUTH_AUDIT_UA_MAX_LEN = 255
 
 STATUS_TRANSITIONS = {
     "Recebido": {"Em analise", "Pendente", "Cancelado"},
@@ -286,6 +289,64 @@ def _create_jwt_session(db: Session, user: Usuario) -> str:
         "typ": "access",
     }
     return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
+
+
+def _request_ip(request: Request) -> str:
+    forwarded = (request.headers.get("x-forwarded-for") or "").strip()
+    if forwarded:
+        return forwarded.split(",", 1)[0].strip()[:64]
+    if request.client and request.client.host:
+        return str(request.client.host).strip()[:64]
+    return ""
+
+
+def _request_user_agent(request: Request) -> str:
+    return (request.headers.get("user-agent") or "").strip()[:AUTH_AUDIT_UA_MAX_LEN]
+
+
+def _add_auth_audit(
+    db: Session,
+    *,
+    request: Request,
+    event_type: str,
+    login_identificador: str,
+    detail: str,
+    success: bool,
+    provider: str,
+    user: Usuario | None = None,
+) -> None:
+    db.add(
+        AuthAuditLog(
+            user_id=(user.id if user else None),
+            user_nome=(user.nome if user else ""),
+            login_identificador=(login_identificador or "").strip()[:255],
+            event_type=event_type,
+            provider=provider,
+            success=bool(success),
+            detail=(detail or "").strip(),
+            ip_origem=_request_ip(request),
+            user_agent=_request_user_agent(request),
+        )
+    )
+
+
+def _find_user_by_login(db: Session, identificador: str) -> Usuario | None:
+    normalized_login = (identificador or "").strip().lower()
+    if not normalized_login:
+        return None
+
+    user = db.query(Usuario).filter(func.lower(Usuario.nome) == normalized_login).first()
+    if user is not None:
+        return user
+
+    if "@" in normalized_login:
+        return (
+            db.query(Usuario)
+            .filter(Usuario.email.is_not(None), func.lower(Usuario.email) == normalized_login)
+            .first()
+        )
+
+    return None
 
 
 def _try_decode_jwt(token: str) -> dict | None:
@@ -677,7 +738,7 @@ def auth_register(
 
 
 @app.post("/auth/google", response_model=AuthOut)
-def auth_google(payload: AuthGoogleIn, db: Session = Depends(get_db)):
+def auth_google(payload: AuthGoogleIn, request: Request, db: Session = Depends(get_db)):
     identity = _verify_google_identity_token(payload.credential)
 
     owner_exists = (
@@ -687,6 +748,16 @@ def auth_google(payload: AuthGoogleIn, db: Session = Depends(get_db)):
         is not None
     )
     if not owner_exists:
+        _add_auth_audit(
+            db,
+            request=request,
+            event_type="LOGIN_GOOGLE",
+            login_identificador=identity["email"],
+            detail="login google bloqueado ate existir PROGRAMADOR local",
+            success=False,
+            provider="GOOGLE",
+        )
+        db.commit()
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="configure um PROGRAMADOR local antes de habilitar o login google",
@@ -742,6 +813,17 @@ def auth_google(payload: AuthGoogleIn, db: Session = Depends(get_db)):
             db.refresh(user)
 
     if user.google_sub and user.google_sub != identity["sub"]:
+        _add_auth_audit(
+            db,
+            request=request,
+            event_type="LOGIN_GOOGLE",
+            login_identificador=identity["email"],
+            detail="conta google nao corresponde ao cadastro",
+            success=False,
+            provider="GOOGLE",
+            user=user,
+        )
+        db.commit()
         raise HTTPException(status_code=409, detail="conta google nao corresponde ao cadastro")
 
     changed = False
@@ -757,17 +839,55 @@ def auth_google(payload: AuthGoogleIn, db: Session = Depends(get_db)):
             db.commit()
         except IntegrityError:
             db.rollback()
+            _add_auth_audit(
+                db,
+                request=request,
+                event_type="LOGIN_GOOGLE",
+                login_identificador=identity["email"],
+                detail="email ja vinculado a outro usuario",
+                success=False,
+                provider="GOOGLE",
+                user=user,
+            )
+            db.commit()
             raise HTTPException(status_code=409, detail="email ja vinculado a outro usuario")
         db.refresh(user)
 
     if not user.ativo:
+        detail = (
+            "Perfil criado com Google e enviado para aprovacao."
+            if created_now
+            else "Sua conta esta em analise. Aguarde aprovacao do PROGRAMADOR."
+        )
+        _add_auth_audit(
+            db,
+            request=request,
+            event_type="LOGIN_GOOGLE",
+            login_identificador=identity["email"],
+            detail=detail,
+            success=False,
+            provider="GOOGLE",
+            user=user,
+        )
+        db.commit()
         return {
             "token": None,
             "token_type": "bearer",
             "usuario": {"id": user.id, "nome": user.nome, "perfil": user.perfil},
             "pending_approval": True,
+            "detail": detail,
         }
 
+    _add_auth_audit(
+        db,
+        request=request,
+        event_type="LOGIN_GOOGLE",
+        login_identificador=identity["email"],
+        detail="login com google realizado com sucesso",
+        success=True,
+        provider="GOOGLE",
+        user=user,
+    )
     token = _create_jwt_session(db, user)
     return {
         "token": token,
@@ -778,36 +898,121 @@ def auth_google(payload: AuthGoogleIn, db: Session = Depends(get_db)):
 
 
 @app.post("/auth/login", response_model=AuthOut)
-def auth_login(payload: AuthLoginIn, db: Session = Depends(get_db)):
+def auth_login(payload: AuthLoginIn, request: Request, db: Session = Depends(get_db)):
     nome = payload.nome.strip()
-    normalized_login = nome.lower()
-    user = db.query(Usuario).filter(func.lower(Usuario.nome) == normalized_login).first()
-    if not user and "@" in nome:
-        user = (
-            db.query(Usuario)
-            .filter(Usuario.email.is_not(None), func.lower(Usuario.email) == normalized_login)
-            .first()
-        )
+    user = _find_user_by_login(db, nome)
     if not user:
-        raise HTTPException(status_code=401, detail="credenciais invalidas")
+        detail = "Usuario nao encontrado. Use Cadastrar para solicitar acesso."
+        _add_auth_audit(
+            db,
+            request=request,
+            event_type="LOGIN_PASSWORD",
+            login_identificador=nome,
+            detail=detail,
+            success=False,
+            provider="LOCAL",
+        )
+        db.commit()
+        raise HTTPException(status_code=404, detail=detail)
     if not user.ativo:
-        raise HTTPException(status_code=403, detail="usuario pendente de aprovacao")
+        detail = "Sua conta esta em analise. Aguarde aprovacao do PROGRAMADOR."
+        _add_auth_audit(
+            db,
+            request=request,
+            event_type="LOGIN_PASSWORD",
+            login_identificador=nome,
+            detail=detail,
+            success=False,
+            provider="LOCAL",
+            user=user,
+        )
+        db.commit()
+        raise HTTPException(status_code=403, detail=detail)
 
     valid, used_legacy = _verify_user_password(user, payload.senha)
     if not valid:
-        raise HTTPException(status_code=401, detail="credenciais invalidas")
+        detail = "Senha invalida. Tente novamente."
+        _add_auth_audit(
+            db,
+            request=request,
+            event_type="LOGIN_PASSWORD",
+            login_identificador=nome,
+            detail=detail,
+            success=False,
+            provider="LOCAL",
+            user=user,
+        )
+        db.commit()
+        raise HTTPException(status_code=401, detail=detail)
 
     if used_legacy:
         user.senha_hash = _hash_password(payload.senha)
         user.senha_salt = ""
-        db.commit()
 
+    _add_auth_audit(
+        db,
+        request=request,
+        event_type="LOGIN_PASSWORD",
+        login_identificador=nome,
+        detail="login com senha realizado com sucesso",
+        success=True,
+        provider="LOCAL",
+        user=user,
+    )
     token = _create_jwt_session(db, user)
     return {
         "token": token,
         "token_type": "bearer",
         "usuario": {"id": user.id, "nome": user.nome, "perfil": user.perfil},
     }
+
+
+@app.post("/auth/recovery-request")
+def auth_recovery_request(payload: AuthRecoveryRequestIn, request: Request, db: Session = Depends(get_db)):
+    identificador = payload.identificador.strip()
+    user = _find_user_by_login(db, identificador)
+    if not user:
+        detail = "Usuario nao encontrado. Use Cadastrar para solicitar acesso."
+        _add_auth_audit(
+            db,
+            request=request,
+            event_type="RECOVERY_REQUEST",
+            login_identificador=identificador,
+            detail=detail,
+            success=False,
+            provider="LOCAL",
+        )
+        db.commit()
+        raise HTTPException(status_code=404, detail=detail)
+
+    if not user.ativo:
+        detail = "Sua conta esta em analise. Aguarde aprovacao do PROGRAMADOR."
+        _add_auth_audit(
+            db,
+            request=request,
+            event_type="RECOVERY_REQUEST",
+            login_identificador=identificador,
+            detail=detail,
+            success=False,
+            provider="LOCAL",
+            user=user,
+        )
+        db.commit()
+        raise HTTPException(status_code=403, detail=detail)
+
+    detail = "Solicitacao registrada. Um PROGRAMADOR deve redefinir sua senha."
+    _add_auth_audit(
+        db,
+        request=request,
+        event_type="RECOVERY_REQUEST",
+        login_identificador=identificador,
+        detail=detail,
+        success=True,
+        provider="LOCAL",
+        user=user,
+    )
+    db.commit()
+    return {"ok": True, "detail": detail}
 
 
 @app.get("/auth/me", response_model=UserOut)
@@ -836,6 +1041,20 @@ def auth_logout(actor: dict = Depends(_actor_from_headers), db: Session = Depend
             sessao.revoked_at = _utcnow()
             db.commit()
     return {"ok": True}
+
+
+@app.get("/auth/audit", response_model=list[AuthAuditLogOut])
+def auth_audit_logs(
+    limit: int = Query(default=50, ge=1, le=200),
+    _actor: dict = Depends(_require_owner),
+    db: Session = Depends(get_db),
+):
+    return (
+        db.query(AuthAuditLog)
+        .order_by(AuthAuditLog.created_at.desc(), AuthAuditLog.id.desc())
+        .limit(limit)
+        .all()
+    )
 
 
 @app.get("/users", response_model=list[UserAdminOut])

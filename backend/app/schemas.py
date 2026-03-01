@@ -91,11 +91,33 @@ class AuthGoogleIn(BaseModel):
     credential: str = Field(min_length=50, max_length=4096)
 
 
+class AuthRecoveryRequestIn(BaseModel):
+    identificador: str = Field(min_length=2, max_length=255)
+
+
 class AuthOut(BaseModel):
     token: str | None = None
     token_type: str = "bearer"
     usuario: UserOut
     pending_approval: bool = False
+    detail: str | None = None
+
+
+class AuthAuditLogOut(BaseModel):
+    id: int
+    user_id: int | None = None
+    user_nome: str
+    login_identificador: str
+    event_type: str
+    provider: str
+    success: bool
+    detail: str
+    ip_origem: str
+    user_agent: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
 
 
 class EmendaCreate(BaseModel):
