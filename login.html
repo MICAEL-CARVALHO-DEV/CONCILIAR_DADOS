@@ -5,53 +5,61 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Login - Prototipo SEC Emendas</title>
   <link rel="icon" href="data:," />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
-  <style>
-    .auth-page {
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 16px;
-    }
-    .auth-shell {
-      width: min(460px, 96vw);
-      background: #fff;
-      border: 1px solid var(--line);
-      border-radius: 14px;
-      padding: 16px;
-      box-shadow: 0 20px 60px rgba(6, 18, 36, 0.2);
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-    .auth-links { display: flex; gap: 10px; flex-wrap: wrap; }
-  </style>
 </head>
-<body>
-  <main class="auth-page">
-    <section class="auth-shell">
-      <h1>Entrar</h1>
-      <p class="muted small">Acesse com seu nome e senha.</p>
-
-      <form id="loginForm" class="auth-form">
-        <div class="field">
-          <label for="nome">Nome</label>
-          <input id="nome" autocomplete="username" required />
+<body class="login-page">
+  <main class="login-layout">
+    <section class="login-brand login-animate-left">
+      <div class="login-logo-frame">
+        <div class="login-logo-flip">
+          <img
+            src="assets/sec-logo.png"
+            alt="Brasao do Estado da Bahia"
+            class="login-logo"
+            onerror="var frame=this.closest('.login-logo-frame'); if(frame){ frame.style.display='none'; } else { this.style.display='none'; }"
+          />
         </div>
-        <div class="field">
-          <label for="senha">Senha</label>
-          <input id="senha" type="password" autocomplete="current-password" required />
-        </div>
-        <button type="submit" class="btn primary">Entrar</button>
-      </form>
-
-      <div class="auth-links">
-        <a class="btn" id="linkCadastro" href="cadastro.html">Criar perfil</a>
-        <a class="btn" href="index.html">Voltar</a>
       </div>
+      <div class="login-title-shell">
+        <h1 class="login-title" aria-label="Sistema Gestao Emendas">
+          <span class="login-title-line" data-text="SISTEMA" style="--line-index: 0;"><span class="login-title-line-core">SISTEMA</span></span>
+          <span class="login-title-line" data-text="GESTAO" style="--line-index: 1;"><span class="login-title-line-core">GESTAO</span></span>
+          <span class="login-title-line" data-text="EMENDAS" style="--line-index: 2;"><span class="login-title-line-core">EMENDAS</span></span>
+        </h1>
+      </div>
+    </section>
 
-      <p id="msg" class="muted small"></p>
+    <section class="login-panel-wrap login-animate-card">
+      <div class="login-panel-glass">
+        <div class="login-panel">
+          <h2 class="login-panel-title" data-text="Login">Login</h2>
+          <form id="loginForm" class="auth-form">
+            <div class="field login-field">
+              <div class="login-input-wrap">
+                <span class="login-input-icon" aria-hidden="true">👤</span>
+                <input id="nome" autocomplete="username" placeholder="Nome" aria-label="Nome" required />
+              </div>
+            </div>
+            <div class="field login-field">
+              <div class="login-input-wrap">
+                <span class="login-input-icon" aria-hidden="true">🔒</span>
+                <input id="senha" type="password" autocomplete="current-password" placeholder="Senha" aria-label="Senha" required />
+              </div>
+            </div>
+            <button type="submit" class="btn primary login-submit">Acessar</button>
+          </form>
+
+          <div class="login-links">
+            <a class="btn login-link" id="linkCadastro" href="cadastro.html">Cadastrar</a>
+          </div>
+
+          <p class="login-help-text muted small">Esqueceu a senha ?</p>
+          <p id="msg" class="login-msg muted small"></p>
+        </div>
+      </div>
     </section>
   </main>
 
@@ -82,7 +90,7 @@
       const linkCadastro = document.getElementById("linkCadastro");
 
       linkCadastro.href = "cadastro.html?next=" + encodeURIComponent(next);
-      if (incomingMsg) msg.textContent = incomingMsg;
+      if (incomingMsg && incomingMsg !== "Entre para continuar.") msg.textContent = incomingMsg;
 
       function getBaseUrl() {
         const raw = String(localStorage.getItem(API_BASE_URL_KEY) || "").trim();
