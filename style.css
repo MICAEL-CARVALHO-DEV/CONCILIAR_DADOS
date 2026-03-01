@@ -1283,6 +1283,40 @@ textarea {
   margin-top: 12px;
 }
 
+.google-auth-block {
+  margin-top: 14px;
+}
+
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 12px;
+  color: rgba(243, 251, 255, 0.82);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(193, 233, 211, 0.14), rgba(193, 233, 211, 0.48), rgba(193, 233, 211, 0.14));
+}
+
+.login-divider span {
+  flex: none;
+}
+
+.google-login-slot {
+  display: flex;
+  justify-content: center;
+  min-height: 44px;
+}
+
 .login-link {
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.82);

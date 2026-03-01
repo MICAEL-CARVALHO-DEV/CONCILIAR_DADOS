@@ -1,5 +1,7 @@
 param(
-  [string]$BaseUrl = "http://127.0.0.1:8000"
+  [string]$BaseUrl = "http://127.0.0.1:8000",
+  [string]$OwnerUser = "",
+  [string]$OwnerPass = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -44,6 +46,7 @@ $token = ""
 $script:headers = @{}
 $user = "qa_reg_" + (Get-Date -Format "HHmmss")
 $pass = "123456"
+$script:authExpectedUser = ""
 $inactiveUser = "qa_inativo_" + (Get-Date -Format "HHmmss")
 $inactivePass = "123456"
 $inactiveUserId = $null
@@ -80,22 +83,58 @@ Step "openapi rotas minimas" {
 }
 
 Step "register e login" {
+  $registered = $null
+  $usedExistingOwner = $false
+
   try {
-    $null = Invoke-Json -Method "POST" -Url "$BaseUrl/auth/register" -Headers @{} -Body @{
+    $registered = Invoke-Json -Method "POST" -Url "$BaseUrl/auth/register" -Headers @{} -Body @{
       nome = $user
       perfil = "PROGRAMADOR"
       senha = $pass
     }
   } catch {
-    if ($_.Exception.Message -notmatch "409|ja existe") { throw }
+    if ($_.Exception.Message -match "403|cadastro publico nao permite este perfil") {
+      $pending = Invoke-Json -Method "POST" -Url "$BaseUrl/auth/register" -Headers @{} -Body @{
+        nome = $user
+        perfil = "CONTABIL"
+        senha = $pass
+      }
+
+      if (-not $pending.pending_approval) {
+        throw "cadastro publico deveria retornar pending_approval=true"
+      }
+
+      if (-not $OwnerUser -or -not $OwnerPass) {
+        throw "existe PROGRAMADOR ativo; informe -OwnerUser e -OwnerPass para concluir a regressao"
+      }
+
+      $login = Invoke-Json -Method "POST" -Url "$BaseUrl/auth/login" -Headers @{} -Body @{
+        nome = $OwnerUser
+        senha = $OwnerPass
+      }
+
+      $script:token = [string]($login.token)
+      $script:authExpectedUser = $OwnerUser
+      $usedExistingOwner = $true
+    } elseif ($_.Exception.Message -notmatch "409|ja existe") {
+      throw
+    }
   }
 
-  $login = Invoke-Json -Method "POST" -Url "$BaseUrl/auth/login" -Headers @{} -Body @{
-    nome = $user
-    senha = $pass
+  if (-not $usedExistingOwner) {
+    if ($registered -and $registered.token) {
+      $script:token = [string]($registered.token)
+    } else {
+      $login = Invoke-Json -Method "POST" -Url "$BaseUrl/auth/login" -Headers @{} -Body @{
+        nome = $user
+        senha = $pass
+      }
+      $script:token = [string]($login.token)
+    }
+
+    $script:authExpectedUser = $user
   }
 
-  $script:token = [string]($login.token)
   if (-not $script:token) { throw "token vazio" }
 
   $script:headers = @{
@@ -107,7 +146,7 @@ Step "register e login" {
 
 Step "auth me" {
   $me = Invoke-Json -Method "GET" -Url "$BaseUrl/auth/me" -Headers $script:headers -Body $null
-  if ([string]$me.nome -ne $user) { throw "auth/me retornou usuario inesperado: $($me.nome)" }
+  if ([string]$me.nome -ne $script:authExpectedUser) { throw "auth/me retornou usuario inesperado: $($me.nome)" }
 }
 
 Step "bloqueio de usuario inativo" {
@@ -132,7 +171,7 @@ Step "bloqueio de usuario inativo" {
     }
     throw "login de usuario inativo deveria falhar"
   } catch {
-    if ($_.Exception.Message -notmatch "401|credenciais invalidas") { throw }
+    if ($_.Exception.Message -notmatch "403|pendente de aprovacao") { throw }
   }
 
   $reactResp = Invoke-Json -Method "PATCH" -Url "$BaseUrl/users/$script:inactiveUserId/status" -Headers $script:headers -Body @{

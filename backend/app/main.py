@@ -1,9 +1,13 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
 import hashlib
+import json
 import re
 import secrets
 from typing import Annotated
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
+from urllib.request import urlopen
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,11 +15,13 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from passlib.exc import UnknownHashError
 from sqlalchemy import func, inspect, or_, text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .db import Base, SessionLocal, engine, get_db
 from .models import Emenda, ExportLog, Historico, ImportLinha, ImportLote, Usuario, UsuarioSessao
 from .schemas import (
+    AuthGoogleIn,
     AuthLoginIn,
     AuthOut,
     AuthRegisterIn,
@@ -56,6 +62,8 @@ PUBLIC_REGISTER_ROLES = {"APG", "SUPERVISAO", "CONTABIL", "POWERBI"}
 SESSION_HOURS = max(int(settings.JWT_EXPIRE_HOURS or 12), 1)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 VERSIONED_ID_RE = re.compile(r"^(?P<base>.+)-v(?P<num>\d+)$", re.IGNORECASE)
+GOOGLE_ISSUERS = {"accounts.google.com", "https://accounts.google.com"}
+GOOGLE_USERNAME_SANITIZE_RE = re.compile(r"\s+")
 
 STATUS_TRANSITIONS = {
     "Recebido": {"Em analise", "Pendente", "Cancelado"},
@@ -178,6 +186,78 @@ def _verify_user_password(user: Usuario, password: str) -> tuple[bool, bool]:
         return True, True
 
     return False, False
+
+
+def _build_unique_public_username(db: Session, preferred: str) -> str:
+    base = GOOGLE_USERNAME_SANITIZE_RE.sub(" ", (preferred or "").strip())
+    if not base:
+        base = "Google User"
+    if len(base) < 2:
+        base = (base + " xx")[:2].strip()
+
+    candidate = base[:120]
+    suffix_num = 2
+    while db.query(Usuario.id).filter(func.lower(Usuario.nome) == candidate.lower()).first():
+        suffix = f" - {suffix_num}"
+        safe_len = max(2, 120 - len(suffix))
+        candidate = (base[:safe_len].rstrip() + suffix).strip()
+        suffix_num += 1
+
+    return candidate
+
+
+def _verify_google_identity_token(id_token: str) -> dict:
+    raw_token = (id_token or "").strip()
+    client_id = (settings.GOOGLE_CLIENT_ID or "").strip()
+
+    if not client_id:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="login com google indisponivel",
+        )
+    if not raw_token:
+        raise HTTPException(status_code=400, detail="credential google ausente")
+
+    query = urlencode({"id_token": raw_token})
+    verify_url = f"{settings.GOOGLE_TOKENINFO_URL}?{query}"
+
+    try:
+        with urlopen(verify_url, timeout=8) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except HTTPError:
+        raise HTTPException(status_code=401, detail="token google invalido")
+    except (URLError, TimeoutError, json.JSONDecodeError):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="falha ao validar token google",
+        )
+
+    aud = str(payload.get("aud") or "").strip()
+    azp = str(payload.get("azp") or "").strip()
+    if aud != client_id and azp != client_id:
+        raise HTTPException(status_code=401, detail="token google com audience invalida")
+
+    issuer = str(payload.get("iss") or "").strip()
+    if issuer not in GOOGLE_ISSUERS:
+        raise HTTPException(status_code=401, detail="issuer google invalido")
+
+    if str(payload.get("email_verified") or "").strip().lower() != "true":
+        raise HTTPException(status_code=403, detail="conta google nao verificada")
+
+    email = str(payload.get("email") or "").strip().lower()
+    sub = str(payload.get("sub") or "").strip()
+    if not email or not sub:
+        raise HTTPException(status_code=401, detail="token google sem identidade valida")
+
+    display_name = str(payload.get("name") or "").strip()
+    if not display_name:
+        display_name = email.split("@", 1)[0]
+
+    return {
+        "email": email,
+        "sub": sub,
+        "name": display_name,
+    }
 
 
 def _create_jwt_session(db: Session, user: Usuario) -> str:
@@ -570,7 +650,14 @@ def auth_register(
         ativo=activate_now,
     )
     db.add(user)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        conflict = db.query(Usuario.id).filter(func.lower(Usuario.nome) == nome.lower()).first()
+        if conflict is not None:
+            raise HTTPException(status_code=409, detail="usuario ja existe")
+        raise
     db.refresh(user)
 
     if pending_approval:
@@ -586,6 +673,107 @@ def auth_register(
         "token": token,
         "token_type": "bearer",
         "usuario": {"id": user.id, "nome": user.nome, "perfil": user.perfil},
+    }
+
+
+@app.post("/auth/google", response_model=AuthOut)
+def auth_google(payload: AuthGoogleIn, db: Session = Depends(get_db)):
+    identity = _verify_google_identity_token(payload.credential)
+
+    owner_exists = (
+        db.query(Usuario.id)
+        .filter(Usuario.ativo.is_(True), Usuario.perfil == OWNER_ROLE)
+        .first()
+        is not None
+    )
+    if not owner_exists:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="configure um PROGRAMADOR local antes de habilitar o login google",
+        )
+
+    user = db.query(Usuario).filter(Usuario.google_sub == identity["sub"]).first()
+    if user is None:
+        user = (
+            db.query(Usuario)
+            .filter(Usuario.email.is_not(None), func.lower(Usuario.email) == identity["email"])
+            .first()
+        )
+
+    pending_approval = False
+    created_now = False
+
+    if user is None:
+        pending_approval = True
+        created_now = True
+        user = Usuario(
+            nome=_build_unique_public_username(db, identity["name"]),
+            email=identity["email"],
+            google_sub=identity["sub"],
+            setor="CONTABIL",
+            perfil="CONTABIL",
+            senha_salt="",
+            senha_hash="",
+            ativo=False,
+        )
+        db.add(user)
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            existing_by_google = db.query(Usuario).filter(Usuario.google_sub == identity["sub"]).first()
+            if existing_by_google is not None:
+                user = existing_by_google
+                pending_approval = not bool(user.ativo)
+                created_now = False
+            else:
+                existing_by_email = (
+                    db.query(Usuario)
+                    .filter(Usuario.email.is_not(None), func.lower(Usuario.email) == identity["email"])
+                    .first()
+                )
+                if existing_by_email is not None:
+                    user = existing_by_email
+                    pending_approval = not bool(user.ativo)
+                    created_now = False
+                else:
+                    raise HTTPException(status_code=409, detail="conflito ao vincular login google")
+        if created_now:
+            db.refresh(user)
+
+    if user.google_sub and user.google_sub != identity["sub"]:
+        raise HTTPException(status_code=409, detail="conta google nao corresponde ao cadastro")
+
+    changed = False
+    if not user.google_sub:
+        user.google_sub = identity["sub"]
+        changed = True
+    if identity["email"] and user.email != identity["email"]:
+        user.email = identity["email"]
+        changed = True
+
+    if changed:
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            raise HTTPException(status_code=409, detail="email ja vinculado a outro usuario")
+        db.refresh(user)
+
+    if not user.ativo:
+        return {
+            "token": None,
+            "token_type": "bearer",
+            "usuario": {"id": user.id, "nome": user.nome, "perfil": user.perfil},
+            "pending_approval": True,
+        }
+
+    token = _create_jwt_session(db, user)
+    return {
+        "token": token,
+        "token_type": "bearer",
+        "usuario": {"id": user.id, "nome": user.nome, "perfil": user.perfil},
+        "pending_approval": pending_approval and created_now,
     }
 
 

@@ -2218,6 +2218,8 @@ async function logoutCurrentUser() {
     }
   }
   sessionStorage.removeItem(SESSION_TOKEN_KEY);
+  localStorage.removeItem(USER_NAME_KEY);
+  localStorage.removeItem(USER_ROLE_KEY);
   closeApiSocket();
 }
 
