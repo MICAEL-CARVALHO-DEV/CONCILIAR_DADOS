@@ -66,7 +66,6 @@
 
           <div class="login-links auth-links">
             <a class="btn login-link" id="linkLogin" href="login.html">Ja tenho conta</a>
-            <a class="btn login-link" href="index.html">Voltar</a>
           </div>
 
           <p id="cadastroModeHint" class="login-msg muted small auth-inline-note"></p>
@@ -105,7 +104,12 @@
       let creatorRole = "";
 
       const linkLogin = document.getElementById("linkLogin");
-      linkLogin.href = "login.html?next=" + encodeURIComponent(next);
+      function updateNavLinks() {
+        const loginHref = "login.html?next=" + encodeURIComponent(next);
+        linkLogin.href = loginHref;
+      }
+
+      updateNavLinks();
 
       function getBaseUrl() {
         const raw = String(localStorage.getItem(API_BASE_URL_KEY) || "").trim();
@@ -142,6 +146,7 @@
       }
 
       function updateModeHint() {
+        updateNavLinks();
         if (!cadastroModeHint) return;
         if (creatorMode === "owner") {
           cadastroModeHint.textContent = "Modo gestor: " + creatorName + " (" + creatorRole + ") pode criar qualquer perfil.";
