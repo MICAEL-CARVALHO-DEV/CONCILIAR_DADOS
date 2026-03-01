@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, Numeric, String, Text
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .db import Base
@@ -14,6 +14,8 @@ class Usuario(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     nome: Mapped[str] = mapped_column(String(120), index=True, nullable=False)
+    email: Mapped[Optional[str]] = mapped_column(String(255), index=True, nullable=True)
+    google_sub: Mapped[Optional[str]] = mapped_column(String(255), index=True, nullable=True)
     setor: Mapped[str] = mapped_column(String(40), nullable=False)
     perfil: Mapped[str] = mapped_column(String(40), nullable=False)
     senha_salt: Mapped[str] = mapped_column(String(255), default="", nullable=False)
@@ -21,6 +23,12 @@ class Usuario(Base):
     ativo: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     ultimo_login: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        Index("ux_usuarios_nome_ci", func.lower(nome), unique=True),
+        Index("ux_usuarios_email_ci", func.lower(email), unique=True),
+        Index("ux_usuarios_google_sub", google_sub, unique=True),
+    )
 
     sessoes: Mapped[list["UsuarioSessao"]] = relationship(back_populates="usuario", cascade="all, delete-orphan")
 

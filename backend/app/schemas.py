@@ -87,6 +87,10 @@ class AuthLoginIn(BaseModel):
     senha: str = Field(min_length=4, max_length=120)
 
 
+class AuthGoogleIn(BaseModel):
+    credential: str = Field(min_length=50, max_length=4096)
+
+
 class AuthOut(BaseModel):
     token: str | None = None
     token_type: str = "bearer"

@@ -11,12 +11,14 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5500,http://localhost:5500,"
         "http://127.0.0.1:5501,http://localhost:5501"
     )
-    CORS_ALLOW_ORIGIN_REGEX: str = r"^https://([a-z0-9-]+)\.github\.io$|^http://(localhost|127\.0\.0\.1)(:\d+)?$"
+    CORS_ALLOW_ORIGIN_REGEX: str = r"^http://(localhost|127\.0\.0\.1)(:\d+)?$"
     API_AUTH_ENABLED: bool = True
     API_SHARED_KEY: str = "troque-esta-chave"
     JWT_SECRET_KEY: str = "troque-esta-chave-jwt"
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_HOURS: int = 12
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_TOKENINFO_URL: str = "https://oauth2.googleapis.com/tokeninfo"
 
     model_config = SettingsConfigDict(
         env_file=".env",

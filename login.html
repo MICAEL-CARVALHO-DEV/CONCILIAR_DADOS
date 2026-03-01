@@ -52,6 +52,11 @@
             <button type="submit" class="btn primary login-submit">Acessar</button>
           </form>
 
+          <div id="googleAuthBlock" class="google-auth-block" hidden>
+            <div class="login-divider"><span>ou</span></div>
+            <div id="googleLoginButton" class="google-login-slot"></div>
+          </div>
+
           <div class="login-links">
             <a class="btn login-link" id="linkCadastro" href="cadastro.html">Cadastrar</a>
           </div>
@@ -66,13 +71,15 @@
   <script src="config.js"></script>
   <script src="config.production.js"></script>
   <script>
-    (function () {
+    (async function () {
       const API_BASE_URL_KEY = "SEC_API_BASE_URL";
       const CFG = (window.SEC_APP_CONFIG && typeof window.SEC_APP_CONFIG === "object") ? window.SEC_APP_CONFIG : {};
       const CFG_HOST_MAP = (CFG.API_BASE_URL_BY_HOST && typeof CFG.API_BASE_URL_BY_HOST === "object") ? CFG.API_BASE_URL_BY_HOST : {};
       const CFG_HOST = (window.location && window.location.hostname) ? String(window.location.hostname) : "";
       const IS_LOCAL_FRONTEND = !CFG_HOST || CFG_HOST === "localhost" || CFG_HOST === "127.0.0.1";
       const DEFAULT_API_BASE_URL = (CFG_HOST_MAP[CFG_HOST] ? String(CFG_HOST_MAP[CFG_HOST]) : "") || (CFG.API_BASE_URL ? String(CFG.API_BASE_URL) : "") || "http://localhost:8000";
+      const CFG_GOOGLE_HOST_MAP = (CFG.GOOGLE_CLIENT_ID_BY_HOST && typeof CFG.GOOGLE_CLIENT_ID_BY_HOST === "object") ? CFG.GOOGLE_CLIENT_ID_BY_HOST : {};
+      const GOOGLE_CLIENT_ID = (CFG_GOOGLE_HOST_MAP[CFG_HOST] ? String(CFG_GOOGLE_HOST_MAP[CFG_HOST]) : "") || (CFG.GOOGLE_CLIENT_ID ? String(CFG.GOOGLE_CLIENT_ID) : "");
       const SESSION_TOKEN_KEY = "SEC_SESSION_TOKEN";
       const USER_NAME_KEY = "SEC_USER_NAME";
       const USER_ROLE_KEY = "SEC_USER_ROLE";
@@ -83,10 +90,8 @@
       const nome = document.getElementById("nome");
       const senha = document.getElementById("senha");
       const msg = document.getElementById("msg");
-      if (sessionStorage.getItem(SESSION_TOKEN_KEY)) {
-        window.location.href = next;
-        return;
-      }
+      const googleAuthBlock = document.getElementById("googleAuthBlock");
+      const googleLoginButton = document.getElementById("googleLoginButton");
 
       const linkCadastro = document.getElementById("linkCadastro");
 
@@ -104,6 +109,45 @@
         }
         const base = (!IS_LOCAL_FRONTEND && isLoopbackApiBase(raw)) ? DEFAULT_API_BASE_URL : (raw || DEFAULT_API_BASE_URL);
         return base.replace(/\/+$/, "");
+      }
+
+      async function validateExistingSession() {
+        const token = String(sessionStorage.getItem(SESSION_TOKEN_KEY) || "").trim();
+        if (!token) return false;
+
+        try {
+          const resp = await fetch(getBaseUrl() + "/auth/me", {
+            method: "GET",
+            headers: {
+              Authorization: "Bearer " + token,
+              "X-Session-Token": token
+            }
+          });
+
+          if (!resp.ok) {
+            throw new Error("sessao invalida");
+          }
+
+          const data = await resp.json();
+          if (data && data.nome) {
+            localStorage.setItem(USER_NAME_KEY, String(data.nome));
+          }
+          if (data && data.perfil) {
+            localStorage.setItem(USER_ROLE_KEY, String(data.perfil));
+          }
+
+          window.location.href = next;
+          return true;
+        } catch (_) {
+          sessionStorage.removeItem(SESSION_TOKEN_KEY);
+          localStorage.removeItem(USER_NAME_KEY);
+          localStorage.removeItem(USER_ROLE_KEY);
+          return false;
+        }
+      }
+
+      if (await validateExistingSession()) {
+        return;
       }
 
       async function apiRequest(path, body) {
@@ -124,11 +168,91 @@
         return json;
       }
 
+      async function loadExternalScript(src) {
+        if (document.querySelector('script[data-ext-src="' + src + '"]')) {
+          return;
+        }
+
+        await new Promise(function (resolve, reject) {
+          const tag = document.createElement("script");
+          tag.src = src;
+          tag.async = true;
+          tag.defer = true;
+          tag.dataset.extSrc = src;
+          tag.onload = resolve;
+          tag.onerror = function () { reject(new Error("falha ao carregar script externo")); };
+          document.head.appendChild(tag);
+        });
+      }
+
       function persistSession(data, fallbackName, fallbackRole) {
         sessionStorage.setItem(SESSION_TOKEN_KEY, String(data.token || ""));
         localStorage.setItem(USER_NAME_KEY, String(data.usuario && data.usuario.nome || fallbackName || ""));
         localStorage.setItem(USER_ROLE_KEY, String(data.usuario && data.usuario.perfil || fallbackRole || "CONTABIL"));
       }
+
+      async function onGoogleCredential(response) {
+        const credential = String(response && response.credential || "").trim();
+        if (!credential) {
+          msg.textContent = "Nao foi possivel receber a credencial do Google.";
+          msg.style.color = "#b4233d";
+          return;
+        }
+
+        msg.textContent = "Validando conta Google...";
+        msg.style.color = "";
+
+        try {
+          const data = await apiRequest("/auth/google", { credential: credential });
+          if (data && data.pending_approval) {
+            msg.textContent = "Perfil criado com Google e enviado para aprovacao.";
+            msg.style.color = "#e8f7ef";
+            return;
+          }
+
+          persistSession(data, (data && data.usuario && data.usuario.nome) || "Google", (data && data.usuario && data.usuario.perfil) || "CONTABIL");
+          window.location.href = next;
+        } catch (err) {
+          msg.textContent = err && err.message ? err.message : "Falha no login com Google.";
+          msg.style.color = "#b4233d";
+        }
+      }
+
+      async function initializeGoogleAuth() {
+        const clientId = String(GOOGLE_CLIENT_ID || "").trim();
+        if (!clientId || !googleAuthBlock || !googleLoginButton) {
+          return;
+        }
+
+        try {
+          await loadExternalScript("https://accounts.google.com/gsi/client");
+          if (!(window.google && window.google.accounts && window.google.accounts.id)) {
+            throw new Error("google identity indisponivel");
+          }
+
+          googleAuthBlock.hidden = false;
+          window.google.accounts.id.initialize({
+            client_id: clientId,
+            callback: onGoogleCredential,
+            auto_select: false,
+            cancel_on_tap_outside: true
+          });
+          googleLoginButton.innerHTML = "";
+          window.google.accounts.id.renderButton(googleLoginButton, {
+            type: "standard",
+            theme: "outline",
+            size: "large",
+            text: "continue_with",
+            shape: "pill",
+            width: 320,
+            logo_alignment: "left"
+          });
+        } catch (_err) {
+          googleAuthBlock.hidden = true;
+        }
+      }
+
+      initializeGoogleAuth();
 
       form.addEventListener("submit", async function (e) {
         e.preventDefault();
