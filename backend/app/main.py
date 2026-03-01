@@ -780,7 +780,14 @@ def auth_google(payload: AuthGoogleIn, db: Session = Depends(get_db)):
 @app.post("/auth/login", response_model=AuthOut)
 def auth_login(payload: AuthLoginIn, db: Session = Depends(get_db)):
     nome = payload.nome.strip()
-    user = db.query(Usuario).filter(func.lower(Usuario.nome) == nome.lower()).first()
+    normalized_login = nome.lower()
+    user = db.query(Usuario).filter(func.lower(Usuario.nome) == normalized_login).first()
+    if not user and "@" in nome:
+        user = (
+            db.query(Usuario)
+            .filter(Usuario.email.is_not(None), func.lower(Usuario.email) == normalized_login)
+            .first()
+        )
     if not user:
         raise HTTPException(status_code=401, detail="credenciais invalidas")
     if not user.ativo:
