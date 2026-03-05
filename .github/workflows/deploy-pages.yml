@@ -1,4 +1,4 @@
-name: Deploy GitHub Pages
+name: Validate Pages Artifact
 
 on:
   push:
@@ -7,19 +7,14 @@ on:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: "pages"
+  group: "pages-artifact"
   cancel-in-progress: true
 
 jobs:
-  deploy:
+  build-artifact:
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - name: Checkout
@@ -42,14 +37,13 @@ jobs:
           cp -r vendor _site/vendor
           touch _site/.nojekyll
 
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: _site
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Verify artifact files
+        run: |
+          test -f _site/index.html
+          test -f _site/login.html
+          test -f _site/cadastro.html
+          test -f _site/style.css
+          test -f _site/app.js
+          test -f _site/config.production.js
+          test -f _site/assets/sec-logo.png
+          test -f _site/assets/login-bg.jpg
