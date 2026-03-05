@@ -1,5 +1,3 @@
-$ErrorActionPreference = "Stop"
-
 param(
   [string]$ApiBaseUrl = "https://sec-emendas-api.onrender.com",
   [string]$FrontOrigin = "https://micael-carvalho-dev.github.io",
@@ -8,6 +6,8 @@ param(
   [switch]$SkipCors,
   [switch]$SkipLogin
 )
+
+$ErrorActionPreference = "Stop"
 
 function Write-Step([string]$msg) {
   Write-Host "[smoke-deploy] $msg" -ForegroundColor Cyan
@@ -55,13 +55,32 @@ if (-not $SkipCors) {
     "Access-Control-Request-Method" = "POST"
     "Access-Control-Request-Headers" = "content-type"
   }
-  $preflight = Invoke-WebRequest -Method Options -Uri "$base/auth/login" -Headers $corsHeaders
-  Assert-True ($preflight.StatusCode -ge 200 -and $preflight.StatusCode -lt 300) "preflight retornou status invalido"
-  $allowOrigin = [string]$preflight.Headers["Access-Control-Allow-Origin"]
+  $statusCode = 0
+  $allowOrigin = ""
+  try {
+    $preflight = Invoke-WebRequest -Method Options -Uri "$base/auth/login" -Headers $corsHeaders
+    $statusCode = [int]$preflight.StatusCode
+    $allowOrigin = [string]$preflight.Headers["Access-Control-Allow-Origin"]
+  } catch {
+    # Fallback para ambientes onde Invoke-WebRequest falha em OPTIONS.
+    Add-Type -AssemblyName System.Net.Http
+    $client = [System.Net.Http.HttpClient]::new()
+    $req = [System.Net.Http.HttpRequestMessage]::new([System.Net.Http.HttpMethod]::Options, "$base/auth/login")
+    $req.Headers.TryAddWithoutValidation("Origin", $FrontOrigin) | Out-Null
+    $req.Headers.TryAddWithoutValidation("Access-Control-Request-Method", "POST") | Out-Null
+    $req.Headers.TryAddWithoutValidation("Access-Control-Request-Headers", "content-type") | Out-Null
+    $resp = $client.SendAsync($req).GetAwaiter().GetResult()
+    $statusCode = [int]$resp.StatusCode
+    if ($resp.Headers.Contains("Access-Control-Allow-Origin")) {
+      $allowOrigin = ($resp.Headers.GetValues("Access-Control-Allow-Origin") | Select-Object -First 1)
+    }
+    $client.Dispose()
+  }
+  Assert-True ($statusCode -ge 200 -and $statusCode -lt 300) "preflight retornou status invalido"
   if ($allowOrigin -and $allowOrigin -ne "*") {
     Assert-True ($allowOrigin -eq $FrontOrigin) "Access-Control-Allow-Origin diferente da origin do front"
   }
-  Write-Host ("  preflight={0} allow-origin={1}" -f $preflight.StatusCode, ($allowOrigin -replace "\s+", "")) -ForegroundColor Green
+  Write-Host ("  preflight={0} allow-origin={1}" -f $statusCode, ($allowOrigin -replace "\s+", "")) -ForegroundColor Green
 }
 
 # 5) Login opcional (somente se credenciais forem passadas)
