@@ -28,6 +28,16 @@ Thumbs.db
 
 # Private notes (local only)
 anotacoes/
+privado/
+NOTAS_PRIVADAS/
+ESTUDOS_IA_ISOLADO/
+**/ESTUDOS_IA_ISOLADO/
+*_ESTUDO*.md
+*_ESTUDOS*.md
+GUIA_SKILLS_E_HABILIDADES.md
+GUIA_TRELLO_NOTION_OPERACAO.md
+MAPA_LOGICO_CONCILIAR_DADOS.md
+RELATORIO_PLANO_EVOLUCAO.md
 
 # Secrets and credentials
 *.pem
@@ -41,6 +51,22 @@ id_ed25519
 secrets/
 **/secrets/
 *.kdbx
+client_secret*.json
+**/client_secret*.json
+credentials*.json
+**/credentials*.json
+token.json
+**/token.json
+google-credentials*.json
+**/google-credentials*.json
+service-account*.json
+**/service-account*.json
+firebase-adminsdk*.json
+**/firebase-adminsdk*.json
+oauth-client*.json
+**/oauth-client*.json
+*jwt*secret*
+*auth*secret*
 
 # Local backups / temp files
 *.bak
