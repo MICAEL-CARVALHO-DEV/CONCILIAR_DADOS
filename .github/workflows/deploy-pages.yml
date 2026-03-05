@@ -36,6 +36,9 @@ jobs:
           cp config.js _site/
           cp config.production.js _site/
           cp LICENSE _site/
+          mkdir -p _site/assets
+          cp assets/sec-logo.png _site/assets/
+          cp assets/login-bg.jpg _site/assets/
           cp -r vendor _site/vendor
           touch _site/.nojekyll
 
