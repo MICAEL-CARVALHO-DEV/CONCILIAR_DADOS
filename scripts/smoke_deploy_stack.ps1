@@ -55,6 +55,7 @@ if (-not $SkipCors) {
     "Access-Control-Request-Method" = "POST"
     "Access-Control-Request-Headers" = "content-type"
   }
+
   $statusCode = 0
   $allowOrigin = ""
   try {
@@ -76,6 +77,7 @@ if (-not $SkipCors) {
     }
     $client.Dispose()
   }
+
   Assert-True ($statusCode -ge 200 -and $statusCode -lt 300) "preflight retornou status invalido"
   if ($allowOrigin -and $allowOrigin -ne "*") {
     Assert-True ($allowOrigin -eq $FrontOrigin) "Access-Control-Allow-Origin diferente da origin do front"
@@ -96,7 +98,7 @@ if (-not $SkipLogin -and $LoginUser -and $LoginPass) {
     throw
   }
 } else {
-  Write-Step "Login foi pulado (use -LoginUser e -LoginPass para validar autenticação real)."
+  Write-Step "Login foi pulado (use -LoginUser e -LoginPass para validar autenticacao real)."
 }
 
 Write-Host ""

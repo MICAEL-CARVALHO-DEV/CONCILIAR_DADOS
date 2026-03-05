@@ -10,5 +10,8 @@ Write-Host 'Instalando/atualizando dependencias...'
 .\.venv\Scripts\python -m pip install --upgrade pip
 .\.venv\Scripts\python -m pip install -r requirements.txt
 
+Write-Host 'Aplicando migracoes do banco (alembic upgrade head)...'
+.\.venv\Scripts\python -m alembic upgrade head
+
 Write-Host 'Subindo API FastAPI em http://localhost:8000 ...'
 .\.venv\Scripts\python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000

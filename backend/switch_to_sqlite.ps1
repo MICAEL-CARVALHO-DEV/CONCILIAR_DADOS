@@ -1,10 +1,13 @@
-﻿$envPath = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) '.env'
+$envPath = Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) ".env"
 $lines = @(
-  'DATABASE_URL=sqlite+pysqlite:///./test.db',
-  'CORS_ORIGINS=http://127.0.0.1:5500,http://localhost:5500,http://127.0.0.1:5501,http://localhost:5501',
-  'API_AUTH_ENABLED=true',
-  'API_SHARED_KEY=troque-esta-chave'
+  "APP_ENV=development",
+  "DATABASE_URL=sqlite+pysqlite:///./test.db",
+  "CORS_ORIGINS=https://micael-carvalho-dev.github.io,http://127.0.0.1:5500,http://localhost:5500,http://127.0.0.1:5501,http://localhost:5501",
+  "API_AUTH_ENABLED=true",
+  "ALLOW_SHARED_KEY_AUTH=false",
+  "API_SHARED_KEY=",
+  "JWT_SECRET_KEY=dev-local-jwt-secret-change-me"
 )
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 [System.IO.File]::WriteAllLines($envPath, $lines, $utf8NoBom)
-Write-Host 'ENV ajustado para SQLite local (test.db).'
+Write-Host "ENV ajustado para SQLite local (test.db) com auth segura."

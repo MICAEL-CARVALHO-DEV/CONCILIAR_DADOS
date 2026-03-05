@@ -6,6 +6,16 @@ Sistema de governanca de emendas com trilha de auditoria por usuario.
 - Operacao/manutencao: `README_MANUTENCAO.md`
 - Guia de deploy geral: `DEPLOY.md`
 - Guia de deploy Render/Supabase: `DEPLOY_GRATIS_RENDER_SUPABASE.md`
+- Controle total do processo: `GUIA_CONTROLE_TOTAL.md`
+- Catalogo de codigos/regras: `CATALOGO_CODIGOS_PREDEFINIDOS.md`
+- Log de mudancas: `LOG_ALTERACOES.md`
+- Termo com papeis/responsabilidades: `TERMO_DE_OPERACAO_E_RESPONSABILIDADES.md`
+- Decisoes de import/export XLSX: `DECISOES_IMPORT_EXPORT_XLSX.md`
+- Escopo e comparativo (Sheets/Excel): `ESCOPO_FLUXO_COMPARATIVO_SEC_EMENDAS.md`
+- Base de continuidade Codex: `BASE_CONTINUIDADE_CODEX.md`
+- Mapa logico do sistema: `MAPA_LOGICO_CONCILIAR_DADOS.md`
+- Guia Trello + Notion: `GUIA_TRELLO_NOTION_OPERACAO.md`
+- Guia de skills e habilidades: `GUIA_SKILLS_E_HABILIDADES.md`
 - Checklist final de deploy/operacao: `CHECKLIST_DEPLOY_FINAL_OPERACAO.md`
 
 ## Stack

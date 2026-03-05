@@ -1,26 +1,40 @@
 param(
-  [string]$BaseUrl = "https://sec-emendas-api.onrender.com",
-  [string]$UserA = "MICAEL_DEV",
+  [string]$BaseUrl = "http://127.0.0.1:8000",
+  [string]$UserA = "",
   [string]$PassA = "",
-  [string]$UserB = "VITOR_DEV",
+  [string]$UserB = "",
   [string]$PassB = "",
   [int]$RecordId = 0,
   [int]$PauseSeconds = 3,
-  [string]$EvidenceDir = "..\\anotacoes\\evidencias"
+  [string]$EvidenceDir = "..\\anotacoes\\evidencias",
+  [switch]$AllowRemote = $false
 )
 
 $ErrorActionPreference = "Stop"
 $BaseUrl = $BaseUrl.TrimEnd("/")
 $PauseSeconds = [Math]::Max(0, $PauseSeconds)
 
+if (-not $AllowRemote -and $BaseUrl -notmatch "^https?://(localhost|127\.0\.0\.1)(:\d+)?$") {
+  throw "BaseUrl remota bloqueada por seguranca. Use -AllowRemote para confirmar execucao fora de localhost."
+}
+
+if ([string]::IsNullOrWhiteSpace($UserA)) {
+  $UserA = $env:SEC_USER_A
+}
+if ([string]::IsNullOrWhiteSpace($UserB)) {
+  $UserB = $env:SEC_USER_B
+}
 if ([string]::IsNullOrWhiteSpace($PassA)) {
   $PassA = $env:SEC_PASS_A
 }
 if ([string]::IsNullOrWhiteSpace($PassB)) {
   $PassB = $env:SEC_PASS_B
 }
-if ([string]::IsNullOrWhiteSpace($PassA) -or [string]::IsNullOrWhiteSpace($PassB)) {
-  throw "Informe -PassA/-PassB ou defina SEC_PASS_A e SEC_PASS_B no ambiente."
+if ([string]::IsNullOrWhiteSpace($UserA) -or [string]::IsNullOrWhiteSpace($PassA)) {
+  throw "Informe -UserA/-PassA ou defina SEC_USER_A e SEC_PASS_A no ambiente."
+}
+if ([string]::IsNullOrWhiteSpace($UserB) -or [string]::IsNullOrWhiteSpace($PassB)) {
+  throw "Informe -UserB/-PassB ou defina SEC_USER_B e SEC_PASS_B no ambiente."
 }
 
 $results = New-Object System.Collections.Generic.List[object]

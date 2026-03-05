@@ -1,5 +1,5 @@
 param(
-  [string]$BaseUrl = "https://sec-emendas-api.onrender.com",
+  [string]$BaseUrl = "http://127.0.0.1:8000",
   [string]$UserA = "",
   [string]$PassA = "",
   [string]$UserB = "",
@@ -16,12 +16,17 @@ param(
   [switch]$FastForward = $false,
   [int]$FastForwardSeconds = 5,
   [switch]$NoteOnly = $false,
-  [string]$EvidenceDir = "..\\anotacoes\\evidencias"
+  [string]$EvidenceDir = "..\\anotacoes\\evidencias",
+  [switch]$AllowRemote = $false
 )
 
 $ErrorActionPreference = "Stop"
 $BaseUrl = $BaseUrl.TrimEnd("/")
 $FastForwardSeconds = [Math]::Max(1, $FastForwardSeconds)
+
+if (-not $AllowRemote -and $BaseUrl -notmatch "^https?://(localhost|127\.0\.0\.1)(:\d+)?$") {
+  throw "BaseUrl remota bloqueada por seguranca. Use -AllowRemote para confirmar execucao fora de localhost."
+}
 
 if ([string]::IsNullOrWhiteSpace($UserA)) { $UserA = $env:SEC_USER_A }
 if ([string]::IsNullOrWhiteSpace($PassA)) { $PassA = $env:SEC_PASS_A }

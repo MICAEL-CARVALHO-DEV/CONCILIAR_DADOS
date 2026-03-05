@@ -45,9 +45,11 @@ function Invoke-Json {
 $token = ""
 $script:headers = @{}
 $user = "qa_reg_" + (Get-Date -Format "HHmmss")
+$userEmail = ($user + "@teste.local").ToLower()
 $pass = "123456"
 $script:authExpectedUser = ""
 $inactiveUser = "qa_inativo_" + (Get-Date -Format "HHmmss")
+$inactiveUserEmail = ($inactiveUser + "@teste.local").ToLower()
 $inactivePass = "123456"
 $inactiveUserId = $null
 $eid = $null
@@ -89,6 +91,7 @@ Step "register e login" {
   try {
     $registered = Invoke-Json -Method "POST" -Url "$BaseUrl/auth/register" -Headers @{} -Body @{
       nome = $user
+      email = $userEmail
       perfil = "PROGRAMADOR"
       senha = $pass
     }
@@ -96,6 +99,7 @@ Step "register e login" {
     if ($_.Exception.Message -match "403|cadastro publico nao permite este perfil") {
       $pending = Invoke-Json -Method "POST" -Url "$BaseUrl/auth/register" -Headers @{} -Body @{
         nome = $user
+        email = $userEmail
         perfil = "CONTABIL"
         senha = $pass
       }
@@ -152,6 +156,7 @@ Step "auth me" {
 Step "bloqueio de usuario inativo" {
   $regInactive = Invoke-Json -Method "POST" -Url "$BaseUrl/auth/register" -Headers @{} -Body @{
     nome = $inactiveUser
+    email = $inactiveUserEmail
     perfil = "CONTABIL"
     senha = $inactivePass
   }

@@ -39,7 +39,12 @@
       <div class="login-panel-glass">
         <div class="login-panel cadastro-panel">
           <h2 class="login-panel-title" data-text="Cadastro">Cadastro</h2>
-          <p class="cadastro-panel-copy">Informe nome, perfil e senha para criar o acesso.</p>
+          <p class="cadastro-panel-copy">Informe nome, Gmail e perfil. Se usar Google, validamos seu Gmail e a senha local fica opcional.</p>
+
+          <div id="googleRegisterBlock" class="google-auth-block" hidden>
+            <div class="login-divider"><span>Cadastro com Google</span></div>
+            <div id="googleRegisterButton" class="google-login-slot"></div>
+          </div>
 
           <form id="cadastroForm" class="auth-form">
             <div class="field login-field">
@@ -50,17 +55,23 @@
             </div>
             <div class="field login-field">
               <div class="login-input-wrap">
+                <span class="login-input-icon" aria-hidden="true">📧</span>
+                <input id="email" type="email" autocomplete="email" placeholder="Gmail" aria-label="Gmail" required />
+              </div>
+            </div>
+            <div class="field login-field">
+              <div class="login-input-wrap">
                 <span class="login-input-icon" aria-hidden="true">🧩</span>
                 <select id="perfil" aria-label="Perfil" required></select>
               </div>
             </div>
-            <div class="field login-field">
+            <div class="field login-field" id="cadastroPasswordGroup">
               <div class="login-input-wrap">
                 <span class="login-input-icon" aria-hidden="true">🔒</span>
                 <input id="senha" type="password" autocomplete="new-password" placeholder="Senha" aria-label="Senha" required />
               </div>
             </div>
-            <div class="field login-field">
+            <div class="field login-field" id="cadastroPasswordConfirmGroup">
               <div class="login-input-wrap">
                 <span class="login-input-icon" aria-hidden="true">🔐</span>
                 <input id="senha2" type="password" autocomplete="new-password" placeholder="Confirmar senha" aria-label="Confirmar senha" required />
@@ -82,13 +93,24 @@
   <script src="config.production.js"></script>
   <script>
     (function () {
+      // Mapa rapido:
+      // 1) Resolve API/Google por host
+      // 2) Detecta modo de criacao (publico x owner/programador)
+      // 3) Faz pre-cadastro com Google (opcional)
+      // 4) Envia cadastro local/Google com regras de perfil
       const API_BASE_URL_KEY = "SEC_API_BASE_URL";
       const CFG = (window.SEC_APP_CONFIG && typeof window.SEC_APP_CONFIG === "object") ? window.SEC_APP_CONFIG : {};
       const CFG_HOST_MAP = (CFG.API_BASE_URL_BY_HOST && typeof CFG.API_BASE_URL_BY_HOST === "object") ? CFG.API_BASE_URL_BY_HOST : {};
       const CFG_HOST = (window.location && window.location.hostname) ? String(window.location.hostname) : "";
       const IS_LOCAL_FRONTEND = !CFG_HOST || CFG_HOST === "localhost" || CFG_HOST === "127.0.0.1";
       const DEFAULT_API_BASE_URL = (CFG_HOST_MAP[CFG_HOST] ? String(CFG_HOST_MAP[CFG_HOST]) : "") || (CFG.API_BASE_URL ? String(CFG.API_BASE_URL) : "") || "http://localhost:8000";
+      const CFG_GOOGLE_HOST_MAP = (CFG.GOOGLE_CLIENT_ID_BY_HOST && typeof CFG.GOOGLE_CLIENT_ID_BY_HOST === "object") ? CFG.GOOGLE_CLIENT_ID_BY_HOST : {};
+      const hasGoogleClientForHost = Object.prototype.hasOwnProperty.call(CFG_GOOGLE_HOST_MAP, CFG_HOST);
+      const GOOGLE_CLIENT_ID = hasGoogleClientForHost
+        ? String(CFG_GOOGLE_HOST_MAP[CFG_HOST] || "")
+        : (CFG.GOOGLE_CLIENT_ID ? String(CFG.GOOGLE_CLIENT_ID) : "");
       const SESSION_TOKEN_KEY = "SEC_SESSION_TOKEN";
+      const PENDING_GOOGLE_CREDENTIAL_KEY = "SEC_PENDING_GOOGLE_CREDENTIAL";
       const USER_NAME_KEY = "SEC_USER_NAME";
       const USER_ROLE_KEY = "SEC_USER_ROLE";
       const ROLE_FALLBACK = ["APG", "SUPERVISAO", "CONTABIL", "POWERBI", "PROGRAMADOR"];
@@ -98,14 +120,23 @@
 
       const form = document.getElementById("cadastroForm");
       const nome = document.getElementById("nome");
+      const email = document.getElementById("email");
       const perfil = document.getElementById("perfil");
       const senha = document.getElementById("senha");
       const senha2 = document.getElementById("senha2");
+      const passwordGroup = document.getElementById("cadastroPasswordGroup");
+      const passwordConfirmGroup = document.getElementById("cadastroPasswordConfirmGroup");
       const msg = document.getElementById("msg");
+      const submitBtn = form.querySelector(".auth-submit");
+      const googleRegisterBlock = document.getElementById("googleRegisterBlock");
+      const googleRegisterButton = document.getElementById("googleRegisterButton");
       let creatorMode = "public";
       let creatorRole = "";
+      let pendingGoogleCredential = String(sessionStorage.getItem(PENDING_GOOGLE_CREDENTIAL_KEY) || "").trim();
+      let usingGoogleRegister = false;
 
       const linkLogin = document.getElementById("linkLogin");
+      // Mantem navegacao de retorno preservando parametro next.
       function updateNavLinks() {
         const loginHref = "login.html?next=" + encodeURIComponent(next);
         linkLogin.href = loginHref;
@@ -113,10 +144,12 @@
 
       updateNavLinks();
 
+      // Verifica se URL eh local.
       function isLoopbackApiBase(value) {
         return /^https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?::\d+)?(?:\/|$)/i.test(String(value || "").trim());
       }
 
+      // Resolve API base com fallback por ambiente.
       function getBaseUrl() {
         const raw = String(localStorage.getItem(API_BASE_URL_KEY) || "").trim();
         if (!IS_LOCAL_FRONTEND && raw && isLoopbackApiBase(raw)) {
@@ -126,6 +159,7 @@
         return base.replace(/\/+$/, "");
       }
 
+      // Wrapper HTTP padrao do cadastro (com opcao de bearer token).
       async function request(path, method, body, withAuth) {
         const opts = { method: method || "GET", headers: {} };
         if (withAuth) {
@@ -144,16 +178,161 @@
 
         if (!resp.ok) {
           const detail = json && json.detail ? json.detail : (text || ("HTTP " + resp.status));
-          throw new Error(String(detail));
+          const err = new Error(String(detail));
+          err.status = resp.status;
+          err.payload = json;
+          throw err;
         }
         return json;
       }
 
+      // Carrega script Google Identity apenas uma vez.
+      async function loadExternalScript(src) {
+        if (document.querySelector('script[data-ext-src="' + src + '"]')) {
+          return;
+        }
+
+        await new Promise(function (resolve, reject) {
+          const tag = document.createElement("script");
+          tag.src = src;
+          tag.async = true;
+          tag.defer = true;
+          tag.dataset.extSrc = src;
+          tag.onload = resolve;
+          tag.onerror = function () { reject(new Error("falha ao carregar script externo")); };
+          document.head.appendChild(tag);
+        });
+      }
+
+      // Estado de loading da tela durante chamadas async.
+      function setBusy(isBusy, busyLabel) {
+        nome.disabled = isBusy;
+        email.disabled = isBusy || usingGoogleRegister;
+        perfil.disabled = isBusy;
+        senha.disabled = isBusy || usingGoogleRegister;
+        senha2.disabled = isBusy || usingGoogleRegister;
+        submitBtn.disabled = isBusy;
+        submitBtn.textContent = isBusy ? (busyLabel || "Processando...") : "Criar perfil";
+
+        if (googleRegisterBlock) {
+          googleRegisterBlock.style.pointerEvents = isBusy ? "none" : "";
+          googleRegisterBlock.style.opacity = isBusy ? "0.6" : "";
+        }
+      }
+
+      // Ativa/desativa fluxo Google (senha local opcional quando ativo).
+      function setGoogleRegisterMode(enabled) {
+        usingGoogleRegister = !!enabled;
+        passwordGroup.hidden = usingGoogleRegister;
+        passwordConfirmGroup.hidden = usingGoogleRegister;
+        senha.required = !usingGoogleRegister;
+        senha2.required = !usingGoogleRegister;
+        senha.disabled = usingGoogleRegister;
+        senha2.disabled = usingGoogleRegister;
+        email.readOnly = usingGoogleRegister;
+      }
+
+      // Remove credencial Google pendente da sessao.
+      function clearPendingGoogleRegistration() {
+        pendingGoogleCredential = "";
+        sessionStorage.removeItem(PENDING_GOOGLE_CREDENTIAL_KEY);
+        setGoogleRegisterMode(false);
+      }
+
+      // Limpa campos para novo cadastro.
+      function resetFormState() {
+        nome.value = "";
+        email.value = "";
+        if (perfil.options.length) {
+          perfil.selectedIndex = 0;
+        }
+        senha.value = "";
+        senha2.value = "";
+        clearPendingGoogleRegistration();
+      }
+
+      // Valida credential Google no backend e preenche nome/email.
+      async function prefillGoogleRegistration(credential) {
+        const raw = String(credential || "").trim();
+        if (!raw) return false;
+
+        setBusy(true, "Validando...");
+        msg.textContent = "Validando conta Google...";
+        msg.style.color = "";
+
+        try {
+          const data = await request("/auth/google-intake", "POST", { credential: raw });
+          pendingGoogleCredential = raw;
+          sessionStorage.setItem(PENDING_GOOGLE_CREDENTIAL_KEY, raw);
+          nome.value = String(data && data.nome || nome.value || "");
+          email.value = String(data && data.email || email.value || "");
+          setGoogleRegisterMode(true);
+          msg.textContent = "Conta Google validada. Complete o perfil e envie para aprovacao.";
+          msg.style.color = "#1f7a42";
+          return true;
+        } catch (err) {
+          clearPendingGoogleRegistration();
+          msg.textContent = err && err.message ? err.message : "Falha ao validar conta Google.";
+          msg.style.color = "#b4233d";
+          return false;
+        } finally {
+          setBusy(false);
+        }
+      }
+
+      // Callback do botao Google na tela de cadastro.
+      async function onGoogleRegisterCredential(response) {
+        const credential = String(response && response.credential || "").trim();
+        if (!credential) {
+          msg.textContent = "Nao foi possivel receber a credencial do Google.";
+          msg.style.color = "#b4233d";
+          return;
+        }
+        await prefillGoogleRegistration(credential);
+      }
+
+      // Inicializa bloco Google para cadastro.
+      async function initializeGoogleAuth() {
+        const clientId = String(GOOGLE_CLIENT_ID || "").trim();
+        if (!clientId || !googleRegisterBlock || !googleRegisterButton) {
+          return;
+        }
+
+        try {
+          await loadExternalScript("https://accounts.google.com/gsi/client");
+          if (!(window.google && window.google.accounts && window.google.accounts.id)) {
+            throw new Error("google identity indisponivel");
+          }
+
+          googleRegisterBlock.hidden = false;
+          window.google.accounts.id.initialize({
+            client_id: clientId,
+            callback: onGoogleRegisterCredential,
+            auto_select: false,
+            cancel_on_tap_outside: true
+          });
+          googleRegisterButton.innerHTML = "";
+          window.google.accounts.id.renderButton(googleRegisterButton, {
+            type: "standard",
+            theme: "outline",
+            size: "large",
+            text: "continue_with",
+            shape: "pill",
+            width: 320,
+            logo_alignment: "left"
+          });
+        } catch (_) {
+          googleRegisterBlock.hidden = true;
+        }
+      }
+
+      // Perfis permitidos no contexto atual (publico ou owner).
       function getAllowedRoles() {
         if (creatorMode === "owner") return ROLE_FALLBACK.slice();
         return PUBLIC_ALLOWED.slice();
       }
 
+      // Descobre se usuario logado eh PROGRAMADOR para liberar criacao owner.
       async function detectCreatorMode() {
         const token = String(sessionStorage.getItem(SESSION_TOKEN_KEY) || "").trim();
         if (!token) {
@@ -176,6 +355,7 @@
         }
       }
 
+      // Carrega perfis do backend com fallback local.
       async function loadRoles() {
         let roles = ROLE_FALLBACK.slice();
         try {
@@ -189,6 +369,7 @@
         fillRoleSelect(filtered.length ? filtered : allowed);
       }
 
+      // Preenche select de perfil.
       function fillRoleSelect(roles) {
         perfil.innerHTML = "";
         roles.forEach(function (r) {
@@ -199,21 +380,34 @@
         });
       }
 
+      // Submit principal do cadastro (local ou com Google).
       form.addEventListener("submit", async function (e) {
         e.preventDefault();
         const n = String(nome.value || "").trim();
+        const m = String(email.value || "").trim().toLowerCase();
         const p = String(perfil.value || "").trim().toUpperCase();
         const s1 = String(senha.value || "").trim();
         const s2 = String(senha2.value || "").trim();
         const allowed = getAllowedRoles();
 
-        if (!n || !p || !s1 || !s2) {
-          msg.textContent = "Preencha todos os campos.";
+        if (!n || !m || !p) {
+          msg.textContent = "Preencha nome, Gmail e perfil.";
           msg.style.color = "#b4233d";
           return;
         }
-        if (s1 !== s2) {
-          msg.textContent = "As senhas nao conferem.";
+        if (!usingGoogleRegister) {
+          if (!s1 || !s2) {
+            msg.textContent = "Preencha a senha e a confirmacao.";
+            msg.style.color = "#b4233d";
+            return;
+          }
+          if (s1 !== s2) {
+            msg.textContent = "As senhas nao conferem.";
+            msg.style.color = "#b4233d";
+            return;
+          }
+        } else if (!pendingGoogleCredential) {
+          msg.textContent = "Valide sua conta Google antes de continuar.";
           msg.style.color = "#b4233d";
           return;
         }
@@ -223,19 +417,30 @@
           return;
         }
 
-        msg.textContent = "Cadastrando...";
+        setBusy(true, "Cadastrando...");
+        msg.textContent = usingGoogleRegister ? "Enviando cadastro com Google..." : "Cadastrando...";
         msg.style.color = "";
 
         try {
-          const data = await request("/auth/register", "POST", { nome: n, perfil: p, senha: s1 }, creatorMode !== "public");
+          const payload = {
+            nome: n,
+            email: m,
+            perfil: p
+          };
+
+          if (usingGoogleRegister) {
+            payload.google_credential = pendingGoogleCredential;
+          } else {
+            payload.senha = s1;
+          }
+
+          const data = await request("/auth/register", "POST", payload, creatorMode !== "public");
 
           if (creatorMode === "public") {
             if (data && data.pending_approval) {
               msg.textContent = "Cadastro enviado. Aguarde aprovacao do PROGRAMADOR.";
               msg.style.color = "#1f7a42";
-              nome.value = "";
-              senha.value = "";
-              senha2.value = "";
+              resetFormState();
               return;
             }
 
@@ -243,29 +448,38 @@
               sessionStorage.setItem(SESSION_TOKEN_KEY, String(data.token || ""));
               localStorage.setItem(USER_NAME_KEY, String(data.usuario && data.usuario.nome || n));
               localStorage.setItem(USER_ROLE_KEY, String(data.usuario && data.usuario.perfil || p));
+              clearPendingGoogleRegistration();
               window.location.href = next;
               return;
             }
 
             msg.textContent = "Cadastro realizado, mas sem sessao ativa.";
             msg.style.color = "#1f7a42";
+            resetFormState();
             return;
           }
 
           msg.textContent = "Perfil criado com sucesso: " + n + " (" + p + ").";
           msg.style.color = "#1f7a42";
-          nome.value = "";
-          senha.value = "";
-          senha2.value = "";
+          resetFormState();
         } catch (err) {
           msg.textContent = err && err.message ? err.message : "Falha no cadastro.";
           msg.style.color = "#b4233d";
+        } finally {
+          setBusy(false);
         }
       });
 
+      // Bootstrap da pagina: modo, perfis, Google e prefill pendente.
       (async function init() {
         await detectCreatorMode();
         await loadRoles();
+        await initializeGoogleAuth();
+        if (pendingGoogleCredential) {
+          await prefillGoogleRegistration(pendingGoogleCredential);
+        } else {
+          setGoogleRegisterMode(false);
+        }
       })();
     })();
   </script>

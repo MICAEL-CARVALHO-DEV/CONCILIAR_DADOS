@@ -67,6 +67,40 @@ VERSIONED_ID_RE = re.compile(r"^(?P<base>.+)-v(?P<num>\d+)$", re.IGNORECASE)
 GOOGLE_ISSUERS = {"accounts.google.com", "https://accounts.google.com"}
 GOOGLE_USERNAME_SANITIZE_RE = re.compile(r"\s+")
 AUTH_AUDIT_UA_MAX_LEN = 255
+PLACEHOLDER_SECRET_TOKENS = {
+    "",
+    "troque-esta-chave",
+    "troque-esta-chave-jwt",
+    "changeme",
+    "change-me",
+    "secret",
+    "default",
+}
+SENSITIVE_FIELD_HINTS = {
+    "cpf",
+    "cnpj",
+    "rg",
+    "email",
+    "e-mail",
+    "telefone",
+    "celular",
+    "endereco",
+    "data_nascimento",
+    "nascimento",
+    "senha",
+    "password",
+    "token",
+    "api_key",
+    "chave",
+    "matricula",
+    "nome",
+}
+AUDIT_MASK_TEXT = "[REDACTED]"
+AUDIT_VALUE_MAX_LEN = 500
+RE_EMAIL = re.compile(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", re.IGNORECASE)
+RE_CPF = re.compile(r"\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b")
+RE_CNPJ = re.compile(r"\b\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}\b")
+RE_BEARER_OR_JWT = re.compile(r"(?i)(bearer\s+[a-z0-9\-._~+/]+=*|eyJ[a-zA-Z0-9_\-\.]{20,})")
 
 STATUS_TRANSITIONS = {
     "Recebido": {"Em analise", "Pendente", "Cancelado"},
@@ -155,6 +189,65 @@ def _hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
 
+def _validate_runtime_security_settings() -> None:
+    if not settings.API_AUTH_ENABLED:
+        return
+
+    jwt_secret = (settings.JWT_SECRET_KEY or "").strip()
+    if not jwt_secret:
+        raise RuntimeError("JWT_SECRET_KEY obrigatoria quando API_AUTH_ENABLED=true.")
+
+    if not settings.is_dev_environment and jwt_secret.lower() in PLACEHOLDER_SECRET_TOKENS:
+        raise RuntimeError("JWT_SECRET_KEY fraca em ambiente nao-dev. Defina segredo forte no ambiente.")
+
+    if not settings.is_dev_environment and settings.ALLOW_SHARED_KEY_AUTH:
+        raise RuntimeError("ALLOW_SHARED_KEY_AUTH nao pode ficar habilitado fora de desenvolvimento.")
+
+    if settings.shared_key_auth_enabled and (settings.API_SHARED_KEY or "").strip().lower() in PLACEHOLDER_SECRET_TOKENS:
+        raise RuntimeError("API_SHARED_KEY fraca; desabilite shared key ou defina chave forte.")
+
+
+def _history_field_is_sensitive(field_name: str | None) -> bool:
+    raw = (field_name or "").strip().lower()
+    if not raw:
+        return False
+    normalized = raw.replace("-", "_").replace(" ", "_")
+    if normalized in SENSITIVE_FIELD_HINTS:
+        return True
+    return any(hint in normalized for hint in SENSITIVE_FIELD_HINTS)
+
+
+def _history_value_looks_sensitive(value: str) -> bool:
+    raw = (value or "").strip()
+    if not raw:
+        return False
+    if RE_EMAIL.search(raw) or RE_CPF.search(raw) or RE_CNPJ.search(raw):
+        return True
+    if RE_BEARER_OR_JWT.search(raw):
+        return True
+    return False
+
+
+def _mask_history_value(field_name: str | None, value: str | None) -> str:
+    raw = (value or "").strip()
+    if not raw:
+        return ""
+    if raw == AUDIT_MASK_TEXT:
+        return raw
+    if _history_field_is_sensitive(field_name) or _history_value_looks_sensitive(raw):
+        return AUDIT_MASK_TEXT
+    if len(raw) > AUDIT_VALUE_MAX_LEN:
+        return raw[:AUDIT_VALUE_MAX_LEN] + "..."
+    return raw
+
+
+def _mask_history_pair(field_name: str | None, old_value: str | None, new_value: str | None) -> tuple[str, str]:
+    return (
+        _mask_history_value(field_name, old_value),
+        _mask_history_value(field_name, new_value),
+    )
+
+
 def _verify_password_modern(password: str, stored_hash: str) -> bool:
     raw_hash = (stored_hash or "").strip()
     if not raw_hash:
@@ -210,6 +303,8 @@ def _build_unique_public_username(db: Session, preferred: str) -> str:
 
 
 def _verify_google_identity_token(id_token: str) -> dict:
+    # Valida o ID token no endpoint oficial do Google e retorna identidade minimizada.
+    # Aqui garantimos audience/issuer/email_verified para evitar token forjado.
     raw_token = (id_token or "").strip()
     client_id = (settings.GOOGLE_CLIENT_ID or "").strip()
 
@@ -264,6 +359,8 @@ def _verify_google_identity_token(id_token: str) -> dict:
 
 
 def _create_jwt_session(db: Session, user: Usuario) -> str:
+    # Cria sessão persistida em banco (revogável) e emite JWT com sid.
+    # O sid do token é conferido em cada request para permitir logout/revogação real.
     session_id = secrets.token_urlsafe(24)
     session_hash = _hash_text(session_id)
     now = _utcnow()
@@ -314,7 +411,8 @@ def _add_auth_audit(
     success: bool,
     provider: str,
     user: Usuario | None = None,
-) -> None:
+    ) -> None:
+    # Auditoria central de autenticação: sucesso/falha, provedor e metadados de request.
     db.add(
         AuthAuditLog(
             user_id=(user.id if user else None),
@@ -331,6 +429,8 @@ def _add_auth_audit(
 
 
 def _find_user_by_login(db: Session, identificador: str) -> Usuario | None:
+    # Login híbrido: aceita nome de usuário e, se houver "@", também Gmail.
+    # Prioriza "nome" para compatibilidade retroativa.
     normalized_login = (identificador or "").strip().lower()
     if not normalized_login:
         return None
@@ -347,6 +447,18 @@ def _find_user_by_login(db: Session, identificador: str) -> Usuario | None:
         )
 
     return None
+
+
+def _find_user_by_email(db: Session, email: str) -> Usuario | None:
+    normalized_email = (email or "").strip().lower()
+    if not normalized_email:
+        return None
+
+    return (
+        db.query(Usuario)
+        .filter(Usuario.email.is_not(None), func.lower(Usuario.email) == normalized_email)
+        .first()
+    )
 
 
 def _try_decode_jwt(token: str) -> dict | None:
@@ -447,6 +559,10 @@ def _actor_from_headers(
     x_user_role: Annotated[str | None, Header(alias="X-User-Role")] = None,
     db: Session = Depends(get_db),
 ) -> dict:
+    # Estratégia de autenticação:
+    # 1) Bearer JWT (preferencial)
+    # 2) X-Session-Token (compatibilidade)
+    # 3) Shared key apenas se explicitamente habilitada (dev/legado).
     if not settings.API_AUTH_ENABLED:
         name = (x_user_name or "sistema").strip() or "sistema"
         role = _normalize_role(x_user_role or "PROGRAMADOR")
@@ -469,7 +585,7 @@ def _actor_from_headers(
         if actor:
             return actor
 
-    if x_api_key and x_api_key == settings.API_SHARED_KEY:
+    if settings.shared_key_auth_enabled and x_api_key and x_api_key == settings.API_SHARED_KEY:
         name = (x_user_name or "").strip()
         role = (x_user_role or "").strip().upper()
         if name and role in ALLOWED_ROLES:
@@ -514,12 +630,18 @@ def _require_owner(actor: dict = Depends(_actor_from_headers)) -> dict:
 
 
 def _ensure_legacy_schema() -> None:
+    # Compatibilidade com bancos legados (principalmente SQLite local):
+    # adiciona colunas/índices ausentes quando necessário.
     insp = inspect(engine)
     tables = set(insp.get_table_names())
 
     if "usuarios" in tables:
         cols = {c["name"] for c in insp.get_columns("usuarios")}
         statements = []
+        if "email" not in cols:
+            statements.append("ALTER TABLE usuarios ADD COLUMN email VARCHAR(255)")
+        if "google_sub" not in cols:
+            statements.append("ALTER TABLE usuarios ADD COLUMN google_sub VARCHAR(255)")
         if "senha_salt" not in cols:
             statements.append("ALTER TABLE usuarios ADD COLUMN senha_salt VARCHAR(255) NOT NULL DEFAULT ''")
         if "senha_hash" not in cols:
@@ -619,6 +741,7 @@ def _broadcast_update(entity: str, entity_id: int | None) -> None:
 
 @app.on_event("startup")
 def startup() -> None:
+    _validate_runtime_security_settings()
     Base.metadata.create_all(bind=engine)
     _ensure_legacy_schema()
 
@@ -629,6 +752,8 @@ def health() -> dict:
         "ok": True,
         "auth_enabled": settings.API_AUTH_ENABLED,
         "auth_mode": "jwt_bearer_with_legacy_fallback",
+        "shared_key_enabled": settings.shared_key_auth_enabled,
+        "app_env": settings.app_env_normalized,
         "roles": ROLES,
     }
 
@@ -653,6 +778,74 @@ def roles() -> dict:
     return {"roles": ROLES}
 
 
+@app.post("/auth/google-intake")
+def auth_google_intake(payload: AuthGoogleIn, request: Request, db: Session = Depends(get_db)) -> dict:
+    # Pré-cadastro com Google: valida token e devolve nome/email para preencher a tela.
+    # Não cria usuário neste passo.
+    identity = _verify_google_identity_token(payload.credential)
+
+    user = db.query(Usuario).filter(Usuario.google_sub == identity["sub"]).first()
+    if user is not None:
+        detail = (
+            "Sua conta esta em analise. Aguarde aprovacao do PROGRAMADOR."
+            if not user.ativo
+            else "Sua conta Google ja esta cadastrada. Use o login."
+        )
+        _add_auth_audit(
+            db,
+            request=request,
+            event_type="GOOGLE_INTAKE",
+            login_identificador=identity["email"],
+            detail=detail,
+            success=False,
+            provider="GOOGLE",
+            user=user,
+        )
+        db.commit()
+        raise HTTPException(status_code=(403 if not user.ativo else 409), detail=detail)
+
+    existing_by_email = _find_user_by_email(db, identity["email"])
+    if existing_by_email is not None:
+        if not existing_by_email.ativo:
+            detail = "Sua conta esta em analise. Aguarde aprovacao do PROGRAMADOR."
+            status_code = 403
+        elif existing_by_email.google_sub:
+            detail = "Conta Google nao corresponde ao cadastro."
+            status_code = 409
+        else:
+            detail = "Ja existe cadastro com este Gmail. Use o login normal e depois sincronize o Google."
+            status_code = 409
+        _add_auth_audit(
+            db,
+            request=request,
+            event_type="GOOGLE_INTAKE",
+            login_identificador=identity["email"],
+            detail=detail,
+            success=False,
+            provider="GOOGLE",
+            user=existing_by_email,
+        )
+        db.commit()
+        raise HTTPException(status_code=status_code, detail=detail)
+
+    _add_auth_audit(
+        db,
+        request=request,
+        event_type="GOOGLE_INTAKE",
+        login_identificador=identity["email"],
+        detail="identidade google validada para pre-cadastro",
+        success=True,
+        provider="GOOGLE",
+    )
+    db.commit()
+
+    return {
+        "nome": identity["name"],
+        "email": identity["email"],
+        "email_verificado": True,
+    }
+
+
 @app.post("/auth/register", response_model=AuthOut)
 def auth_register(
     payload: AuthRegisterIn,
@@ -660,12 +853,40 @@ def auth_register(
     x_session_token: Annotated[str | None, Header(alias="X-Session-Token")] = None,
     db: Session = Depends(get_db),
 ):
+    # Cadastro com 2 caminhos:
+    # - Público: cria usuário inativo (pendente aprovação do PROGRAMADOR).
+    # - Privado (ator PROGRAMADOR): cria usuário já ativo.
     nome = payload.nome.strip()
+    email = (payload.email or "").strip().lower()
     role = payload.perfil
+    google_credential = (payload.google_credential or "").strip()
+    using_google = bool(google_credential)
+    google_identity = None
+
+    if using_google:
+        google_identity = _verify_google_identity_token(google_credential)
+        if email and email != google_identity["email"]:
+            raise HTTPException(status_code=409, detail="gmail informado nao corresponde ao Google")
+        email = google_identity["email"]
 
     exists = db.query(Usuario).filter(func.lower(Usuario.nome) == nome.lower()).first()
     if exists:
         raise HTTPException(status_code=409, detail="usuario ja existe")
+
+    if email:
+        existing_email = _find_user_by_email(db, email)
+        if existing_email is not None:
+            raise HTTPException(status_code=409, detail="gmail ja cadastrado")
+
+    if google_identity is not None:
+        existing_google = db.query(Usuario).filter(Usuario.google_sub == google_identity["sub"]).first()
+        if existing_google is not None:
+            detail = (
+                "Sua conta esta em analise. Aguarde aprovacao do PROGRAMADOR."
+                if not existing_google.ativo
+                else "Sua conta Google ja esta cadastrada. Use o login."
+            )
+            raise HTTPException(status_code=(403 if not existing_google.ativo else 409), detail=detail)
 
     actor = _actor_optional_from_headers(authorization, x_session_token, db)
     owner_exists = (
@@ -691,6 +912,8 @@ def auth_register(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="cadastro publico nao permite este perfil",
             )
+        if not email:
+            raise HTTPException(status_code=400, detail="informe um gmail valido para solicitar acesso")
         activate_now = False
         pending_approval = True
     else:
@@ -701,9 +924,18 @@ def auth_register(
                 detail="apenas PROGRAMADOR pode criar/aprovar perfis",
             )
 
-    pwd_hash = _hash_password(payload.senha)
+    if using_google:
+        pwd_hash = ""
+    else:
+        raw_password = (payload.senha or "").strip()
+        if not raw_password:
+            raise HTTPException(status_code=400, detail="senha obrigatoria no cadastro normal")
+        pwd_hash = _hash_password(raw_password)
+
     user = Usuario(
         nome=nome,
+        email=(email or None),
+        google_sub=(google_identity["sub"] if google_identity else None),
         setor=role,
         perfil=role,
         senha_salt="",
@@ -718,6 +950,13 @@ def auth_register(
         conflict = db.query(Usuario.id).filter(func.lower(Usuario.nome) == nome.lower()).first()
         if conflict is not None:
             raise HTTPException(status_code=409, detail="usuario ja existe")
+        conflict = _find_user_by_email(db, email)
+        if email and conflict is not None:
+            raise HTTPException(status_code=409, detail="gmail ja cadastrado")
+        if google_identity is not None:
+            conflict = db.query(Usuario.id).filter(Usuario.google_sub == google_identity["sub"]).first()
+            if conflict is not None:
+                raise HTTPException(status_code=409, detail="sua conta Google ja esta cadastrada")
         raise
     db.refresh(user)
 
@@ -739,6 +978,9 @@ def auth_register(
 
 @app.post("/auth/google", response_model=AuthOut)
 def auth_google(payload: AuthGoogleIn, request: Request, db: Session = Depends(get_db)):
+    # Login Google direto:
+    # - só funciona após existir PROGRAMADOR local ativo (evita lock-in externo).
+    # - rejeita conta não aprovada e conflitos de vínculo Gmail/sub.
     identity = _verify_google_identity_token(payload.credential)
 
     owner_exists = (
@@ -764,101 +1006,52 @@ def auth_google(payload: AuthGoogleIn, request: Request, db: Session = Depends(g
         )
 
     user = db.query(Usuario).filter(Usuario.google_sub == identity["sub"]).first()
-    if user is None:
-        user = (
-            db.query(Usuario)
-            .filter(Usuario.email.is_not(None), func.lower(Usuario.email) == identity["email"])
-            .first()
-        )
-
-    pending_approval = False
-    created_now = False
-
-    if user is None:
-        pending_approval = True
-        created_now = True
-        user = Usuario(
-            nome=_build_unique_public_username(db, identity["name"]),
-            email=identity["email"],
-            google_sub=identity["sub"],
-            setor="CONTABIL",
-            perfil="CONTABIL",
-            senha_salt="",
-            senha_hash="",
-            ativo=False,
-        )
-        db.add(user)
-        try:
-            db.commit()
-        except IntegrityError:
-            db.rollback()
-            existing_by_google = db.query(Usuario).filter(Usuario.google_sub == identity["sub"]).first()
-            if existing_by_google is not None:
-                user = existing_by_google
-                pending_approval = not bool(user.ativo)
-                created_now = False
-            else:
-                existing_by_email = (
-                    db.query(Usuario)
-                    .filter(Usuario.email.is_not(None), func.lower(Usuario.email) == identity["email"])
-                    .first()
-                )
-                if existing_by_email is not None:
-                    user = existing_by_email
-                    pending_approval = not bool(user.ativo)
-                    created_now = False
-                else:
-                    raise HTTPException(status_code=409, detail="conflito ao vincular login google")
-        if created_now:
-            db.refresh(user)
-
-    if user.google_sub and user.google_sub != identity["sub"]:
-        _add_auth_audit(
-            db,
-            request=request,
-            event_type="LOGIN_GOOGLE",
-            login_identificador=identity["email"],
-            detail="conta google nao corresponde ao cadastro",
-            success=False,
-            provider="GOOGLE",
-            user=user,
-        )
-        db.commit()
-        raise HTTPException(status_code=409, detail="conta google nao corresponde ao cadastro")
-
-    changed = False
-    if not user.google_sub:
-        user.google_sub = identity["sub"]
-        changed = True
-    if identity["email"] and user.email != identity["email"]:
-        user.email = identity["email"]
-        changed = True
-
-    if changed:
-        try:
-            db.commit()
-        except IntegrityError:
-            db.rollback()
+    if user is not None:
+        if not user.ativo:
+            detail = "Sua conta esta em analise. Aguarde aprovacao do PROGRAMADOR."
             _add_auth_audit(
                 db,
                 request=request,
                 event_type="LOGIN_GOOGLE",
                 login_identificador=identity["email"],
-                detail="email ja vinculado a outro usuario",
+                detail=detail,
                 success=False,
                 provider="GOOGLE",
                 user=user,
             )
             db.commit()
-            raise HTTPException(status_code=409, detail="email ja vinculado a outro usuario")
-        db.refresh(user)
+            raise HTTPException(status_code=403, detail=detail)
 
-    if not user.ativo:
-        detail = (
-            "Perfil criado com Google e enviado para aprovacao."
-            if created_now
-            else "Sua conta esta em analise. Aguarde aprovacao do PROGRAMADOR."
+        _add_auth_audit(
+            db,
+            request=request,
+            event_type="LOGIN_GOOGLE",
+            login_identificador=identity["email"],
+            detail="login com google realizado com sucesso",
+            success=True,
+            provider="GOOGLE",
+            user=user,
         )
+        token = _create_jwt_session(db, user)
+        return {
+            "token": token,
+            "token_type": "bearer",
+            "usuario": {"id": user.id, "nome": user.nome, "perfil": user.perfil},
+            "pending_approval": False,
+        }
+
+    existing_by_email = _find_user_by_email(db, identity["email"])
+    if existing_by_email is not None:
+        if existing_by_email.google_sub and existing_by_email.google_sub != identity["sub"]:
+            detail = "Conta Google nao corresponde ao cadastro."
+            status_code = 409
+        elif not existing_by_email.ativo:
+            detail = "Sua conta esta em analise. Aguarde aprovacao do PROGRAMADOR."
+            status_code = 403
+        else:
+            detail = "Ja existe cadastro com este Gmail. Use o login normal e depois sincronize o Google."
+            status_code = 409
+
         _add_auth_audit(
             db,
             request=request,
@@ -867,53 +1060,47 @@ def auth_google(payload: AuthGoogleIn, request: Request, db: Session = Depends(g
             detail=detail,
             success=False,
             provider="GOOGLE",
-            user=user,
+            user=existing_by_email,
         )
         db.commit()
-        return {
-            "token": None,
-            "token_type": "bearer",
-            "usuario": {"id": user.id, "nome": user.nome, "perfil": user.perfil},
-            "pending_approval": True,
-            "detail": detail,
-        }
+        raise HTTPException(status_code=status_code, detail=detail)
 
+    detail = "Conta Google ainda nao cadastrada. Use Cadastrar para solicitar acesso."
     _add_auth_audit(
         db,
         request=request,
         event_type="LOGIN_GOOGLE",
         login_identificador=identity["email"],
-        detail="login com google realizado com sucesso",
-        success=True,
+        detail=detail,
+        success=False,
         provider="GOOGLE",
-        user=user,
     )
-    token = _create_jwt_session(db, user)
-    return {
-        "token": token,
-        "token_type": "bearer",
-        "usuario": {"id": user.id, "nome": user.nome, "perfil": user.perfil},
-        "pending_approval": pending_approval and created_now,
-    }
+    db.commit()
+    raise HTTPException(status_code=404, detail=detail)
 
 
 @app.post("/auth/login", response_model=AuthOut)
 def auth_login(payload: AuthLoginIn, request: Request, db: Session = Depends(get_db)):
+    # Login local por usuário/Gmail + senha.
+    # Se hash legado for detectado, migra para hash moderno no primeiro login válido.
     nome = payload.nome.strip()
     user = _find_user_by_login(db, nome)
     if not user:
-        detail = "Usuario nao encontrado. Use Cadastrar para solicitar acesso."
+        audit_detail = "usuario nao encontrado"
+        public_detail = "Credenciais invalidas."
         _add_auth_audit(
             db,
             request=request,
             event_type="LOGIN_PASSWORD",
             login_identificador=nome,
-            detail=detail,
+            detail=audit_detail,
             success=False,
             provider="LOCAL",
         )
         db.commit()
-        raise HTTPException(status_code=404, detail=detail)
+        if settings.is_dev_environment:
+            raise HTTPException(status_code=404, detail="Usuario nao encontrado. Use Cadastrar para solicitar acesso.")
+        raise HTTPException(status_code=401, detail=public_detail)
     if not user.ativo:
         detail = "Sua conta esta em analise. Aguarde aprovacao do PROGRAMADOR."
         _add_auth_audit(
@@ -931,19 +1118,20 @@ def auth_login(payload: AuthLoginIn, request: Request, db: Session = Depends(get
 
     valid, used_legacy = _verify_user_password(user, payload.senha)
     if not valid:
-        detail = "Senha invalida. Tente novamente."
+        audit_detail = "senha invalida"
+        public_detail = "Credenciais invalidas."
         _add_auth_audit(
             db,
             request=request,
             event_type="LOGIN_PASSWORD",
             login_identificador=nome,
-            detail=detail,
+            detail=audit_detail,
             success=False,
             provider="LOCAL",
             user=user,
         )
         db.commit()
-        raise HTTPException(status_code=401, detail=detail)
+        raise HTTPException(status_code=401, detail=public_detail)
 
     if used_legacy:
         user.senha_hash = _hash_password(payload.senha)
@@ -969,10 +1157,12 @@ def auth_login(payload: AuthLoginIn, request: Request, db: Session = Depends(get
 
 @app.post("/auth/recovery-request")
 def auth_recovery_request(payload: AuthRecoveryRequestIn, request: Request, db: Session = Depends(get_db)):
+    # Recovery sem reset automático:
+    # registra solicitação para fluxo controlado por PROGRAMADOR (governança).
     identificador = payload.identificador.strip()
     user = _find_user_by_login(db, identificador)
     if not user:
-        detail = "Usuario nao encontrado. Use Cadastrar para solicitar acesso."
+        detail = "usuario nao encontrado"
         _add_auth_audit(
             db,
             request=request,
@@ -983,7 +1173,9 @@ def auth_recovery_request(payload: AuthRecoveryRequestIn, request: Request, db: 
             provider="LOCAL",
         )
         db.commit()
-        raise HTTPException(status_code=404, detail=detail)
+        if settings.is_dev_environment:
+            raise HTTPException(status_code=404, detail="Usuario nao encontrado. Use Cadastrar para solicitar acesso.")
+        return {"ok": True, "detail": "Se o cadastro existir e estiver ativo, a solicitacao foi registrada."}
 
     if not user.ativo:
         detail = "Sua conta esta em analise. Aguarde aprovacao do PROGRAMADOR."
@@ -998,7 +1190,9 @@ def auth_recovery_request(payload: AuthRecoveryRequestIn, request: Request, db: 
             user=user,
         )
         db.commit()
-        raise HTTPException(status_code=403, detail=detail)
+        if settings.is_dev_environment:
+            raise HTTPException(status_code=403, detail=detail)
+        return {"ok": True, "detail": "Se o cadastro existir e estiver ativo, a solicitacao foi registrada."}
 
     detail = "Solicitacao registrada. Um PROGRAMADOR deve redefinir sua senha."
     _add_auth_audit(
@@ -1012,7 +1206,9 @@ def auth_recovery_request(payload: AuthRecoveryRequestIn, request: Request, db: 
         user=user,
     )
     db.commit()
-    return {"ok": True, "detail": detail}
+    if settings.is_dev_environment:
+        return {"ok": True, "detail": detail}
+    return {"ok": True, "detail": "Se o cadastro existir e estiver ativo, a solicitacao foi registrada."}
 
 
 @app.get("/auth/me", response_model=UserOut)
@@ -1024,6 +1220,7 @@ def auth_me(actor: dict = Depends(_actor_from_headers)):
 
 @app.post("/auth/logout")
 def auth_logout(actor: dict = Depends(_actor_from_headers), db: Session = Depends(get_db)):
+    # Revoga sessão atual por sid (JWT) ou por hash de token legado.
     sid = (actor.get("session_sid") or "").strip()
     if sid:
         session_hash = _hash_text(sid)
@@ -1076,6 +1273,8 @@ def alterar_status_usuario(
     actor: dict = Depends(_require_owner),
     db: Session = Depends(get_db),
 ):
+    # Aprovação/desativação administrativa de usuário.
+    # Ao desativar, revoga sessões ativas para efeito imediato.
     user = db.get(Usuario, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="usuario nao encontrado")
@@ -1115,6 +1314,8 @@ def listar_emendas(
     _actor: dict = Depends(_actor_from_headers),
     db: Session = Depends(get_db),
 ):
+    # Listagem principal com filtros combináveis e busca textual.
+    # include_old=False mantém apenas versões correntes por padrão.
     query = db.query(Emenda)
 
     if not include_old:
@@ -1215,6 +1416,7 @@ def alterar_status_oficial(
 
     emenda.status_oficial = payload.novo_status
     emenda.updated_at = _utcnow()
+    old_value_masked, new_value_masked = _mask_history_pair("status_oficial", anterior, payload.novo_status)
 
     db.add(
         Historico(
@@ -1224,8 +1426,9 @@ def alterar_status_oficial(
             setor=actor["role"],
             tipo_evento="OFFICIAL_STATUS",
             origem_evento=origin,
-            valor_antigo=anterior,
-            valor_novo=payload.novo_status,
+            campo_alterado="status_oficial",
+            valor_antigo=old_value_masked,
+            valor_novo=new_value_masked,
             motivo=payload.motivo,
         )
     )
@@ -1251,6 +1454,8 @@ def adicionar_evento(
 
     origin = _resolve_event_origin(payload.origem_evento or x_event_origin, actor, fallback="UI")
 
+    old_value_masked, new_value_masked = _mask_history_pair(payload.campo_alterado, payload.valor_antigo, payload.valor_novo)
+
     db.add(
         Historico(
             emenda_id=emenda.id,
@@ -1260,8 +1465,8 @@ def adicionar_evento(
             tipo_evento=payload.tipo_evento,
             origem_evento=origin,
             campo_alterado=payload.campo_alterado,
-            valor_antigo=payload.valor_antigo,
-            valor_novo=payload.valor_novo,
+            valor_antigo=old_value_masked,
+            valor_novo=new_value_masked,
             motivo=payload.motivo,
         )
     )
@@ -1319,6 +1524,8 @@ def versionar_emenda(
     db.flush()
 
     reason = (payload.motivo or "").strip() or "Nova versao"
+    old_value_masked, new_value_masked = _mask_history_pair("version", str(origem.version), str(nova.version))
+
     db.add(
         Historico(
             emenda_id=nova.id,
@@ -1328,8 +1535,8 @@ def versionar_emenda(
             tipo_evento="VERSIONAR",
             origem_evento=origin,
             campo_alterado="version",
-            valor_antigo=str(origem.version),
-            valor_novo=str(nova.version),
+            valor_antigo=old_value_masked,
+            valor_novo=new_value_masked,
             motivo=reason,
         )
     )
@@ -1479,23 +1686,26 @@ def listar_logs_exportacao(
 @app.get("/audit")
 def audit_log(_actor: dict = Depends(_require_manager), db: Session = Depends(get_db)):
     rows = db.query(Historico).order_by(Historico.data_hora.desc()).all()
-    return [
-        {
-            "id": r.id,
-            "emenda_id": r.emenda_id,
-            "usuario_id": r.usuario_id,
-            "usuario_nome": r.usuario_nome,
-            "setor": r.setor,
-            "tipo_evento": r.tipo_evento,
-            "origem_evento": r.origem_evento,
-            "campo_alterado": r.campo_alterado,
-            "valor_antigo": r.valor_antigo,
-            "valor_novo": r.valor_novo,
-            "motivo": r.motivo,
-            "data_hora": r.data_hora,
-        }
-        for r in rows
-    ]
+    response: list[dict] = []
+    for r in rows:
+        old_value_masked, new_value_masked = _mask_history_pair(r.campo_alterado, r.valor_antigo, r.valor_novo)
+        response.append(
+            {
+                "id": r.id,
+                "emenda_id": r.emenda_id,
+                "usuario_id": r.usuario_id,
+                "usuario_nome": r.usuario_nome,
+                "setor": r.setor,
+                "tipo_evento": r.tipo_evento,
+                "origem_evento": r.origem_evento,
+                "campo_alterado": r.campo_alterado,
+                "valor_antigo": old_value_masked,
+                "valor_novo": new_value_masked,
+                "motivo": r.motivo,
+                "data_hora": r.data_hora,
+            }
+        )
+    return response
 @app.websocket("/ws")
 async def websocket_updates(websocket: WebSocket):
     if settings.API_AUTH_ENABLED:

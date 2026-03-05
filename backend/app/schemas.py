@@ -70,8 +70,10 @@ class UserStatusUpdate(BaseModel):
 
 class AuthRegisterIn(BaseModel):
     nome: str = Field(min_length=2, max_length=120)
+    email: str | None = Field(default=None, min_length=5, max_length=255)
     perfil: str
-    senha: str = Field(min_length=4, max_length=120)
+    senha: str | None = Field(default=None, min_length=4, max_length=120)
+    google_credential: str | None = Field(default=None, min_length=50, max_length=4096)
 
     @field_validator("perfil")
     @classmethod
@@ -79,6 +81,16 @@ class AuthRegisterIn(BaseModel):
         v = (value or "").strip().upper()
         if v not in ROLE_SET:
             raise ValueError("perfil invalido")
+        return v
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        v = (value or "").strip().lower()
+        if "@" not in v or "." not in v.split("@", 1)[-1]:
+            raise ValueError("email invalido")
         return v
 
 

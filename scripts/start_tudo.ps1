@@ -46,14 +46,14 @@ powershell -ExecutionPolicy Bypass -File '.\\run_api.ps1'
 
 $frontCmd = @"
 Set-Location '$root'
-py -3 -m http.server $FrontPort --bind 0.0.0.0
+py -3 -m http.server $FrontPort --bind 127.0.0.1
 "@
 
 Write-Host ""
 Write-Host "Iniciando stack local..." -ForegroundColor Cyan
 Write-Host "API   : http://127.0.0.1:$ApiPort" -ForegroundColor Green
 Write-Host "Front : http://127.0.0.1:$FrontPort/login.html" -ForegroundColor Green
-Write-Host "LAN   : http://${lanIp}:${FrontPort}/login.html" -ForegroundColor Yellow
+Write-Host "Obs   : Front rodando apenas em localhost (evita bloqueio WinError 10013 em redes corporativas)." -ForegroundColor Yellow
 Write-Host ""
 
 Start-Process powershell -ArgumentList "-NoExit", "-Command", $apiCmd | Out-Null

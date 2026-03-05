@@ -329,6 +329,7 @@ setupCrossTabSync();
 render();
 initializeAuthFlow();
 
+// Inicializa os filtros da UI principal e prepara os selects dependentes.
 function initSelects() {
   setSelectOptions(statusFilter, STATUS_FILTERS);
 
@@ -379,6 +380,8 @@ function syncCustomExportFilters() {
   setSelectOptions(exportCustomYear, yearOptions, exportCustomYear.value || "");
   setSelectOptions(exportCustomStatus, statusOptions, exportCustomStatus.value || "");
 }
+
+// Preenche um <select> mantendo valor anterior quando ainda for valido.
 function setSelectOptions(select, options, preferredValue) {
   const prev = preferredValue !== undefined ? preferredValue : select.value;
   select.innerHTML = "";
@@ -395,6 +398,7 @@ function setSelectOptions(select, options, preferredValue) {
   select.value = hasPrev ? prev : options[0].value;
 }
 
+// Render da grade principal de emendas (dados + progresso + acoes).
 function render() {
   const rows = getFiltered();
   tbody.innerHTML = "";
@@ -428,6 +432,7 @@ function render() {
   renderImportDashboard();
 }
 
+// Aplica filtros de status/ano/texto sobre o estado em memoria.
 function getFiltered() {
   const status = statusFilter.value;
   const year = yearFilter.value;
@@ -921,6 +926,7 @@ function onModalFieldInput(e) {
   updateModalDraftUi();
 }
 
+// Renderiza editor de campos da emenda no modal.
 function renderKvEditor(rec) {
   kv.innerHTML = "";
 
@@ -954,6 +960,7 @@ function renderKvEditor(rec) {
   updateModalDraftUi();
 }
 
+// Salva alteracoes de campos feitas no modal e registra eventos.
 async function saveModalDraftChanges(keepOpen) {
   clearModalAutoCloseTimer();
   if (!modalDraftState) return true;
@@ -1103,6 +1110,7 @@ function discardModalDraftChanges(keepOpen) {
   updateModalDraftUi();
 }
 
+// Fecha modal com confirmacao quando existe alteracao pendente.
 async function requestCloseModal() {
   if (modalCloseInProgress) return;
   modalCloseInProgress = true;
@@ -1118,6 +1126,7 @@ async function requestCloseModal() {
     modalCloseInProgress = false;
   }
 }
+// Abre modal de detalhe da emenda selecionada.
 function openModal(id, keepReasons) {
   clearModalAutoCloseTimer();
   clearModalSaveFeedback();
@@ -1425,6 +1434,7 @@ function getSelected() {
   });
 }
 
+// Pipeline de importacao: cria/atualiza registros e gera relatorio consolidado.
 function processImportedRows(sourceRows, fileName) {
   const report = {
     fileName: fileName,
@@ -1530,6 +1540,7 @@ function processImportedRows(sourceRows, fileName) {
   return report;
 }
 
+// Cria um novo registro interno a partir de uma linha importada.
 function createRecordFromImport(incoming, ctx, fileName) {
   const now = isoNow();
   const ano = incoming.ano || currentYear();
@@ -1572,6 +1583,7 @@ function createRecordFromImport(incoming, ctx, fileName) {
   return base;
 }
 
+// Faz merge de uma linha importada em registro existente, preservando historico.
 function mergeImportIntoRecord(target, incoming, ctx, fileName) {
   const changedEvents = [];
   let changedAny = false;
@@ -1704,10 +1716,12 @@ function stringifyFieldValue(value, type) {
   return String(value == null ? "" : value);
 }
 
+// Padroniza mensagem de auditoria para eventos de importacao.
 function buildImportNote(fileName, ctx) {
   return "Importado de " + fileName + " | Aba: " + (ctx.sheetName || "XLSX") + " | Linha: " + String(ctx.rowNumber || "-");
 }
 
+// Le arquivo XLSX, detecta cabecalho e extrai linhas validas para importacao.
 async function parseInputFile(file) {
   const name = String(file.name || "").toLowerCase();
 
@@ -1820,6 +1834,7 @@ function extractPlanilha1AoaFromWorkbook(workbook, xlsxApi) {
 }
 
 
+// Gera diagnostico estrutural da planilha (cabecalhos, tipos e faltas criticas).
 function buildImportValidationReport(sourceRows) {
   const rows = Array.isArray(sourceRows) ? sourceRows : [];
   const knownSet = buildKnownHeaderSet();
@@ -2050,6 +2065,8 @@ function pickRandom(arr) {
   const i = Math.floor(Math.random() * arr.length);
   return arr[i];
 }
+
+// Configura eventos de login/cadastro do auth-gate interno da pagina principal.
 function setupAuthUi() {
   if (!authGate) return;
 
@@ -2125,6 +2142,7 @@ function setupAuthUi() {
   }
 }
 
+// Carrega papeis permitidos no cadastro publico do auth-gate.
 function syncRegisterRoles() {
   if (!authRegisterRole) return;
   authRegisterRole.innerHTML = "";
@@ -2136,6 +2154,7 @@ function syncRegisterRoles() {
   });
 }
 
+// Alterna entre formularios de login e cadastro no auth-gate.
 function switchAuthMode(mode) {
   if (!authLoginForm || !authRegisterForm || !authTabLogin || !authTabRegister) return;
   const register = mode === "register";
@@ -2172,6 +2191,7 @@ function extractApiError(err, fallback) {
   return msg;
 }
 
+// Trata sucesso de autenticacao: grava sessao, libera UI e sincroniza API.
 function onAuthSuccess(resp) {
   const token = resp && resp.token ? String(resp.token) : "";
   const usuario = resp && resp.usuario ? resp.usuario : null;
@@ -2191,6 +2211,7 @@ function onAuthSuccess(resp) {
 }
 
 
+// Persiste usuario autenticado no contexto local da UI.
 function setAuthenticatedUser(usuario) {
   CURRENT_USER = String(usuario.nome || CURRENT_USER).trim() || CURRENT_USER;
   CURRENT_ROLE = normalizeUserRole(usuario.perfil || CURRENT_ROLE);
@@ -2198,6 +2219,7 @@ function setAuthenticatedUser(usuario) {
   localStorage.setItem(USER_ROLE_KEY, CURRENT_ROLE);
 }
 
+// Redireciona para login/cadastro preservando pagina de retorno.
 function redirectToAuth(page, query) {
   const target = page || AUTH_LOGIN_PAGE;
   const suffix = query ? (String(query).startsWith("?") ? String(query) : "?" + String(query)) : "";
@@ -2208,6 +2230,7 @@ function redirectToAuth(page, query) {
     window.location.href = finalUrl;
   }
 }
+// Encerra sessao local e tenta logout remoto na API.
 async function logoutCurrentUser() {
   const token = String(sessionStorage.getItem(SESSION_TOKEN_KEY) || "").trim();
   if (token && isApiEnabled()) {
@@ -2223,6 +2246,7 @@ async function logoutCurrentUser() {
   closeApiSocket();
 }
 
+// Ponto de entrada da autenticacao ao abrir index.html.
 async function initializeAuthFlow() {
   if (!isApiEnabled()) {
     closeApiSocket();
@@ -2254,6 +2278,7 @@ async function initializeAuthFlow() {
 }
 
 
+// Carrega configuracao de usuario local (fallback quando API esta desativada).
 function loadUserConfig(forcePrompt) {
   const legacyUser = localStorage.getItem("SEC_USER_ID");
   const savedUser = localStorage.getItem(USER_NAME_KEY) || legacyUser;
@@ -2276,6 +2301,7 @@ function loadUserConfig(forcePrompt) {
   }
 }
 
+// Aplica regras de permissao por perfil e atualiza botoes/indicadores.
 function applyAccessProfile() {
   const isOwner = CURRENT_ROLE === "PROGRAMADOR";
   const isSupervisor = CURRENT_ROLE === "SUPERVISAO";
@@ -2379,6 +2405,7 @@ function renderPendingUsersTable(items) {
   pendingUsersTableWrap.innerHTML = head + rows + "</tbody></table>";
 }
 
+// Busca e lista cadastros pendentes para aprovacao.
 async function refreshPendingUsersModal() {
   if (!isApiEnabled()) {
     setPendingUsersFeedback("Aprovacao de cadastro exige API ativa.", true);
@@ -2407,6 +2434,7 @@ async function refreshPendingUsersModal() {
   }
 }
 
+// Aprova usuario pendente com perfil selecionado pelo programador.
 async function approvePendingUser(userId) {
   if (!userId) return;
   if (!isOwnerUser()) {
@@ -2427,6 +2455,7 @@ async function approvePendingUser(userId) {
   await refreshPendingUsersModal();
 }
 
+// Abre modal de aprovacao e dispara refresh inicial.
 function openPendingUsersModal() {
   if (!pendingUsersModal) return;
   pendingUsersModal.classList.add("show");
@@ -2436,6 +2465,7 @@ function openPendingUsersModal() {
   });
 }
 
+// Sincroniza estado local com API (health + lista de emendas).
 async function bootstrapApiIntegration() {
   if (!isApiEnabled()) {
     closeApiSocket();
@@ -2518,6 +2548,7 @@ function mergeRemoteEmendas(remoteList) {
   });
 }
 
+// Envia alteracao de status oficial da emenda para backend.
 async function syncOfficialStatusToApi(rec, nextStatus, motivo) {
   if (!isApiEnabled()) return;
   const backendId = await ensureBackendEmenda(rec);
@@ -2530,6 +2561,7 @@ async function syncOfficialStatusToApi(rec, nextStatus, motivo) {
   applyAccessProfile();
 }
 
+// Envia evento generico (nota, marcacao, edicao) para backend.
 async function syncGenericEventToApi(rec, payload) {
   if (!isApiEnabled()) return;
   const backendId = await ensureBackendEmenda(rec);
@@ -2539,6 +2571,7 @@ async function syncGenericEventToApi(rec, payload) {
   applyAccessProfile();
 }
 
+// Garante que o registro local tenha ID correspondente no backend.
 async function ensureBackendEmenda(rec) {
   if (rec.backend_id) return rec.backend_id;
 
@@ -2625,6 +2658,7 @@ function queueApiRefreshFromSocket() {
 }
 
 
+// Abre WebSocket da API para atualizar tela em tempo real.
 function connectApiSocket() {
   closeApiSocket();
 
@@ -2669,6 +2703,7 @@ function connectApiSocket() {
     scheduleApiSocketReconnect();
   };
 }
+// Decide se a UI deve operar em modo API (nuvem) ou local.
 function isApiEnabled() {
   const host = (typeof window !== "undefined" && window.location && window.location.hostname) ? String(window.location.hostname) : "";
   const isHostedUi = !!host && host !== "localhost" && host !== "127.0.0.1";
@@ -2684,6 +2719,7 @@ function isApiEnabled() {
   return String(raw).trim().toLowerCase() !== "false";
 }
 
+// Resolve URL base da API com protecao contra override localhost em host publicado.
 function getApiBaseUrl() {
   const raw = localStorage.getItem(API_BASE_URL_KEY);
   const runtimeBase = text(RUNTIME_CONFIG.API_BASE_URL);
@@ -2701,6 +2737,7 @@ function getApiBaseUrl() {
   return base.replace(/\/+$/, "");
 }
 
+// Wrapper autenticado para chamadas privadas da API.
 async function apiRequest(method, path, body, eventOrigin) {
   const url = getApiBaseUrl() + path;
   const opts = { method: method, headers: buildApiHeaders(eventOrigin) };
@@ -2737,6 +2774,7 @@ async function apiRequest(method, path, body, eventOrigin) {
   return null;
 }
 
+// Wrapper publico para login/cadastro sem token.
 async function apiRequestPublic(method, path, body) {
   const url = getApiBaseUrl() + path;
   const opts = { method: method, headers: {} };
@@ -2762,6 +2800,7 @@ async function apiRequestPublic(method, path, body) {
   return null;
 }
 
+// Monta headers padrao de auditoria/autenticacao para chamadas privadas.
 function buildApiHeaders(eventOrigin) {
   const headers = {
     "X-User-Name": CURRENT_USER,
@@ -2950,6 +2989,7 @@ function deriveStatusForBackend(rec) {
   return latestMarkedStatus(rec) || "Recebido";
 }
 
+// Sincroniza alteracoes entre abas via BroadcastChannel/storage event.
 function setupCrossTabSync() {
   if (stateChannel) {
     stateChannel.onmessage = function (evt) {
@@ -2969,6 +3009,7 @@ function setupCrossTabSync() {
   }
 }
 
+// Notifica outras abas que o estado local mudou.
 function notifyStateUpdated() {
   if (stateChannel) {
     stateChannel.postMessage({ type: "state_updated", at: Date.now(), tabId: LOCAL_TAB_ID });
@@ -2976,6 +3017,7 @@ function notifyStateUpdated() {
   localStorage.setItem(CROSS_TAB_PING_KEY, String(Date.now()));
 }
 
+// Recarrega estado salvo e redesenha interface.
 function refreshStateFromStorage() {
   const loaded = loadState();
   state = { records: (loaded.records || []).map(normalizeRecordShape) };
@@ -2984,6 +3026,7 @@ function refreshStateFromStorage() {
   syncYearFilter();
   render();
 }
+// Carrega estado persistido (storage atual, fallback e legado).
 function loadState() {
   try {
     const primary = getPrimaryStorage();
@@ -3013,6 +3056,7 @@ function loadState() {
   }
 }
 
+// Persiste estado e opcionalmente propaga sincronizacao cross-tab.
 function saveState(silentSync) {
   syncActiveUsersCache(state.records || []);
   const data = JSON.stringify(state);
@@ -3597,6 +3641,7 @@ function refreshCustomExportSummary() {
   exportCustomSummary.textContent = "Registros selecionados: " + String(rows.length) + " de " + String(totalBase);
 }
 
+// Orquestra exportacao por escopo (atuais, historico ou personalizado).
 async function runExportByScope(scope, options) {
   const opts = options || {};
   const exportScope = scope || EXPORT_SCOPE.ATUAIS;
@@ -3655,6 +3700,7 @@ async function runExportByScope(scope, options) {
 
   return true;
 }
+// Registra lote de importacao no backend para rastreabilidade.
 async function syncImportBatchToApi(file, report) {
   if (!isApiEnabled()) return null;
   const payload = {
@@ -3687,6 +3733,7 @@ async function syncImportBatchToApi(file, report) {
   }
 }
 
+// Envia linhas detalhadas da importacao em blocos para evitar payload gigante.
 async function syncImportLinesToApi(loteId, rowDetails) {
   if (!isApiEnabled()) return;
   if (!loteId) return;
@@ -3723,6 +3770,7 @@ async function syncImportLinesToApi(loteId, rowDetails) {
   applyAccessProfile();
 }
 
+// Grava log de exportacao no backend (auditoria operacional).
 async function syncExportLogToApi(meta) {
   if (!isApiEnabled()) return;
   const payload = {
@@ -3748,6 +3796,7 @@ async function syncExportLogToApi(meta) {
   }
 }
 
+// Exportador padrao: gera abas de dados + auditoria + resumo.
 function exportRecordsToXlsx(records, filename, options) {
   const xlsxApi = typeof window !== "undefined" ? window.XLSX : null;
   if (!xlsxApi) {
@@ -3797,6 +3846,7 @@ function exportRecordsToXlsx(records, filename, options) {
   };
 }
 
+// Exportador em modo template: preserva estrutura do XLSX original.
 function exportRecordsToTemplateXlsx(records, filename, options, xlsxApi) {
   const opts = options || {};
   const template = lastImportedWorkbookTemplate;
@@ -4044,6 +4094,7 @@ function runTemplateRoundTripCheck(workbook, assertions) {
   }
 }
 
+// Monta tabela principal de exportacao com headers escolhidos.
 function buildExportTableData(records, options) {
   const opts = options || {};
   const useOriginal = !!opts.useOriginalHeaders;
@@ -4101,6 +4152,7 @@ function buildExportTableData(records, options) {
   return { headers: headers, rows: rows };
 }
 
+// Monta tabela de auditoria para aba AuditLog do XLSX exportado.
 function buildAuditLogTableData(records) {
   const headers = [
     "id_interno_sistema",

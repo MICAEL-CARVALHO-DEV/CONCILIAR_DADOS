@@ -72,6 +72,11 @@
   <script src="config.production.js"></script>
   <script>
     (async function () {
+      // Mapa rapido:
+      // 1) Resolve configuracao de host/API/Google
+      // 2) Valida sessao existente
+      // 3) Executa login local e login Google
+      // 4) Registra pedido de recuperacao
       const API_BASE_URL_KEY = "SEC_API_BASE_URL";
       const CFG = (window.SEC_APP_CONFIG && typeof window.SEC_APP_CONFIG === "object") ? window.SEC_APP_CONFIG : {};
       const CFG_HOST_MAP = (CFG.API_BASE_URL_BY_HOST && typeof CFG.API_BASE_URL_BY_HOST === "object") ? CFG.API_BASE_URL_BY_HOST : {};
@@ -79,8 +84,12 @@
       const IS_LOCAL_FRONTEND = !CFG_HOST || CFG_HOST === "localhost" || CFG_HOST === "127.0.0.1";
       const DEFAULT_API_BASE_URL = (CFG_HOST_MAP[CFG_HOST] ? String(CFG_HOST_MAP[CFG_HOST]) : "") || (CFG.API_BASE_URL ? String(CFG.API_BASE_URL) : "") || "http://localhost:8000";
       const CFG_GOOGLE_HOST_MAP = (CFG.GOOGLE_CLIENT_ID_BY_HOST && typeof CFG.GOOGLE_CLIENT_ID_BY_HOST === "object") ? CFG.GOOGLE_CLIENT_ID_BY_HOST : {};
-      const GOOGLE_CLIENT_ID = (CFG_GOOGLE_HOST_MAP[CFG_HOST] ? String(CFG_GOOGLE_HOST_MAP[CFG_HOST]) : "") || (CFG.GOOGLE_CLIENT_ID ? String(CFG.GOOGLE_CLIENT_ID) : "");
+      const hasGoogleClientForHost = Object.prototype.hasOwnProperty.call(CFG_GOOGLE_HOST_MAP, CFG_HOST);
+      const GOOGLE_CLIENT_ID = hasGoogleClientForHost
+        ? String(CFG_GOOGLE_HOST_MAP[CFG_HOST] || "")
+        : (CFG.GOOGLE_CLIENT_ID ? String(CFG.GOOGLE_CLIENT_ID) : "");
       const SESSION_TOKEN_KEY = "SEC_SESSION_TOKEN";
+      const PENDING_GOOGLE_CREDENTIAL_KEY = "SEC_PENDING_GOOGLE_CREDENTIAL";
       const USER_NAME_KEY = "SEC_USER_NAME";
       const USER_ROLE_KEY = "SEC_USER_ROLE";
       const next = new URLSearchParams(window.location.search).get("next") || "index.html";
@@ -100,10 +109,12 @@
       linkCadastro.href = "cadastro.html?next=" + encodeURIComponent(next);
       if (incomingMsg && incomingMsg !== "Entre para continuar.") msg.textContent = incomingMsg;
 
+      // Verifica se a URL aponta para localhost/loopback.
       function isLoopbackApiBase(value) {
         return /^https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?::\d+)?(?:\/|$)/i.test(String(value || "").trim());
       }
 
+      // Resolve URL base da API com fallback por ambiente.
       function getBaseUrl() {
         const raw = String(localStorage.getItem(API_BASE_URL_KEY) || "").trim();
         if (!IS_LOCAL_FRONTEND && raw && isLoopbackApiBase(raw)) {
@@ -113,6 +124,7 @@
         return base.replace(/\/+$/, "");
       }
 
+      // Se houver token salvo, valida no backend e redireciona para a pagina alvo.
       async function validateExistingSession() {
         const token = String(sessionStorage.getItem(SESSION_TOKEN_KEY) || "").trim();
         if (!token) return false;
@@ -152,6 +164,7 @@
         return;
       }
 
+      // Requisicao padrao para endpoints de autenticacao.
       async function apiRequest(path, body) {
         const resp = await fetch(getBaseUrl() + path, {
           method: "POST",
@@ -165,11 +178,15 @@
 
         if (!resp.ok) {
           const detail = json && json.detail ? json.detail : (text || ("HTTP " + resp.status));
-          throw new Error(String(detail));
+          const err = new Error(String(detail));
+          err.status = resp.status;
+          err.payload = json;
+          throw err;
         }
         return json;
       }
 
+      // Carrega script externo 1 vez (Google Identity).
       async function loadExternalScript(src) {
         if (document.querySelector('script[data-ext-src="' + src + '"]')) {
           return;
@@ -187,12 +204,14 @@
         });
       }
 
+      // Persiste sessao no browser apos autenticacao bem sucedida.
       function persistSession(data, fallbackName, fallbackRole) {
         sessionStorage.setItem(SESSION_TOKEN_KEY, String(data.token || ""));
         localStorage.setItem(USER_NAME_KEY, String(data.usuario && data.usuario.nome || fallbackName || ""));
         localStorage.setItem(USER_ROLE_KEY, String(data.usuario && data.usuario.perfil || fallbackRole || "CONTABIL"));
       }
 
+      // Controla estado visual durante chamadas async (loading/disable).
       function setBusy(isBusy, busyLabel) {
         nome.disabled = isBusy;
         senha.disabled = isBusy;
@@ -206,6 +225,7 @@
         }
       }
 
+      // Callback do Google Sign-In: valida credential no backend e cria sessao.
       async function onGoogleCredential(response) {
         const credential = String(response && response.credential || "").trim();
         if (!credential) {
@@ -220,15 +240,14 @@
 
         try {
           const data = await apiRequest("/auth/google", { credential: credential });
-          if (data && data.pending_approval) {
-            msg.textContent = (data && data.detail) || "Perfil criado com Google e enviado para aprovacao.";
-            msg.style.color = "#e8f7ef";
-            return;
-          }
-
           persistSession(data, (data && data.usuario && data.usuario.nome) || "Google", (data && data.usuario && data.usuario.perfil) || "CONTABIL");
           window.location.href = next;
         } catch (err) {
+          if (Number(err && err.status) === 404) {
+            sessionStorage.setItem(PENDING_GOOGLE_CREDENTIAL_KEY, credential);
+            window.location.href = "cadastro.html?next=" + encodeURIComponent(next) + "&google=1";
+            return;
+          }
           msg.textContent = err && err.message ? err.message : "Falha no login com Google.";
           msg.style.color = "#b4233d";
         } finally {
@@ -236,6 +255,7 @@
         }
       }
 
+      // Inicializa botao Google no login (se houver client id valido).
       async function initializeGoogleAuth() {
         const clientId = String(GOOGLE_CLIENT_ID || "").trim();
         if (!clientId || !googleAuthBlock || !googleLoginButton) {
@@ -272,6 +292,7 @@
 
       initializeGoogleAuth();
 
+      // Login local (usuario/gmail + senha).
       form.addEventListener("submit", async function (e) {
         e.preventDefault();
         const n = String(nome.value || "").trim();
@@ -298,6 +319,7 @@
         }
       });
 
+      // Recuperacao de acesso: cria solicitacao para aprovacao de PROGRAMADOR.
       forgotBtn.addEventListener("click", async function () {
         const identificador = String(nome.value || "").trim();
         if (!identificador) {

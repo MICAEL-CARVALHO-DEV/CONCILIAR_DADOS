@@ -1,16 +1,21 @@
 param(
   [string]$TaskPrefix = "SEC_Expediente_Real",
-  [string]$BaseUrl = "https://sec-emendas-api.onrender.com",
+  [string]$BaseUrl = "http://127.0.0.1:8000",
   [int]$RecordId = 0,
   [string]$ScriptPath = "",
   [string[]]$Slots = @("09:00", "11:00", "14:00", "16:00"),
   [string[]]$StatusSequence = @("Em analise", "Pendente", "Aguardando execucao", "Em execucao"),
   [switch]$NoteOnly = $false,
-  [switch]$RemoveOnly = $false
+  [switch]$RemoveOnly = $false,
+  [switch]$AllowRemote = $false
 )
 
 $ErrorActionPreference = "Stop"
 $BaseUrl = $BaseUrl.TrimEnd("/")
+
+if (-not $AllowRemote -and $BaseUrl -notmatch "^https?://(localhost|127\.0\.0\.1)(:\d+)?$") {
+  throw "BaseUrl remota bloqueada por seguranca. Use -AllowRemote para confirmar execucao fora de localhost."
+}
 
 if ($RecordId -le 0) {
   throw "Informe -RecordId com id valido da emenda."
@@ -63,14 +68,14 @@ for ($i = 0; $i -lt $Slots.Count; $i++) {
   $slotTag = $slot.Replace(":", "")
   $taskName = "$TaskPrefix`_$slotTag"
 
-  $cmd = "powershell.exe -NoP -ExecutionPolicy Bypass -File `"$TaskScriptPath`" -RecordId $RecordId -SingleSlot $slot"
-  if ($BaseUrl -ne "https://sec-emendas-api.onrender.com") {
-    $cmd += " -BaseUrl `"$BaseUrl`""
-  }
+  $cmd = "powershell.exe -NoP -ExecutionPolicy Bypass -File `"$TaskScriptPath`" -RecordId $RecordId -SingleSlot $slot -BaseUrl `"$BaseUrl`""
   if ($NoteOnly) {
     $cmd += " -NoteOnly"
   } else {
     $cmd += " -ForcedStatusIndex $i"
+  }
+  if ($AllowRemote) {
+    $cmd += " -AllowRemote"
   }
 
   $tasks += [pscustomobject]@{

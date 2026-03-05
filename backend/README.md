@@ -27,8 +27,8 @@ Backend SEC Emendas - FastAPI + PostgreSQL/SQLite
 
 6) Headers recomendados
    Authorization: Bearer <token>
-   X-User-Name: <nome>
-   X-User-Role: APG|SUPERVISAO|CONTABIL|POWERBI|PROGRAMADOR
+   X-Session-Token: <token> (compatibilidade)
+   Observacao: `X-API-Key` + `X-User-*` fica desabilitado por padrao e nao deve ser usado em producao.
 
 7) WebSocket em tempo real
    GET /ws?token=<JWT>
