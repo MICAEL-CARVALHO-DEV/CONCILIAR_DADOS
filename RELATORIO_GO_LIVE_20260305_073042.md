@@ -69,6 +69,6 @@
 ```
 
 ## Status
-- Item 1 (workflow custom): AJUSTADO localmente para validacao de artefato (sem deploy duplicado).
+- Item 1 (workflow custom): ajustado para execucao manual (`workflow_dispatch`) para evitar falha automatica redundante em push.
 - Item 2 (smoke producao): OK para health/openapi/roles/cors; login real ficou sem credencial (step pulado).
 - Item 3 (relatorio go-live): CONCLUIDO.
