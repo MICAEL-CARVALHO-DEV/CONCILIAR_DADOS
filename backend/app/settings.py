@@ -21,6 +21,21 @@ class Settings(BaseSettings):
     JWT_EXPIRE_HOURS: int = 12
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_TOKENINFO_URL: str = "https://oauth2.googleapis.com/tokeninfo"
+    AI_ORCHESTRATOR_ENABLED: bool = True
+    AI_ORCHESTRATOR_TIMEOUT_SECONDS: int = 45
+    OPENAI_API_KEY: str = ""
+    OPENAI_MODEL_CODEX: str = "gpt-5.1-codex"
+    GEMINI_API_KEY: str = ""
+    GEMINI_MODEL_PRO: str = "gemini-2.5-pro"
+    ANTHROPIC_API_KEY: str = ""
+    ANTHROPIC_MODEL_CLAUDE: str = "claude-3-5-sonnet-latest"
+    GROQ_API_KEY: str = ""
+    GROQ_MODEL_FREE: str = "llama-3.3-70b-versatile"
+    CLOUDFLARE_API_TOKEN: str = ""
+    CLOUDFLARE_ACCOUNT_ID: str = ""
+    CLOUDFLARE_MODEL_FREE: str = "@cf/meta/llama-3.1-8b-instruct"
+    OLLAMA_BASE_URL: str = "http://127.0.0.1:11434"
+    OLLAMA_MODEL_FREE: str = "llama3.2:3b"
 
     model_config = SettingsConfigDict(
         env_file=".env",

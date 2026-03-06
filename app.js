@@ -63,6 +63,8 @@ const API_WS_PATH = "/ws";
 const WS_RECONNECT_BASE_MS = 1500;
 const WS_RECONNECT_MAX_MS = 15000;
 const WS_REFRESH_DEBOUNCE_MS = 400;
+const API_WS_ENABLED = String((RUNTIME_CONFIG && RUNTIME_CONFIG.API_WS_ENABLED) != null ? RUNTIME_CONFIG.API_WS_ENABLED : "false").trim().toLowerCase() === "true";
+const EMENDA_LOCK_POLL_MS = 20000;
 const API_DEFAULT_EVENT_ORIGIN = "UI";
 const DEMO_MULTI_USERS = [
   { name: "Miguel", role: "APG" },
@@ -242,6 +244,9 @@ let apiRefreshTimer = null;
 let apiRefreshRunning = false;
 let presenceByBackendId = {};
 let currentPresenceBackendId = null;
+let emendaLockState = null;
+let emendaLockReadOnly = false;
+let emendaLockTimer = null;
 let latestImportReport = null;
 let latestExportReport = null;
 let lastImportValidation = null;
@@ -260,6 +265,7 @@ const searchInput = document.getElementById("searchInput");
 const modal = document.getElementById("modal");
 const modalTitle = document.getElementById("modalTitle");
 const modalSub = document.getElementById("modalSub");
+const modalAccessState = document.getElementById("modalAccessState");
 const modalClose = document.getElementById("modalClose");
 const modalClose2 = document.getElementById("modalClose2");
 
@@ -856,6 +862,7 @@ function hasPendingModalAction() {
 
 function canSaveDraftNow() {
   if (!canMutateRecords()) return false;
+  if (emendaLockReadOnly) return false;
   if (hasPendingModalAction()) return true;
   if (!isModalDraftDirty()) return false;
   const selectedStatus = markStatus ? (markStatus.value || "").trim() : "";
@@ -866,6 +873,9 @@ function canSaveDraftNow() {
 function getDraftSaveBlockReason() {
   if (!canMutateRecords()) {
     return "Perfil SUPERVISAO: monitoramento apenas, sem alteracao de dados.";
+  }
+  if (emendaLockReadOnly) {
+    return "Edicao bloqueada: esta emenda esta em uso por outro usuario (modo leitura).";
   }
   if (hasPendingModalAction()) return "";
   if (!isModalDraftDirty()) return "";
@@ -946,12 +956,18 @@ function updateModalDraftUi() {
 }
 
 function applyModalAccessProfile() {
-  const readOnlyMode = !canMutateRecords();
+  const readOnlyMode = !canMutateRecords() || emendaLockReadOnly;
   if (markStatus) markStatus.disabled = readOnlyMode;
   if (markReason) markReason.disabled = readOnlyMode;
   if (btnMarkStatus) btnMarkStatus.disabled = readOnlyMode;
   if (btnAddNote) btnAddNote.disabled = readOnlyMode;
   if (btnKvSave) btnKvSave.style.display = readOnlyMode ? "none" : "inline-block";
+  if (kv) {
+    const inputs = kv.querySelectorAll("[data-kv-field]");
+    inputs.forEach(function (el) {
+      el.disabled = readOnlyMode;
+    });
+  }
 }
 
 function onModalFieldInput(e) {
@@ -1014,6 +1030,10 @@ async function saveModalDraftChanges(keepOpen) {
   clearModalAutoCloseTimer();
   if (!canMutateRecords()) {
     showModalSaveFeedback("Perfil SUPERVISAO: monitoramento apenas. Salvamento bloqueado.", true);
+    return false;
+  }
+  if (emendaLockReadOnly) {
+    showModalSaveFeedback("Edicao bloqueada: emenda em uso por outro usuario.", true);
     return false;
   }
   if (!modalDraftState) return true;
@@ -1194,12 +1214,16 @@ function openModal(id, keepReasons) {
   const previousId = selectedId;
   if (previousId && previousId !== id) {
     const previousRec = (state.records || []).find(function (r) { return r.id === previousId; });
-    if (previousRec) announcePresenceForRecord(previousRec, "leave");
+    if (previousRec) {
+      announcePresenceForRecord(previousRec, "leave");
+      releaseEmendaLock(previousRec).catch(function () { /* no-op */ });
+    }
   }
   lastFocusedElement = document.activeElement;
   selectedId = id;
   const rec = getSelected();
   if (!rec) return;
+  emendaLockReadOnly = isApiEnabled() ? canMutateRecords() : false;
 
   modalTitle.textContent = "Emenda: " + rec.id;
   modalSub.textContent = rec.identificacao + " | " + rec.municipio + " | " + rec.deputado;
@@ -1265,6 +1289,10 @@ function openModal(id, keepReasons) {
   modal.classList.add("show");
   modal.setAttribute("aria-hidden", "false");
   applyModalAccessProfile();
+  renderEmendaLockInfo(rec);
+  syncModalEmendaLock(rec).catch(function (_err) {
+    renderEmendaLockInfo(rec);
+  });
   setTimeout(function () {
     if (modalClose && typeof modalClose.focus === "function") modalClose.focus();
   }, 0);
@@ -1484,11 +1512,20 @@ function closeModal() {
 
 function forceCloseModal() {
   const activeRec = getSelected();
-  if (activeRec) announcePresenceForRecord(activeRec, "leave");
+  if (activeRec) {
+    announcePresenceForRecord(activeRec, "leave");
+    releaseEmendaLock(activeRec).catch(function () { /* no-op */ });
+  }
+  clearEmendaLockTimer();
+  setEmendaLockState(null);
   clearModalAutoCloseTimer();
   clearModalSaveFeedback();
   modal.classList.remove("show");
   modal.setAttribute("aria-hidden", "true");
+  if (modalAccessState) {
+    modalAccessState.classList.add("hidden");
+    modalAccessState.textContent = "";
+  }
   selectedId = null;
   modalDraftState = null;
   updateModalDraftUi();
@@ -2461,6 +2498,202 @@ function canMutateRecords() {
   return !isSupervisorUser();
 }
 
+function clearEmendaLockTimer() {
+  if (!emendaLockTimer) return;
+  clearInterval(emendaLockTimer);
+  emendaLockTimer = null;
+}
+
+function setEmendaLockState(payload) {
+  emendaLockState = payload && typeof payload === "object" ? payload : null;
+  if (!canMutateRecords()) {
+    emendaLockReadOnly = true;
+    return;
+  }
+  if (!emendaLockState) {
+    emendaLockReadOnly = false;
+    return;
+  }
+  emendaLockReadOnly = !Boolean(emendaLockState.can_edit);
+}
+
+function emendaLockOwnerText(payload) {
+  if (!payload || !payload.locked) return "";
+  const ownerName = text(payload.owner_user_name || "-");
+  const ownerRole = text(payload.owner_user_role || "-");
+  return ownerName + " (" + ownerRole + ")";
+}
+
+function renderModalAccessState(rec) {
+  if (!modalAccessState) return;
+  if (!modal || !modal.classList.contains("show") || !rec) {
+    modalAccessState.classList.add("hidden");
+    modalAccessState.textContent = "";
+    return;
+  }
+
+  const showReadOnly = function (message) {
+    modalAccessState.textContent = message;
+    modalAccessState.classList.remove("hidden");
+  };
+
+  if (!isApiEnabled()) {
+    if (!canMutateRecords()) {
+      showReadOnly("MODO LEITURA: perfil SUPERVISAO monitora, sem alterar dados.");
+      return;
+    }
+    modalAccessState.classList.add("hidden");
+    modalAccessState.textContent = "";
+    return;
+  }
+
+  if (!canMutateRecords()) {
+    showReadOnly("MODO LEITURA: perfil SUPERVISAO monitora, sem alterar dados.");
+    return;
+  }
+
+  if (!emendaLockReadOnly) {
+    modalAccessState.classList.add("hidden");
+    modalAccessState.textContent = "";
+    return;
+  }
+
+  if (!emendaLockState) {
+    showReadOnly("MODO LEITURA: verificando disponibilidade de edicao...");
+    return;
+  }
+
+  const owner = emendaLockOwnerText(emendaLockState);
+  const expiresAt = emendaLockState.expires_at ? fmtDateTime(emendaLockState.expires_at) : "";
+  const ownerMsg = owner ? (" por " + owner) : " por outro usuario";
+  const when = expiresAt ? (" Ate: " + expiresAt + ".") : "";
+  showReadOnly("MODO LEITURA: esta emenda esta em edicao" + ownerMsg + "." + when);
+}
+
+function renderEmendaLockInfo(rec) {
+  let message = "";
+  if (rec) {
+    if (!isApiEnabled()) {
+      message = "Modo local: lock de edicao indisponivel.";
+    } else if (isSupervisorUser()) {
+      const owner = emendaLockOwnerText(emendaLockState);
+      message = owner
+        ? ("Modo supervisao (leitura). Em edicao por: " + owner + ".")
+        : "Modo supervisao (leitura).";
+    } else {
+      const expiresAt = emendaLockState && emendaLockState.expires_at ? fmtDateTime(emendaLockState.expires_at) : "";
+      if (emendaLockReadOnly) {
+        const owner = emendaLockOwnerText(emendaLockState);
+        const ownerMsg = owner ? ("por " + owner) : "por outro usuario";
+        const when = expiresAt ? (" Ate: " + expiresAt + ".") : "";
+        message = "Modo leitura ativo: emenda em edicao " + ownerMsg + "." + when;
+      } else if (emendaLockState && emendaLockState.locked && emendaLockState.is_owner) {
+        const when = expiresAt ? (" Ate: " + expiresAt + ".") : "";
+        message = "Voce esta com edicao exclusiva desta emenda." + when;
+      } else {
+        message = "Edicao disponivel nesta emenda.";
+      }
+    }
+  }
+
+  if (livePresenceText) livePresenceText.textContent = message;
+  renderModalAccessState(rec);
+}
+
+async function fetchEmendaLockStatus(rec) {
+  const backendId = await ensureBackendEmenda(rec);
+  return await apiRequest("GET", "/emendas/" + String(backendId) + "/lock", undefined, "UI");
+}
+
+async function acquireEmendaLock(rec, forceAcquire) {
+  const backendId = await ensureBackendEmenda(rec);
+  return await apiRequest("POST", "/emendas/" + String(backendId) + "/lock/acquire", {
+    force: !!forceAcquire
+  }, "UI");
+}
+
+async function renewEmendaLock(rec) {
+  const backendId = await ensureBackendEmenda(rec);
+  return await apiRequest("POST", "/emendas/" + String(backendId) + "/lock/renew", {}, "UI");
+}
+
+async function releaseEmendaLock(rec) {
+  if (!rec || !isApiEnabled()) return;
+  const backendId = getBackendIdForRecord(rec) || await ensureBackendEmenda(rec);
+  if (!backendId) return;
+  await apiRequest("POST", "/emendas/" + String(backendId) + "/lock/release", {}, "UI");
+}
+
+async function tickEmendaLock() {
+  if (!modal || !modal.classList.contains("show")) return;
+  const rec = getSelected();
+  if (!rec) return;
+
+  try {
+    if (!canMutateRecords()) {
+      const lockInfo = await fetchEmendaLockStatus(rec);
+      setEmendaLockState(lockInfo);
+    } else if (emendaLockReadOnly) {
+      const lockInfo = await fetchEmendaLockStatus(rec);
+      setEmendaLockState(lockInfo);
+      if (lockInfo && !lockInfo.locked && lockInfo.can_edit) {
+        const acquired = await acquireEmendaLock(rec, false);
+        setEmendaLockState(acquired);
+      }
+    } else {
+      const renewed = await renewEmendaLock(rec);
+      setEmendaLockState(renewed);
+    }
+  } catch (_err) {
+    // Mantem estado atual em caso de oscilacao de rede.
+  }
+
+  renderEmendaLockInfo(rec);
+  applyModalAccessProfile();
+  updateModalDraftUi();
+}
+
+function startEmendaLockPolling() {
+  clearEmendaLockTimer();
+  if (!isApiEnabled()) return;
+  emendaLockTimer = setInterval(function () {
+    tickEmendaLock().catch(function () { /* no-op */ });
+  }, EMENDA_LOCK_POLL_MS);
+}
+
+async function syncModalEmendaLock(rec) {
+  clearEmendaLockTimer();
+  emendaLockState = null;
+  if (canMutateRecords()) emendaLockReadOnly = true;
+
+  if (!rec) return;
+  if (!isApiEnabled()) {
+    renderEmendaLockInfo(rec);
+    return;
+  }
+
+  try {
+    if (!canMutateRecords()) {
+      const lockInfo = await fetchEmendaLockStatus(rec);
+      setEmendaLockState(lockInfo);
+    } else {
+      const acquired = await acquireEmendaLock(rec, false);
+      setEmendaLockState(acquired);
+    }
+  } catch (err) {
+    setEmendaLockState({
+      locked: true,
+      can_edit: false,
+      message: extractApiError(err, "Falha ao consultar lock de edicao.")
+    });
+  }
+
+  renderEmendaLockInfo(rec);
+  applyModalAccessProfile();
+  updateModalDraftUi();
+  startEmendaLockPolling();
+}
+
 function renderRoleNotice() {
   if (!roleNotice) return;
   if (isSupervisorUser()) {
@@ -3053,6 +3286,7 @@ function handlePresencePayload(data) {
 function connectApiSocket() {
   closeApiSocket();
 
+  if (!API_WS_ENABLED) return;
   if (typeof WebSocket === "undefined") return;
   if (!isApiEnabled()) return;
 
@@ -3299,6 +3533,7 @@ function isApiConflictError(err) {
 function extractConflictDetail(err) {
   const detail = err && err.detail && typeof err.detail === "object" ? err.detail : null;
   if (!detail) return null;
+  if (detail.code && String(detail.code) === "edit_lock_conflict") return null;
   return {
     message: String(detail.message || "Conflito de atualizacao."),
     expected: toInt(detail.expected_row_version),
@@ -3307,7 +3542,24 @@ function extractConflictDetail(err) {
   };
 }
 
+function extractLockConflictDetail(err) {
+  const detail = err && err.detail && typeof err.detail === "object" ? err.detail : null;
+  if (!detail) return null;
+  if (String(detail.code || "") !== "edit_lock_conflict") return null;
+  return {
+    ownerName: text(detail.lock_owner_name || ""),
+    ownerRole: text(detail.lock_owner_role || ""),
+    expiresAt: text(detail.lock_expires_at || "")
+  };
+}
+
 function conflictMessageFromError(err) {
+  const lockInfo = extractLockConflictDetail(err);
+  if (lockInfo) {
+    const owner = (lockInfo.ownerName || "-") + " (" + (lockInfo.ownerRole || "-") + ")";
+    const until = lockInfo.expiresAt ? fmtDateTime(lockInfo.expiresAt) : "-";
+    return "Edicao bloqueada por outro usuario: " + owner + ". Expira em: " + until + ".";
+  }
   const info = extractConflictDetail(err);
   if (!info) return "Conflito de atualizacao detectado. Atualize os dados antes de salvar novamente.";
   const when = info.updatedAt ? fmtDateTime(info.updatedAt) : "-";

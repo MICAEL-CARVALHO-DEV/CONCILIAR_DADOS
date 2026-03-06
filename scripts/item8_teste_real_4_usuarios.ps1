@@ -138,48 +138,29 @@ $full = Invoke-Json -Method "GET" -Url "$base/emendas/$eid" -Headers $ownerHeade
 $rv0 = [int]$full.row_version
 if ($rv0 -le 0) { throw "row_version invalido na emenda de teste" }
 
-Write-Host "[item8] 4 usuarios registrando NOTE em paralelo"
-$jobs = @()
-foreach ($u in $users) {
-  $jobs += Start-Job -ScriptBlock {
-    param($baseArg, $eidArg, $userNameArg, $tokenArg)
-    $headers = @{
-      Authorization = "Bearer $tokenArg"
-      "X-Session-Token" = $tokenArg
-      "Content-Type" = "application/json"
-    }
-    $body = @{
-      tipo_evento = "NOTE"
-      origem_evento = "UI"
-      motivo = "item8 note $userNameArg"
-    } | ConvertTo-Json
-
-    $resp = Invoke-RestMethod -Method "POST" -Uri "$baseArg/emendas/$eidArg/eventos" -Headers $headers -ContentType "application/json" -Body $body
-    [pscustomobject]@{
-      user = $userNameArg
-      ok = [bool]$resp.ok
-    }
-  } -ArgumentList $base, $eid, $u.name, $u.token
-}
-
-Wait-Job -Job $jobs | Out-Null
-$jobResults = @($jobs | Receive-Job)
-$jobs | Remove-Job -Force
-
-$failed = @($jobResults | Where-Object { -not $_.ok })
-if ($failed.Count -gt 0) {
-  throw ("falha em note paralelo: " + (($failed | ForEach-Object { $_.user }) -join ", "))
-}
-
 $apg1 = @($users | Where-Object { $_.name -eq $ApgUser1 })[0]
 $apg2 = @($users | Where-Object { $_.name -eq $ApgUser2 })[0]
 $cont1 = @($users | Where-Object { $_.name -eq $ContabilUser1 })[0]
+$cont2 = @($users | Where-Object { $_.name -eq $ContabilUser2 })[0]
 
 $apg1Headers = New-AuthHeaders -token $apg1.token
 $apg2Headers = New-AuthHeaders -token $apg2.token
 $cont1Headers = New-AuthHeaders -token $cont1.token
+$cont2Headers = New-AuthHeaders -token $cont2.token
 
-Write-Host "[item8] conflito otimista APG x APG (esperado 409 na versao antiga)"
+Write-Host "[item8] APG1 adquirindo lock da emenda"
+$lockApg1 = Invoke-Json -Method "POST" -Url "$base/emendas/$eid/lock/acquire" -Headers $apg1Headers -Body @{ force = $false }
+if (-not $lockApg1.can_edit) { throw "APG1 nao conseguiu adquirir lock de edicao" }
+
+Write-Host "[item8] validando modo leitura para APG2 + 2 CONTABIL"
+$lockApg2 = Invoke-Json -Method "POST" -Url "$base/emendas/$eid/lock/acquire" -Headers $apg2Headers -Body @{ force = $false }
+$lockCont1 = Invoke-Json -Method "POST" -Url "$base/emendas/$eid/lock/acquire" -Headers $cont1Headers -Body @{ force = $false }
+$lockCont2 = Invoke-Json -Method "POST" -Url "$base/emendas/$eid/lock/acquire" -Headers $cont2Headers -Body @{ force = $false }
+if ($lockApg2.can_edit -or $lockCont1.can_edit -or $lockCont2.can_edit) {
+  throw "usuario sem lock ficou com permissao de edicao; esperado somente leitura"
+}
+
+Write-Host "[item8] APG1 edita Plano A"
 $edit1 = Invoke-Json -Method "POST" -Url "$base/emendas/$eid/eventos" -Headers $apg1Headers -Body @{
   tipo_evento = "EDIT_FIELD"
   campo_alterado = "Plano A"
@@ -191,6 +172,7 @@ $edit1 = Invoke-Json -Method "POST" -Url "$base/emendas/$eid/eventos" -Headers $
 $rv1 = [int]$edit1.row_version
 if ($rv1 -le $rv0) { throw "row_version nao evoluiu no edit APG1" }
 
+Write-Host "[item8] APG2 tenta editar sem lock (esperado 409)"
 $conflict409 = $false
 try {
   $null = Invoke-Json -Method "POST" -Url "$base/emendas/$eid/eventos" -Headers $apg2Headers -Body @{
@@ -206,6 +188,11 @@ try {
   if ($code -eq 409) { $conflict409 = $true } else { throw }
 }
 if (-not $conflict409) { throw "nao retornou 409 no conflito APG x APG" }
+
+Write-Host "[item8] APG1 libera lock e APG2 assume edicao"
+$null = Invoke-Json -Method "POST" -Url "$base/emendas/$eid/lock/release" -Headers $apg1Headers -Body @{}
+$lockApg2AfterRelease = Invoke-Json -Method "POST" -Url "$base/emendas/$eid/lock/acquire" -Headers $apg2Headers -Body @{ force = $false }
+if (-not $lockApg2AfterRelease.can_edit) { throw "APG2 nao conseguiu assumir lock apos liberacao" }
 
 $edit2 = Invoke-Json -Method "POST" -Url "$base/emendas/$eid/eventos" -Headers $apg2Headers -Body @{
   tipo_evento = "EDIT_FIELD"
@@ -237,10 +224,10 @@ if ($got.plan_a -ne "A1" -or $got.plan_b -ne "B1") {
 
 $audit = Invoke-Json -Method "GET" -Url "$base/audit" -Headers $ownerHeaders -Body $null
 $auditByEmenda = @($audit | Where-Object { [int]$_.emenda_id -eq $eid })
-$noteRows = @($auditByEmenda | Where-Object { $_.tipo_evento -eq "NOTE" -and [string]$_.motivo -like "item8 note *" })
-$noteUsers = @($noteRows | ForEach-Object { [string]$_.usuario_nome } | Sort-Object -Unique)
-if ($noteUsers.Count -lt 4) {
-  throw "auditoria nao registrou os 4 usuarios no NOTE paralelo"
+$editRows = @($auditByEmenda | Where-Object { $_.tipo_evento -eq "EDIT_FIELD" -and ([string]$_.motivo -like "item8 apg*") })
+$editUsers = @($editRows | ForEach-Object { [string]$_.usuario_nome } | Sort-Object -Unique)
+if ($editUsers.Count -lt 2) {
+  throw "auditoria nao registrou as 2 edicoes (APG1 e APG2)"
 }
 
 $result = [pscustomobject]@{
@@ -249,11 +236,16 @@ $result = [pscustomobject]@{
   emenda_id = $eid
   id_interno = $idInterno
   users = @($users | ForEach-Object { "$($_.name):$($_.role)" })
-  note_users = $noteUsers
+  readonly_users_while_locked = @(
+    "${ApgUser2}:can_edit=$($lockApg2.can_edit)",
+    "${ContabilUser1}:can_edit=$($lockCont1.can_edit)",
+    "${ContabilUser2}:can_edit=$($lockCont2.can_edit)"
+  )
   conflict_409 = $conflict409
   contabil_status_403 = $contabilStatus403
   plan_a_final = $got.plan_a
   plan_b_final = $got.plan_b
+  edit_users = $editUsers
   audit_rows_for_emenda = @($auditByEmenda).Count
 }
 

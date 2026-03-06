@@ -17,6 +17,7 @@ Sistema de governanca de emendas com trilha de auditoria por usuario.
 - Mapa logico do sistema: `MAPA_LOGICO_CONCILIAR_DADOS.md`
 - Guia Trello + Notion: `GUIA_TRELLO_NOTION_OPERACAO.md`
 - Guia de skills e habilidades: `GUIA_SKILLS_E_HABILIDADES.md`
+- Guia do orquestrador multi-IA: `GUIA_ORQUESTRADOR_MULTI_IA.md`
 - Checklist final de deploy/operacao: `CHECKLIST_DEPLOY_FINAL_OPERACAO.md`
 
 ## Stack

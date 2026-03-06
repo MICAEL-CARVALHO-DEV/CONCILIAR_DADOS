@@ -19,8 +19,9 @@ from sqlalchemy import func, inspect, or_, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from .ai_schemas import AIProviderStatusResponse, AIWorkflowRequest, AIWorkflowResponse
 from .db import Base, SessionLocal, engine, get_db
-from .models import AuthAuditLog, Emenda, ExportLog, Historico, ImportLinha, ImportLote, Usuario, UsuarioSessao
+from .models import AuthAuditLog, Emenda, EmendaLock, ExportLog, Historico, ImportLinha, ImportLote, Usuario, UsuarioSessao
 from .schemas import (
     AuthGoogleIn,
     AuthAuditLogOut,
@@ -29,6 +30,8 @@ from .schemas import (
     AuthRecoveryRequestIn,
     AuthRegisterIn,
     EmendaCreate,
+    EmendaLockAcquireIn,
+    EmendaLockOut,
     EmendaOut,
     EmendaStatusUpdate,
     EmendaVersionarIn,
@@ -45,6 +48,7 @@ from .schemas import (
     UserOut,
     UserStatusUpdate,
 )
+from .services.ai_orchestrator import AIOrchestrator, OrchestrationError
 from .settings import settings
 
 app = FastAPI(title="API Emendas", version="0.5.0")
@@ -57,13 +61,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+ai_orchestrator = AIOrchestrator(settings)
 
 ALLOWED_ROLES = set(ROLES)
 MANAGER_ROLES = {"APG", "SUPERVISAO", "PROGRAMADOR"}
+EDITOR_ROLES = {"APG", "CONTABIL", "PROGRAMADOR"}
 OWNER_ROLE = "PROGRAMADOR"
 PUBLIC_REGISTER_ROLES = {"APG", "SUPERVISAO", "CONTABIL", "POWERBI"}
 # Apenas estes usuarios podem ser PROGRAMADOR e sao imutaveis por regra de governanca.
 IMMUTABLE_OWNER_NAMES = {"MICAEL_DEV", "VITOR_DEV"}
+EDIT_LOCK_TTL_SECONDS = 90
 SESSION_HOURS = max(int(settings.JWT_EXPIRE_HOURS or 12), 1)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 VERSIONED_ID_RE = re.compile(r"^(?P<base>.+)-v(?P<num>\d+)$", re.IGNORECASE)
@@ -335,6 +342,176 @@ def _assert_row_version_match(emenda: Emenda, expected: int | None, action: str)
 
 def _bump_row_version(emenda: Emenda) -> None:
     emenda.row_version = _emenda_row_version(emenda) + 1
+
+
+def _actor_can_edit_records(actor: dict | None) -> bool:
+    role = str((actor or {}).get("role") or "").strip().upper()
+    return role in EDITOR_ROLES
+
+
+def _lock_expires_at(now: datetime | None = None) -> datetime:
+    base = now or _utcnow()
+    return base + timedelta(seconds=EDIT_LOCK_TTL_SECONDS)
+
+
+def _get_valid_emenda_lock(db: Session, emenda_id: int) -> EmendaLock | None:
+    lock = db.get(EmendaLock, emenda_id)
+    if not lock:
+        return None
+
+    now = _utcnow()
+    if lock.expires_at and lock.expires_at <= now:
+        return None
+    return lock
+
+
+def _lock_payload(
+    emenda_id: int,
+    lock: EmendaLock | None,
+    actor: dict | None,
+    message: str = "",
+) -> dict:
+    actor_id = int((actor or {}).get("id") or 0)
+    is_owner = bool(lock and actor_id > 0 and int(lock.usuario_id or 0) == actor_id)
+    can_edit_role = _actor_can_edit_records(actor)
+    can_edit = can_edit_role and (lock is None or is_owner)
+
+    return {
+        "emenda_id": emenda_id,
+        "locked": bool(lock),
+        "owner_user_id": (int(lock.usuario_id) if lock and lock.usuario_id is not None else None),
+        "owner_user_name": str(lock.usuario_nome or "") if lock else "",
+        "owner_user_role": str(lock.setor or "") if lock else "",
+        "acquired_at": (lock.acquired_at if lock else None),
+        "heartbeat_at": (lock.heartbeat_at if lock else None),
+        "expires_at": (lock.expires_at if lock else None),
+        "is_owner": is_owner,
+        "can_edit": can_edit,
+        "message": message,
+    }
+
+
+def _upsert_emenda_lock(db: Session, emenda_id: int, actor: dict, now: datetime | None = None) -> EmendaLock:
+    at = now or _utcnow()
+    lock = db.get(EmendaLock, emenda_id)
+    if not lock:
+        lock = EmendaLock(
+            emenda_id=emenda_id,
+            usuario_id=actor.get("id"),
+            usuario_nome=str(actor.get("name") or ""),
+            setor=str(actor.get("role") or ""),
+            acquired_at=at,
+            heartbeat_at=at,
+            expires_at=_lock_expires_at(at),
+        )
+        db.add(lock)
+        db.flush()
+        return lock
+
+    lock.usuario_id = actor.get("id")
+    lock.usuario_nome = str(actor.get("name") or "")
+    lock.setor = str(actor.get("role") or "")
+    lock.acquired_at = at
+    lock.heartbeat_at = at
+    lock.expires_at = _lock_expires_at(at)
+    db.add(lock)
+    db.flush()
+    return lock
+
+
+def _acquire_emenda_lock(db: Session, emenda_id: int, actor: dict, force: bool = False) -> dict:
+    lock = _get_valid_emenda_lock(db, emenda_id)
+    if not _actor_can_edit_records(actor):
+        return _lock_payload(
+            emenda_id,
+            lock,
+            actor,
+            message="Perfil sem permissao de edicao. Modo leitura.",
+        )
+
+    actor_id = int(actor.get("id") or 0)
+    now = _utcnow()
+    if lock:
+        lock_owner_id = int(lock.usuario_id or 0)
+        if lock_owner_id == actor_id:
+            lock.heartbeat_at = now
+            lock.expires_at = _lock_expires_at(now)
+            db.add(lock)
+            db.flush()
+            return _lock_payload(emenda_id, lock, actor, message="Lock renovado.")
+
+        if not force:
+            return _lock_payload(
+                emenda_id,
+                lock,
+                actor,
+                message="Emenda em edicao por outro usuario. Modo leitura ativo.",
+            )
+
+        if str(actor.get("role") or "").strip().upper() != OWNER_ROLE:
+            raise HTTPException(status_code=403, detail="somente PROGRAMADOR pode forcar lock")
+
+    new_lock = _upsert_emenda_lock(db, emenda_id, actor, now)
+    return _lock_payload(emenda_id, new_lock, actor, message="Lock adquirido.")
+
+
+def _renew_emenda_lock(db: Session, emenda_id: int, actor: dict) -> dict:
+    return _acquire_emenda_lock(db, emenda_id, actor, force=False)
+
+
+def _release_emenda_lock(db: Session, emenda_id: int, actor: dict) -> dict:
+    lock = _get_valid_emenda_lock(db, emenda_id)
+    if not lock:
+        return _lock_payload(emenda_id, None, actor, message="Sem lock ativo.")
+
+    actor_id = int(actor.get("id") or 0)
+    lock_owner_id = int(lock.usuario_id or 0)
+    actor_role = str(actor.get("role") or "").strip().upper()
+    can_force = actor_role == OWNER_ROLE
+
+    if actor_id != lock_owner_id and not can_force:
+        return _lock_payload(
+            emenda_id,
+            lock,
+            actor,
+            message="Lock pertence a outro usuario. Sem permissao para liberar.",
+        )
+
+    db.delete(lock)
+    db.flush()
+    return _lock_payload(emenda_id, None, actor, message="Lock liberado.")
+
+
+def _assert_edit_lock_or_raise(db: Session, emenda_id: int, actor: dict, action: str) -> None:
+    if not _actor_can_edit_records(actor):
+        raise HTTPException(status_code=403, detail="perfil sem permissao de edicao")
+
+    lock = _get_valid_emenda_lock(db, emenda_id)
+    actor_id = int(actor.get("id") or 0)
+    now = _utcnow()
+
+    if lock:
+        lock_owner_id = int(lock.usuario_id or 0)
+        if lock_owner_id != actor_id:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "edit_lock_conflict",
+                    "message": "emenda em edicao por outro usuario (modo leitura)",
+                    "action": action,
+                    "lock_owner_user_id": int(lock.usuario_id) if lock.usuario_id is not None else None,
+                    "lock_owner_name": str(lock.usuario_nome or ""),
+                    "lock_owner_role": str(lock.setor or ""),
+                    "lock_expires_at": (lock.expires_at.isoformat() + "Z") if lock.expires_at else "",
+                },
+            )
+        lock.heartbeat_at = now
+        lock.expires_at = _lock_expires_at(now)
+        db.add(lock)
+        db.flush()
+        return
+
+    _upsert_emenda_lock(db, emenda_id, actor, now)
 
 
 def _presence_payload(emenda_id: int, users: list[dict]) -> dict:
@@ -931,6 +1108,23 @@ def _ensure_legacy_schema() -> None:
                 conn.execute(text(st))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_historico_data_hora ON historico(data_hora)"))
 
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS emenda_locks ("
+                "emenda_id INTEGER PRIMARY KEY, "
+                "usuario_id INTEGER NULL, "
+                "usuario_nome VARCHAR(120) NOT NULL DEFAULT '', "
+                "setor VARCHAR(40) NOT NULL DEFAULT '', "
+                "acquired_at TIMESTAMP NOT NULL, "
+                "heartbeat_at TIMESTAMP NOT NULL, "
+                "expires_at TIMESTAMP NOT NULL"
+                ")"
+            )
+        )
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_emenda_locks_expires_at ON emenda_locks(expires_at)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_emenda_locks_usuario_id ON emenda_locks(usuario_id)"))
+
     if "import_linhas" in tables:
         with engine.begin() as conn:
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_import_linhas_id_interno ON import_linhas(id_interno)"))
@@ -1001,6 +1195,8 @@ def health() -> dict:
         "shared_key_enabled": settings.shared_key_auth_enabled,
         "app_env": settings.app_env_normalized,
         "roles": ROLES,
+        "ai_orchestrator_enabled": settings.AI_ORCHESTRATOR_ENABLED,
+        "ai_configured_providers": ai_orchestrator.configured_count(),
     }
 
 
@@ -1022,6 +1218,25 @@ def favicon() -> Response:
 @app.get("/roles")
 def roles() -> dict:
     return {"roles": ROLES}
+
+
+@app.get("/ai/providers/status", response_model=AIProviderStatusResponse)
+def ai_provider_status(_actor: dict = Depends(_require_owner)) -> AIProviderStatusResponse:
+    return AIProviderStatusResponse(
+        orchestrator_enabled=settings.AI_ORCHESTRATOR_ENABLED,
+        providers=ai_orchestrator.provider_status(),
+    )
+
+
+@app.post("/ai/workflows/review-loop", response_model=AIWorkflowResponse)
+def ai_workflow_review_loop(
+    payload: AIWorkflowRequest,
+    actor: dict = Depends(_require_owner),
+) -> AIWorkflowResponse:
+    try:
+        return ai_orchestrator.run_review_loop(payload=payload, actor=actor)
+    except OrchestrationError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
 @app.post("/auth/google-intake")
@@ -1614,6 +1829,67 @@ def obter_emenda(emenda_id: int, _actor: dict = Depends(_actor_from_headers), db
     return emenda
 
 
+@app.get("/emendas/{emenda_id}/lock", response_model=EmendaLockOut)
+def obter_lock_emenda(
+    emenda_id: int,
+    actor: dict = Depends(_actor_from_headers),
+    db: Session = Depends(get_db),
+):
+    emenda = db.get(Emenda, emenda_id)
+    if not emenda:
+        raise HTTPException(status_code=404, detail="Emenda nao encontrada")
+
+    lock = _get_valid_emenda_lock(db, emenda_id)
+    message = "Sem lock ativo." if not lock else "Lock ativo."
+    return _lock_payload(emenda_id, lock, actor, message=message)
+
+
+@app.post("/emendas/{emenda_id}/lock/acquire", response_model=EmendaLockOut)
+def adquirir_lock_emenda(
+    emenda_id: int,
+    payload: EmendaLockAcquireIn,
+    actor: dict = Depends(_actor_from_headers),
+    db: Session = Depends(get_db),
+):
+    emenda = db.get(Emenda, emenda_id)
+    if not emenda:
+        raise HTTPException(status_code=404, detail="Emenda nao encontrada")
+
+    data = _acquire_emenda_lock(db, emenda_id, actor, force=bool(payload.force))
+    db.commit()
+    return data
+
+
+@app.post("/emendas/{emenda_id}/lock/renew", response_model=EmendaLockOut)
+def renovar_lock_emenda(
+    emenda_id: int,
+    actor: dict = Depends(_actor_from_headers),
+    db: Session = Depends(get_db),
+):
+    emenda = db.get(Emenda, emenda_id)
+    if not emenda:
+        raise HTTPException(status_code=404, detail="Emenda nao encontrada")
+
+    data = _renew_emenda_lock(db, emenda_id, actor)
+    db.commit()
+    return data
+
+
+@app.post("/emendas/{emenda_id}/lock/release", response_model=EmendaLockOut)
+def liberar_lock_emenda(
+    emenda_id: int,
+    actor: dict = Depends(_actor_from_headers),
+    db: Session = Depends(get_db),
+):
+    emenda = db.get(Emenda, emenda_id)
+    if not emenda:
+        raise HTTPException(status_code=404, detail="Emenda nao encontrada")
+
+    data = _release_emenda_lock(db, emenda_id, actor)
+    db.commit()
+    return data
+
+
 @app.post("/emendas", response_model=EmendaOut)
 def criar_emenda(
     payload: EmendaCreate,
@@ -1685,11 +1961,13 @@ def alterar_status_oficial(
     if not emenda:
         raise HTTPException(status_code=404, detail="Emenda nao encontrada")
 
+    _assert_edit_lock_or_raise(db, emenda_id, actor, "status_oficial")
     _assert_row_version_match(emenda, payload.expected_row_version, "status_oficial")
     origin = _resolve_event_origin(x_event_origin, actor, fallback="UI")
 
     anterior = emenda.status_oficial
     if anterior == payload.novo_status:
+        db.commit()
         return {
             "ok": True,
             "changed": False,
@@ -1740,6 +2018,7 @@ def adicionar_evento(
     if not emenda:
         raise HTTPException(status_code=404, detail="Emenda nao encontrada")
 
+    _assert_edit_lock_or_raise(db, emenda_id, actor, "evento")
     _assert_row_version_match(emenda, payload.expected_row_version, "evento")
     if payload.tipo_evento == "OFFICIAL_STATUS":
         raise HTTPException(status_code=400, detail="Use /status para status oficial")
@@ -1795,6 +2074,7 @@ def versionar_emenda(
     if not origem:
         raise HTTPException(status_code=404, detail="Emenda nao encontrada")
 
+    _assert_edit_lock_or_raise(db, emenda_id, actor, "versionar")
     _assert_row_version_match(origem, payload.expected_row_version, "versionar")
     origin = _resolve_event_origin(x_event_origin, actor, fallback="API")
 

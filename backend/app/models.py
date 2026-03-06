@@ -97,6 +97,18 @@ class Emenda(Base):
     historicos: Mapped[list["Historico"]] = relationship(back_populates="emenda", cascade="all, delete-orphan")
 
 
+class EmendaLock(Base):
+    __tablename__ = "emenda_locks"
+
+    emenda_id: Mapped[int] = mapped_column(ForeignKey("emendas.id"), primary_key=True)
+    usuario_id: Mapped[Optional[int]] = mapped_column(ForeignKey("usuarios.id"), index=True, nullable=True)
+    usuario_nome: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    setor: Mapped[str] = mapped_column(String(40), default="", nullable=False)
+    acquired_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    heartbeat_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, index=True, nullable=False)
+
+
 class ImportLote(Base):
     __tablename__ = "lotes_importacao"
 

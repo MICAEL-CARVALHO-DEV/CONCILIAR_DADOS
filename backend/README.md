@@ -46,3 +46,17 @@ Backend SEC Emendas - FastAPI + PostgreSQL/SQLite
    Objetivo:
    - Registrar lote de importacao (arquivo/hash/resumo)
    - Registrar log de exportacao (formato/filtros/quantidades)
+
+10) Orquestrador Multi-IA (Codex + Gemini + revisores)
+   Requisitos minimos em `.env`:
+   - OPENAI_API_KEY e GEMINI_API_KEY (reis)
+   - Opcional: ANTHROPIC_API_KEY, GROQ_API_KEY, CLOUDFLARE_* e/ou Ollama local
+
+   Endpoints:
+   - GET  /ai/providers/status
+   - POST /ai/workflows/review-loop
+
+   Observacoes:
+   - Rotas protegidas por perfil PROGRAMADOR.
+   - Fluxo padrao do review-loop: planejar -> implementar -> revisar -> consolidar.
+   - O endpoint de status mostra quais providers estao configurados no ambiente.

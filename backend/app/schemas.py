@@ -259,6 +259,25 @@ class EmendaOut(BaseModel):
     class Config:
         from_attributes = True
 
+
+class EmendaLockAcquireIn(BaseModel):
+    force: bool = False
+
+
+class EmendaLockOut(BaseModel):
+    emenda_id: int
+    locked: bool = False
+    owner_user_id: int | None = None
+    owner_user_name: str = ""
+    owner_user_role: str = ""
+    acquired_at: datetime | None = None
+    heartbeat_at: datetime | None = None
+    expires_at: datetime | None = None
+    is_owner: bool = False
+    can_edit: bool = False
+    message: str = ""
+
+
 class ImportLoteCreate(BaseModel):
     arquivo_nome: str = Field(min_length=1, max_length=255)
     arquivo_hash: str = Field(default="", max_length=128)
