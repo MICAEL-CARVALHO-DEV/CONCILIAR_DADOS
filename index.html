@@ -282,7 +282,8 @@
     (function () {
       function loadApp() {
         var appScript = document.createElement("script");
-        appScript.src = "app.js";
+        var appVer = "dev-" + String(Date.now());
+        appScript.src = "app.js?v=" + encodeURIComponent(appVer);
         document.body.appendChild(appScript);
       }
 

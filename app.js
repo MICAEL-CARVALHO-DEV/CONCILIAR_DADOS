@@ -2601,27 +2601,27 @@ function renderEmendaLockInfo(rec) {
 }
 
 async function fetchEmendaLockStatus(rec) {
-  const backendId = await ensureBackendEmenda(rec);
-  return await apiRequest("GET", "/emendas/" + String(backendId) + "/lock", undefined, "UI");
+  const backendId = await ensureBackendEmenda(rec, { handleAuthFailure: false });
+  return await apiRequest("GET", "/emendas/" + String(backendId) + "/lock", undefined, "UI", { handleAuthFailure: false });
 }
 
 async function acquireEmendaLock(rec, forceAcquire) {
-  const backendId = await ensureBackendEmenda(rec);
+  const backendId = await ensureBackendEmenda(rec, { handleAuthFailure: false });
   return await apiRequest("POST", "/emendas/" + String(backendId) + "/lock/acquire", {
     force: !!forceAcquire
-  }, "UI");
+  }, "UI", { handleAuthFailure: false });
 }
 
 async function renewEmendaLock(rec) {
-  const backendId = await ensureBackendEmenda(rec);
-  return await apiRequest("POST", "/emendas/" + String(backendId) + "/lock/renew", {}, "UI");
+  const backendId = await ensureBackendEmenda(rec, { handleAuthFailure: false });
+  return await apiRequest("POST", "/emendas/" + String(backendId) + "/lock/renew", {}, "UI", { handleAuthFailure: false });
 }
 
 async function releaseEmendaLock(rec) {
   if (!rec || !isApiEnabled()) return;
-  const backendId = getBackendIdForRecord(rec) || await ensureBackendEmenda(rec);
+  const backendId = getBackendIdForRecord(rec) || await ensureBackendEmenda(rec, { handleAuthFailure: false });
   if (!backendId) return;
-  await apiRequest("POST", "/emendas/" + String(backendId) + "/lock/release", {}, "UI");
+  await apiRequest("POST", "/emendas/" + String(backendId) + "/lock/release", {}, "UI", { handleAuthFailure: false });
 }
 
 async function tickEmendaLock() {
@@ -3102,7 +3102,11 @@ async function syncGenericEventToApi(rec, payload) {
 }
 
 // Garante que o registro local tenha ID correspondente no backend.
-async function ensureBackendEmenda(rec) {
+async function ensureBackendEmenda(rec, options) {
+  const requestOpts = options && typeof options === "object" ? options : {};
+  const handleAuthFailure = Object.prototype.hasOwnProperty.call(requestOpts, "handleAuthFailure")
+    ? !!requestOpts.handleAuthFailure
+    : true;
   if (rec.backend_id) return rec.backend_id;
 
   const known = apiEmendaIdByInterno[rec.id];
@@ -3111,7 +3115,7 @@ async function ensureBackendEmenda(rec) {
     return rec.backend_id;
   }
 
-  const remoteList = await apiRequest("GET", "/emendas", undefined, "API");
+  const remoteList = await apiRequest("GET", "/emendas", undefined, "API", { handleAuthFailure: handleAuthFailure });
   const found = (Array.isArray(remoteList) ? remoteList : []).find(function (x) {
     return text(x.id_interno) === rec.id;
   });
@@ -3142,7 +3146,7 @@ async function ensureBackendEmenda(rec) {
     valor_atual: toNumber(rec.valor_atual || 0),
     processo_sei: rec.processo_sei || "",
     status_oficial: deriveStatusForBackend(rec)
-  }, "IMPORT");
+  }, "IMPORT", { handleAuthFailure: handleAuthFailure });
 
   rec.backend_id = created && created.id != null ? Number(created.id) : null;
   if (rec.backend_id) apiEmendaIdByInterno[rec.id] = rec.backend_id;
@@ -3410,7 +3414,9 @@ function getApiBaseUrl() {
 }
 
 // Wrapper autenticado para chamadas privadas da API.
-async function apiRequest(method, path, body, eventOrigin) {
+async function apiRequest(method, path, body, eventOrigin, options) {
+  const requestOpts = options && typeof options === "object" ? options : {};
+  const handleAuthFailure = Object.prototype.hasOwnProperty.call(requestOpts, "handleAuthFailure") ? !!requestOpts.handleAuthFailure : false;
   const url = getApiBaseUrl() + path;
   const opts = { method: method, headers: buildApiHeaders(eventOrigin) };
   if (body !== undefined) {
@@ -3445,7 +3451,7 @@ async function apiRequest(method, path, body, eventOrigin) {
     apiLastError = "HTTP " + resp.status + " " + detailMessage;
     applyAccessProfile();
 
-    if (resp.status === 401 && isApiEnabled()) {
+    if (resp.status === 401 && isApiEnabled() && handleAuthFailure) {
       clearStoredSessionToken();
       closeApiSocket();
       showAuthGate("Sessao expirada. Faca login novamente.");
