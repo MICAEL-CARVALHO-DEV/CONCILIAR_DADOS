@@ -136,6 +136,19 @@ class EmendaCreate(BaseModel):
     id_interno: str
     ano: int
     identificacao: str
+    cod_subfonte: str = ""
+    deputado: str = ""
+    cod_uo: str = ""
+    sigla_uo: str = ""
+    cod_orgao: str = ""
+    cod_acao: str = ""
+    descricao_acao: str = ""
+    plan_a: str = ""
+    plan_b: str = ""
+    municipio: str = ""
+    valor_inicial: float = 0
+    valor_atual: float = 0
+    processo_sei: str = ""
     status_oficial: str = "Recebido"
 
     @field_validator("status_oficial")
@@ -150,6 +163,7 @@ class EmendaCreate(BaseModel):
 class EmendaStatusUpdate(BaseModel):
     novo_status: str
     motivo: str
+    expected_row_version: int | None = Field(default=None, ge=1)
 
     @field_validator("novo_status")
     @classmethod
@@ -175,6 +189,7 @@ class EventoCreate(BaseModel):
     valor_antigo: str = ""
     valor_novo: str = ""
     motivo: str = ""
+    expected_row_version: int | None = Field(default=None, ge=1)
 
     @field_validator("tipo_evento")
     @classmethod
@@ -197,10 +212,19 @@ class EventoCreate(BaseModel):
 
 class EmendaVersionarIn(BaseModel):
     motivo: str = "Nova versao"
+    expected_row_version: int | None = Field(default=None, ge=1)
     ano: int | None = None
     identificacao: str | None = None
+    cod_subfonte: str | None = None
     municipio: str | None = None
     deputado: str | None = None
+    cod_uo: str | None = None
+    sigla_uo: str | None = None
+    cod_orgao: str | None = None
+    cod_acao: str | None = None
+    descricao_acao: str | None = None
+    plan_a: str | None = None
+    plan_b: str | None = None
     valor_inicial: float | None = None
     valor_atual: float | None = None
     processo_sei: str | None = None
@@ -211,10 +235,25 @@ class EmendaOut(BaseModel):
     id_interno: str
     ano: int
     identificacao: str
+    cod_subfonte: str
+    deputado: str
+    cod_uo: str
+    sigla_uo: str
+    cod_orgao: str
+    cod_acao: str
+    descricao_acao: str
+    plan_a: str
+    plan_b: str
+    municipio: str
+    valor_inicial: float
+    valor_atual: float
+    processo_sei: str
     status_oficial: str
     parent_id: int | None = None
     version: int = 1
+    row_version: int = 1
     is_current: bool = True
+    created_at: datetime
     updated_at: datetime
 
     class Config:

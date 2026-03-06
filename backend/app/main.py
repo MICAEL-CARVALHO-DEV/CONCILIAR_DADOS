@@ -4,6 +4,7 @@ import hashlib
 import json
 import re
 import secrets
+import unicodedata
 from typing import Annotated
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -61,6 +62,8 @@ ALLOWED_ROLES = set(ROLES)
 MANAGER_ROLES = {"APG", "SUPERVISAO", "PROGRAMADOR"}
 OWNER_ROLE = "PROGRAMADOR"
 PUBLIC_REGISTER_ROLES = {"APG", "SUPERVISAO", "CONTABIL", "POWERBI"}
+# Apenas estes usuarios podem ser PROGRAMADOR e sao imutaveis por regra de governanca.
+IMMUTABLE_OWNER_NAMES = {"MICAEL_DEV", "VITOR_DEV"}
 SESSION_HOURS = max(int(settings.JWT_EXPIRE_HOURS or 12), 1)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 VERSIONED_ID_RE = re.compile(r"^(?P<base>.+)-v(?P<num>\d+)$", re.IGNORECASE)
@@ -113,6 +116,61 @@ STATUS_TRANSITIONS = {
     "Cancelado": set(),
 }
 
+EMENDA_EDITABLE_FIELDS = {
+    "ano": "ano",
+    "identificacao": "identificacao",
+    "cod_subfonte": "cod_subfonte",
+    "deputado": "deputado",
+    "cod_uo": "cod_uo",
+    "sigla_uo": "sigla_uo",
+    "cod_orgao": "cod_orgao",
+    "cod_acao": "cod_acao",
+    "descricao_acao": "descricao_acao",
+    "plan_a": "plan_a",
+    "plan_b": "plan_b",
+    "municipio": "municipio",
+    "valor_inicial": "valor_inicial",
+    "valor_atual": "valor_atual",
+    "processo_sei": "processo_sei",
+}
+
+EMENDA_EDITABLE_FIELD_ALIASES = {
+    "ano": "ano",
+    "identificacao": "identificacao",
+    "identificacao_da_emenda": "identificacao",
+    "cod_subfonte": "cod_subfonte",
+    "codigo_subfonte": "cod_subfonte",
+    "deputado": "deputado",
+    "cod_uo": "cod_uo",
+    "codigo_uo": "cod_uo",
+    "sigla_uo": "sigla_uo",
+    "sigla_da_uo": "sigla_uo",
+    "cod_orgao": "cod_orgao",
+    "codigo_orgao": "cod_orgao",
+    "cod_acao": "cod_acao",
+    "codacao": "cod_acao",
+    "codigo_acao": "cod_acao",
+    "codigo_da_acao": "cod_acao",
+    "descricao_acao": "descricao_acao",
+    "descricao_da_acao": "descricao_acao",
+    "descritor_da_acao": "descricao_acao",
+    "plan_a": "plan_a",
+    "plano_a": "plan_a",
+    "planoa": "plan_a",
+    "plano_a_acao": "plan_a",
+    "plan_b": "plan_b",
+    "plano_b": "plan_b",
+    "planob": "plan_b",
+    "plano_b_acao": "plan_b",
+    "municipio": "municipio",
+    "valor_inicial": "valor_inicial",
+    "valor_inicial_epi": "valor_inicial",
+    "valor_atual": "valor_atual",
+    "valor_atual_epi": "valor_atual",
+    "processo_sei": "processo_sei",
+    "processo": "processo_sei",
+}
+
 
 class WsConnectionBroker:
     def __init__(self) -> None:
@@ -145,7 +203,86 @@ class WsConnectionBroker:
                     self._connections.discard(ws)
 
 
+class PresenceBroker:
+    def __init__(self) -> None:
+        self._by_emenda: dict[int, dict[WebSocket, dict]] = {}
+        self._by_socket: dict[WebSocket, set[int]] = {}
+        self._lock = asyncio.Lock()
+
+    @staticmethod
+    def _normalize_info(actor: dict) -> dict:
+        return {
+            "usuario_nome": str(actor.get("name") or "-"),
+            "setor": str(actor.get("role") or "-"),
+            "at": _utcnow().isoformat() + "Z",
+        }
+
+    @staticmethod
+    def _snapshot_from_bucket(bucket: dict[WebSocket, dict]) -> list[dict]:
+        dedup: dict[str, dict] = {}
+        for info in bucket.values():
+            key = f"{info.get('usuario_nome', '-')}|{info.get('setor', '-')}"
+            prev = dedup.get(key)
+            if prev is None or str(info.get("at") or "") > str(prev.get("at") or ""):
+                dedup[key] = {
+                    "usuario_nome": str(info.get("usuario_nome") or "-"),
+                    "setor": str(info.get("setor") or "-"),
+                    "at": str(info.get("at") or ""),
+                }
+        return sorted(
+            list(dedup.values()),
+            key=lambda item: (str(item.get("setor") or ""), str(item.get("usuario_nome") or "")),
+        )
+
+    async def join(self, websocket: WebSocket, emenda_id: int, actor: dict) -> list[dict]:
+        if emenda_id <= 0:
+            return []
+        async with self._lock:
+            bucket = self._by_emenda.setdefault(emenda_id, {})
+            bucket[websocket] = self._normalize_info(actor)
+            self._by_socket.setdefault(websocket, set()).add(emenda_id)
+            return self._snapshot_from_bucket(bucket)
+
+    async def leave(self, websocket: WebSocket, emenda_id: int) -> list[dict]:
+        if emenda_id <= 0:
+            return []
+        async with self._lock:
+            bucket = self._by_emenda.get(emenda_id)
+            if not bucket:
+                return []
+
+            bucket.pop(websocket, None)
+            socket_emendas = self._by_socket.get(websocket)
+            if socket_emendas is not None:
+                socket_emendas.discard(emenda_id)
+                if not socket_emendas:
+                    self._by_socket.pop(websocket, None)
+
+            if not bucket:
+                self._by_emenda.pop(emenda_id, None)
+                return []
+
+            return self._snapshot_from_bucket(bucket)
+
+    async def disconnect(self, websocket: WebSocket) -> dict[int, list[dict]]:
+        changes: dict[int, list[dict]] = {}
+        async with self._lock:
+            emenda_ids = list(self._by_socket.pop(websocket, set()))
+            for emenda_id in emenda_ids:
+                bucket = self._by_emenda.get(emenda_id)
+                if not bucket:
+                    continue
+                bucket.pop(websocket, None)
+                if not bucket:
+                    self._by_emenda.pop(emenda_id, None)
+                    changes[emenda_id] = []
+                else:
+                    changes[emenda_id] = self._snapshot_from_bucket(bucket)
+        return changes
+
+
 ws_broker = WsConnectionBroker()
+presence_broker = PresenceBroker()
 def _utcnow() -> datetime:
     return datetime.utcnow()
 
@@ -167,6 +304,47 @@ def _validate_status_transition(current_status: str, next_status: str) -> None:
             status_code=409,
             detail=f"transicao invalida: {current} -> {target}. Permitidos: {allowed_list}",
         )
+
+
+def _emenda_row_version(emenda: Emenda) -> int:
+    raw = int(emenda.row_version or 1)
+    return raw if raw > 0 else 1
+
+
+def _raise_row_version_conflict(emenda: Emenda, expected: int | None, action: str) -> None:
+    raise HTTPException(
+        status_code=409,
+        detail={
+            "code": "row_version_conflict",
+            "message": "conflito de atualizacao: registro foi alterado por outro usuario",
+            "action": action,
+            "expected_row_version": int(expected or 0),
+            "current_row_version": _emenda_row_version(emenda),
+            "current_updated_at": (emenda.updated_at.isoformat() + "Z") if emenda.updated_at else "",
+        },
+    )
+
+
+def _assert_row_version_match(emenda: Emenda, expected: int | None, action: str) -> None:
+    if expected is None:
+        return
+    current = _emenda_row_version(emenda)
+    if int(expected) != current:
+        _raise_row_version_conflict(emenda, expected, action)
+
+
+def _bump_row_version(emenda: Emenda) -> None:
+    emenda.row_version = _emenda_row_version(emenda) + 1
+
+
+def _presence_payload(emenda_id: int, users: list[dict]) -> dict:
+    return {
+        "type": "presence",
+        "entity": "emenda",
+        "id": emenda_id,
+        "users": users,
+        "at": _utcnow().isoformat() + "Z",
+    }
 
 
 def _resolve_event_origin(origin_raw: str | None, actor: dict | None = None, fallback: str = "API") -> str:
@@ -246,6 +424,50 @@ def _mask_history_pair(field_name: str | None, old_value: str | None, new_value:
         _mask_history_value(field_name, old_value),
         _mask_history_value(field_name, new_value),
     )
+
+
+def _normalize_edit_field_name(raw_field: str | None) -> str:
+    raw = (raw_field or "").strip().lower()
+    if not raw:
+        return ""
+    normalized = unicodedata.normalize("NFD", raw)
+    normalized = "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
+    normalized = re.sub(r"[^a-z0-9]+", "_", normalized).strip("_")
+    return normalized
+
+
+def _resolve_emenda_edit_field(raw_field: str | None) -> str:
+    normalized = _normalize_edit_field_name(raw_field)
+    if not normalized:
+        return ""
+    if normalized in EMENDA_EDITABLE_FIELDS:
+        return normalized
+    return EMENDA_EDITABLE_FIELD_ALIASES.get(normalized, "")
+
+
+def _apply_emenda_field_edit(emenda: Emenda, field_name: str, raw_value: str | None) -> None:
+    value = (raw_value or "").strip()
+    if field_name == "ano":
+        try:
+            emenda.ano = int(value or 0)
+        except ValueError as err:
+            raise HTTPException(status_code=400, detail="valor invalido para campo ano") from err
+        if emenda.ano <= 0:
+            raise HTTPException(status_code=400, detail="valor invalido para campo ano")
+        return
+
+    if field_name in {"valor_inicial", "valor_atual"}:
+        if not value:
+            setattr(emenda, field_name, 0)
+            return
+        try:
+            numeric = float(value.replace(".", "").replace(",", ".")) if value.count(",") == 1 and value.count(".") > 1 else float(value.replace(",", "."))
+        except ValueError as err:
+            raise HTTPException(status_code=400, detail=f"valor invalido para campo {field_name}") from err
+        setattr(emenda, field_name, numeric)
+        return
+
+    setattr(emenda, field_name, value)
 
 
 def _verify_password_modern(password: str, stored_hash: str) -> bool:
@@ -551,6 +773,23 @@ def _normalize_role(role: str) -> str:
     return value
 
 
+def _normalize_user_name(name: str) -> str:
+    return (name or "").strip().upper()
+
+
+def _is_immutable_owner_name(name: str) -> bool:
+    return _normalize_user_name(name) in IMMUTABLE_OWNER_NAMES
+
+
+def _assert_allowed_owner_identity(name: str) -> None:
+    if not _is_immutable_owner_name(name):
+        allowed = ", ".join(sorted(IMMUTABLE_OWNER_NAMES))
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"apenas usuarios oficiais podem ser PROGRAMADOR: {allowed}",
+        )
+
+
 def _actor_from_headers(
     authorization: Annotated[str | None, Header(alias="Authorization")] = None,
     x_session_token: Annotated[str | None, Header(alias="X-Session-Token")] = None,
@@ -663,8 +902,14 @@ def _ensure_legacy_schema() -> None:
             statements.append("ALTER TABLE emendas ADD COLUMN parent_id INTEGER")
         if "version" not in cols:
             statements.append("ALTER TABLE emendas ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
+        if "row_version" not in cols:
+            statements.append("ALTER TABLE emendas ADD COLUMN row_version INTEGER NOT NULL DEFAULT 1")
         if "is_current" not in cols:
             statements.append("ALTER TABLE emendas ADD COLUMN is_current BOOLEAN NOT NULL DEFAULT TRUE")
+        if "plan_a" not in cols:
+            statements.append("ALTER TABLE emendas ADD COLUMN plan_a TEXT NOT NULL DEFAULT ''")
+        if "plan_b" not in cols:
+            statements.append("ALTER TABLE emendas ADD COLUMN plan_b TEXT NOT NULL DEFAULT ''")
 
         with engine.begin() as conn:
             for st in statements:
@@ -673,6 +918,7 @@ def _ensure_legacy_schema() -> None:
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_emendas_status_oficial ON emendas(status_oficial)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_emendas_updated_at ON emendas(updated_at)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_emendas_is_current ON emendas(is_current)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_emendas_row_version ON emendas(row_version)"))
 
     if "historico" in tables:
         cols = {c["name"] for c in insp.get_columns("historico")}
@@ -906,6 +1152,7 @@ def auth_register(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="primeiro cadastro deve ser PROGRAMADOR",
             )
+        _assert_allowed_owner_identity(nome)
     elif actor is None:
         if role not in PUBLIC_REGISTER_ROLES:
             raise HTTPException(
@@ -923,6 +1170,8 @@ def auth_register(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="apenas PROGRAMADOR pode criar/aprovar perfis",
             )
+        if role == OWNER_ROLE:
+            _assert_allowed_owner_identity(nome)
 
     if using_google:
         pwd_hash = ""
@@ -1283,9 +1532,23 @@ def alterar_status_usuario(
     if actor_id is not None and int(actor_id) == int(user.id) and payload.ativo is False:
         raise HTTPException(status_code=400, detail="nao e permitido desativar o proprio usuario")
 
+    normalized_name = _normalize_user_name(user.nome)
+    is_immutable_owner = normalized_name in IMMUTABLE_OWNER_NAMES
+
+    if is_immutable_owner and payload.ativo is False:
+        raise HTTPException(status_code=403, detail="programador oficial imutavel nao pode ser desativado")
+
     if payload.perfil is not None:
-        user.perfil = payload.perfil
-        user.setor = payload.perfil
+        normalized_next_role = _normalize_role(payload.perfil)
+        if is_immutable_owner and normalized_next_role != OWNER_ROLE:
+            raise HTTPException(status_code=403, detail="programador oficial imutavel nao pode mudar de perfil")
+        if normalized_next_role == OWNER_ROLE and normalized_name not in IMMUTABLE_OWNER_NAMES:
+            raise HTTPException(
+                status_code=403,
+                detail="somente MICAEL_DEV e VITOR_DEV podem permanecer como PROGRAMADOR",
+            )
+        user.perfil = normalized_next_role
+        user.setor = normalized_next_role
 
     user.ativo = bool(payload.ativo)
 
@@ -1335,6 +1598,8 @@ def listar_emendas(
                 Emenda.municipio.ilike(needle),
                 Emenda.deputado.ilike(needle),
                 Emenda.processo_sei.ilike(needle),
+                Emenda.plan_a.ilike(needle),
+                Emenda.plan_b.ilike(needle),
             )
         )
 
@@ -1367,9 +1632,23 @@ def criar_emenda(
         id_interno=payload.id_interno,
         ano=payload.ano,
         identificacao=payload.identificacao,
+        cod_subfonte=payload.cod_subfonte,
+        deputado=payload.deputado,
+        cod_uo=payload.cod_uo,
+        sigla_uo=payload.sigla_uo,
+        cod_orgao=payload.cod_orgao,
+        cod_acao=payload.cod_acao,
+        descricao_acao=payload.descricao_acao,
+        plan_a=payload.plan_a,
+        plan_b=payload.plan_b,
+        municipio=payload.municipio,
+        valor_inicial=payload.valor_inicial,
+        valor_atual=payload.valor_atual,
+        processo_sei=payload.processo_sei,
         status_oficial=payload.status_oficial,
         parent_id=None,
         version=1,
+        row_version=1,
         is_current=True,
         created_at=now,
         updated_at=now,
@@ -1406,15 +1685,22 @@ def alterar_status_oficial(
     if not emenda:
         raise HTTPException(status_code=404, detail="Emenda nao encontrada")
 
+    _assert_row_version_match(emenda, payload.expected_row_version, "status_oficial")
     origin = _resolve_event_origin(x_event_origin, actor, fallback="UI")
 
     anterior = emenda.status_oficial
     if anterior == payload.novo_status:
-        return {"ok": True, "changed": False}
+        return {
+            "ok": True,
+            "changed": False,
+            "row_version": _emenda_row_version(emenda),
+            "updated_at": (emenda.updated_at.isoformat() + "Z") if emenda.updated_at else "",
+        }
 
     _validate_status_transition(anterior, payload.novo_status)
 
     emenda.status_oficial = payload.novo_status
+    _bump_row_version(emenda)
     emenda.updated_at = _utcnow()
     old_value_masked, new_value_masked = _mask_history_pair("status_oficial", anterior, payload.novo_status)
 
@@ -1433,8 +1719,13 @@ def alterar_status_oficial(
         )
     )
     db.commit()
+    db.refresh(emenda)
     _broadcast_update("emenda", emenda.id)
-    return {"ok": True}
+    return {
+        "ok": True,
+        "row_version": _emenda_row_version(emenda),
+        "updated_at": (emenda.updated_at.isoformat() + "Z") if emenda.updated_at else "",
+    }
 
 
 @app.post("/emendas/{emenda_id}/eventos")
@@ -1449,12 +1740,22 @@ def adicionar_evento(
     if not emenda:
         raise HTTPException(status_code=404, detail="Emenda nao encontrada")
 
+    _assert_row_version_match(emenda, payload.expected_row_version, "evento")
     if payload.tipo_evento == "OFFICIAL_STATUS":
         raise HTTPException(status_code=400, detail="Use /status para status oficial")
 
+    editable_field = ""
+    if payload.tipo_evento == "EDIT_FIELD":
+        editable_field = _resolve_emenda_edit_field(payload.campo_alterado)
+        if editable_field == "status_oficial":
+            raise HTTPException(status_code=400, detail="Use /status para status oficial")
+        if editable_field:
+            _apply_emenda_field_edit(emenda, editable_field, payload.valor_novo)
+
     origin = _resolve_event_origin(payload.origem_evento or x_event_origin, actor, fallback="UI")
 
-    old_value_masked, new_value_masked = _mask_history_pair(payload.campo_alterado, payload.valor_antigo, payload.valor_novo)
+    history_field = editable_field or payload.campo_alterado
+    old_value_masked, new_value_masked = _mask_history_pair(history_field, payload.valor_antigo, payload.valor_novo)
 
     db.add(
         Historico(
@@ -1464,16 +1765,22 @@ def adicionar_evento(
             setor=actor["role"],
             tipo_evento=payload.tipo_evento,
             origem_evento=origin,
-            campo_alterado=payload.campo_alterado,
+            campo_alterado=history_field,
             valor_antigo=old_value_masked,
             valor_novo=new_value_masked,
             motivo=payload.motivo,
         )
     )
+    _bump_row_version(emenda)
     emenda.updated_at = _utcnow()
     db.commit()
+    db.refresh(emenda)
     _broadcast_update("emenda", emenda.id)
-    return {"ok": True}
+    return {
+        "ok": True,
+        "row_version": _emenda_row_version(emenda),
+        "updated_at": (emenda.updated_at.isoformat() + "Z") if emenda.updated_at else "",
+    }
 
 
 @app.post("/emendas/{emenda_id}/versionar", response_model=EmendaOut)
@@ -1488,12 +1795,14 @@ def versionar_emenda(
     if not origem:
         raise HTTPException(status_code=404, detail="Emenda nao encontrada")
 
+    _assert_row_version_match(origem, payload.expected_row_version, "versionar")
     origin = _resolve_event_origin(x_event_origin, actor, fallback="API")
 
     now = _utcnow()
     next_version = int(origem.version or 1) + 1
 
     origem.is_current = False
+    _bump_row_version(origem)
     origem.updated_at = now
 
     novo_id_interno = _versioned_id_interno(origem.id_interno, next_version, db)
@@ -1502,13 +1811,15 @@ def versionar_emenda(
         id_interno=novo_id_interno,
         ano=payload.ano if payload.ano is not None else origem.ano,
         identificacao=payload.identificacao if payload.identificacao is not None else origem.identificacao,
-        cod_subfonte=origem.cod_subfonte,
+        cod_subfonte=payload.cod_subfonte if payload.cod_subfonte is not None else origem.cod_subfonte,
         deputado=payload.deputado if payload.deputado is not None else origem.deputado,
-        cod_uo=origem.cod_uo,
-        sigla_uo=origem.sigla_uo,
-        cod_orgao=origem.cod_orgao,
-        cod_acao=origem.cod_acao,
-        descricao_acao=origem.descricao_acao,
+        cod_uo=payload.cod_uo if payload.cod_uo is not None else origem.cod_uo,
+        sigla_uo=payload.sigla_uo if payload.sigla_uo is not None else origem.sigla_uo,
+        cod_orgao=payload.cod_orgao if payload.cod_orgao is not None else origem.cod_orgao,
+        cod_acao=payload.cod_acao if payload.cod_acao is not None else origem.cod_acao,
+        descricao_acao=payload.descricao_acao if payload.descricao_acao is not None else origem.descricao_acao,
+        plan_a=payload.plan_a if payload.plan_a is not None else origem.plan_a,
+        plan_b=payload.plan_b if payload.plan_b is not None else origem.plan_b,
         municipio=payload.municipio if payload.municipio is not None else origem.municipio,
         valor_inicial=payload.valor_inicial if payload.valor_inicial is not None else origem.valor_inicial,
         valor_atual=payload.valor_atual if payload.valor_atual is not None else origem.valor_atual,
@@ -1516,6 +1827,7 @@ def versionar_emenda(
         status_oficial=origem.status_oficial,
         parent_id=origem.id,
         version=next_version,
+        row_version=1,
         is_current=True,
         created_at=now,
         updated_at=now,
@@ -1708,6 +2020,13 @@ def audit_log(_actor: dict = Depends(_require_manager), db: Session = Depends(ge
     return response
 @app.websocket("/ws")
 async def websocket_updates(websocket: WebSocket):
+    actor = {
+        "id": None,
+        "name": (websocket.query_params.get("user_name") or "anon").strip() or "anon",
+        "role": (websocket.query_params.get("user_role") or "-").strip().upper() or "-",
+        "auth_type": "disabled",
+    }
+
     if settings.API_AUTH_ENABLED:
         token = (websocket.query_params.get("token") or "").strip()
         if not token:
@@ -1742,9 +2061,42 @@ async def websocket_updates(websocket: WebSocket):
                     "id": None,
                     "at": _utcnow().isoformat() + "Z",
                 })
+                continue
+
+            payload = None
+            try:
+                payload = json.loads(data or "")
+            except Exception:
+                payload = None
+
+            if not isinstance(payload, dict):
+                continue
+
+            msg_type = str(payload.get("type") or "").strip().lower()
+            if msg_type != "presence":
+                continue
+
+            action = str(payload.get("action") or "").strip().lower()
+            emenda_id = int(payload.get("emenda_id") or 0)
+            if emenda_id <= 0:
+                continue
+
+            if action == "join":
+                users = await presence_broker.join(websocket, emenda_id, actor)
+            elif action == "leave":
+                users = await presence_broker.leave(websocket, emenda_id)
+            else:
+                continue
+
+            await ws_broker.broadcast(_presence_payload(emenda_id, users))
     except WebSocketDisconnect:
-        await ws_broker.disconnect(websocket)
+        pass
     except Exception:
+        pass
+    finally:
         await ws_broker.disconnect(websocket)
+        changes = await presence_broker.disconnect(websocket)
+        for emenda_id, users in changes.items():
+            await ws_broker.broadcast(_presence_payload(emenda_id, users))
 
 

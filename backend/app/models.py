@@ -76,6 +76,8 @@ class Emenda(Base):
     cod_orgao: Mapped[str] = mapped_column(String(40), default="")
     cod_acao: Mapped[str] = mapped_column(String(40), default="")
     descricao_acao: Mapped[str] = mapped_column(Text, default="")
+    plan_a: Mapped[str] = mapped_column(Text, default="")
+    plan_b: Mapped[str] = mapped_column(Text, default="")
     municipio: Mapped[str] = mapped_column(String(120), default="")
     valor_inicial: Mapped[float] = mapped_column(Numeric(16, 2), default=0)
     valor_atual: Mapped[float] = mapped_column(Numeric(16, 2), default=0)
@@ -84,6 +86,7 @@ class Emenda(Base):
 
     parent_id: Mapped[Optional[int]] = mapped_column(ForeignKey("emendas.id"), index=True, nullable=True)
     version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    row_version: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     is_current: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
