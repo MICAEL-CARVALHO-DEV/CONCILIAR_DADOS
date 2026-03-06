@@ -6,6 +6,7 @@ Sistema de governanca de emendas com trilha de auditoria por usuario.
 - Operacao/manutencao: `README_MANUTENCAO.md`
 - Guia de deploy geral: `DEPLOY.md`
 - Guia de deploy Render/Supabase: `DEPLOY_GRATIS_RENDER_SUPABASE.md`
+- Guia de deploy Front Cloudflare Pages: `DEPLOY_CLOUDFLARE_PAGES.md`
 - Controle total do processo: `GUIA_CONTROLE_TOTAL.md`
 - Catalogo de codigos/regras: `CATALOGO_CODIGOS_PREDEFINIDOS.md`
 - Log de mudancas: `LOG_ALTERACOES.md`

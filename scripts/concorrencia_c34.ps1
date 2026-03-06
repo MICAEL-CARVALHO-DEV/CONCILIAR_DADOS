@@ -1,12 +1,21 @@
-﻿param(
+param(
   [string]$BaseUrl = "http://127.0.0.1:8000",
-  [int]$Users = 4
+  [int]$Users = 4,
+  [string]$OwnerUser = "",
+  [string]$OwnerPass = "",
+  [string]$ParticipantRole = "CONTABIL"
 )
 
 $ErrorActionPreference = "Stop"
 $BaseUrl = ($BaseUrl.TrimEnd('/'))
 if ($Users -lt 2) { throw "Use pelo menos 2 usuarios" }
 if ($Users -gt 5) { throw "Use no maximo 5 usuarios (escopo C34)" }
+
+$participantRoleNormalized = ($ParticipantRole.Trim().ToUpper())
+$allowedParticipantRoles = @("APG", "SUPERVISAO", "CONTABIL", "POWERBI")
+if ($allowedParticipantRoles -notcontains $participantRoleNormalized) {
+  throw "ParticipantRole invalido. Use APG, SUPERVISAO, CONTABIL ou POWERBI."
+}
 
 function Invoke-Json {
   param(
@@ -35,10 +44,36 @@ function New-AuthHeaders([string]$token) {
 $seed = Get-Date -Format "HHmmss"
 $pass = "123456"
 
-$owner = "qa_owner_$seed"
-$null = Invoke-Json -Method "POST" -Url "$BaseUrl/auth/register" -Headers @{} -Body @{ nome = $owner; perfil = "PROGRAMADOR"; senha = $pass }
-$ownerLogin = Invoke-Json -Method "POST" -Url "$BaseUrl/auth/login" -Headers @{} -Body @{ nome = $owner; senha = $pass }
-$ownerHeaders = New-AuthHeaders -token ([string]$ownerLogin.token)
+if (-not $OwnerUser) { $OwnerUser = $env:SEC_OWNER_USER }
+if (-not $OwnerPass) { $OwnerPass = $env:SEC_OWNER_PASS }
+
+if (-not $OwnerUser -or -not $OwnerPass) {
+  $OwnerUser = "qa_owner_$seed"
+  $OwnerPass = $pass
+  try {
+    $null = Invoke-Json -Method "POST" -Url "$BaseUrl/auth/register" -Headers @{} -Body @{
+      nome = $OwnerUser
+      perfil = "PROGRAMADOR"
+      senha = $OwnerPass
+    }
+    Write-Host "Owner bootstrap criado: $OwnerUser"
+  } catch {
+    $statusCode = -1
+    try { $statusCode = [int]$_.Exception.Response.StatusCode } catch {}
+    if ($statusCode -eq 403) {
+      throw "existe PROGRAMADOR ativo. Rode com -OwnerUser e -OwnerPass para criar usuarios de teste nao PROGRAMADOR."
+    }
+    throw
+  }
+}
+
+$ownerLogin = Invoke-Json -Method "POST" -Url "$BaseUrl/auth/login" -Headers @{} -Body @{
+  nome = $OwnerUser
+  senha = $OwnerPass
+}
+$ownerToken = [string]$ownerLogin.token
+if (-not $ownerToken) { throw "owner sem token" }
+$ownerHeaders = New-AuthHeaders -token $ownerToken
 
 $idInterno = "EPI-C34-$seed"
 $em = Invoke-Json -Method "POST" -Url "$BaseUrl/emendas" -Headers $ownerHeaders -Body @{
@@ -53,7 +88,13 @@ if (-not $eid) { throw "nao foi possivel criar emenda teste C34" }
 $participants = @()
 for ($i = 1; $i -le $Users; $i++) {
   $name = "qa_c34_${seed}_$i"
-  $null = Invoke-Json -Method "POST" -Url "$BaseUrl/auth/register" -Headers @{} -Body @{ nome = $name; perfil = "CONTABIL"; senha = $pass }
+  $email = ($name + "@teste.local").ToLower()
+  $null = Invoke-Json -Method "POST" -Url "$BaseUrl/auth/register" -Headers $ownerHeaders -Body @{
+    nome = $name
+    email = $email
+    perfil = $participantRoleNormalized
+    senha = $pass
+  }
   $login = Invoke-Json -Method "POST" -Url "$BaseUrl/auth/login" -Headers @{} -Body @{ nome = $name; senha = $pass }
   $participants += [pscustomobject]@{ name = $name; token = [string]$login.token }
 }
@@ -99,4 +140,5 @@ if ($distinctUsers.Count -lt $Users) {
 Write-Host "Teste C34 concorrencia: SUCESSO" -ForegroundColor Green
 Write-Host "Emenda teste: $idInterno (id=$eid)"
 Write-Host "Usuarios concorrentes: $Users"
+Write-Host "Perfil dos participantes: $participantRoleNormalized"
 Write-Host "Eventos NOTE registrados: $($hits.Count)"

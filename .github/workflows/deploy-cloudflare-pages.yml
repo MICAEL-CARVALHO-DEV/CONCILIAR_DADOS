@@ -1,0 +1,42 @@
+name: Deploy Front to Cloudflare Pages
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: "cloudflare-pages-deploy"
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build static bundle
+        run: |
+          mkdir -p .cf-pages-dist
+          cp index.html .cf-pages-dist/
+          cp login.html .cf-pages-dist/
+          cp cadastro.html .cf-pages-dist/
+          cp style.css .cf-pages-dist/
+          cp app.js .cf-pages-dist/
+          cp config.js .cf-pages-dist/
+          cp config.production.js .cf-pages-dist/
+          cp LICENSE .cf-pages-dist/
+          mkdir -p .cf-pages-dist/assets
+          cp assets/sec-logo.png .cf-pages-dist/assets/
+          cp assets/login-bg.jpg .cf-pages-dist/assets/
+          cp -r vendor .cf-pages-dist/vendor
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy .cf-pages-dist --project-name=${{ secrets.CLOUDFLARE_PAGES_PROJECT }} --branch=${{ github.ref_name }}

@@ -6,8 +6,8 @@ window.SEC_APP_CONFIG = Object.assign(
     GOOGLE_CLIENT_ID: "",
     // Mapeamento automatico por hostname
     API_BASE_URL_BY_HOST: {
-      "localhost": "http://localhost:8000",
-      "127.0.0.1": "http://localhost:8000"
+      "localhost": "http://127.0.0.1:8000",
+      "127.0.0.1": "http://127.0.0.1:8000"
     },
     GOOGLE_CLIENT_ID_BY_HOST: {}
   },

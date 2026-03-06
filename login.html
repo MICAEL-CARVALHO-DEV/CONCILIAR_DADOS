@@ -85,15 +85,85 @@
       const DEFAULT_API_BASE_URL = (CFG_HOST_MAP[CFG_HOST] ? String(CFG_HOST_MAP[CFG_HOST]) : "") || (CFG.API_BASE_URL ? String(CFG.API_BASE_URL) : "") || "http://localhost:8000";
       const CFG_GOOGLE_HOST_MAP = (CFG.GOOGLE_CLIENT_ID_BY_HOST && typeof CFG.GOOGLE_CLIENT_ID_BY_HOST === "object") ? CFG.GOOGLE_CLIENT_ID_BY_HOST : {};
       const hasGoogleClientForHost = Object.prototype.hasOwnProperty.call(CFG_GOOGLE_HOST_MAP, CFG_HOST);
-      const GOOGLE_CLIENT_ID = hasGoogleClientForHost
-        ? String(CFG_GOOGLE_HOST_MAP[CFG_HOST] || "")
-        : (CFG.GOOGLE_CLIENT_ID ? String(CFG.GOOGLE_CLIENT_ID) : "");
+      const GOOGLE_CLIENT_ID = IS_LOCAL_FRONTEND
+        ? ""
+        : (hasGoogleClientForHost
+          ? String(CFG_GOOGLE_HOST_MAP[CFG_HOST] || "")
+          : (CFG.GOOGLE_CLIENT_ID ? String(CFG.GOOGLE_CLIENT_ID) : ""));
       const SESSION_TOKEN_KEY = "SEC_SESSION_TOKEN";
+      const SESSION_TOKEN_BACKUP_KEY = "SEC_SESSION_TOKEN_BKP";
       const PENDING_GOOGLE_CREDENTIAL_KEY = "SEC_PENDING_GOOGLE_CREDENTIAL";
       const USER_NAME_KEY = "SEC_USER_NAME";
       const USER_ROLE_KEY = "SEC_USER_ROLE";
-      const next = new URLSearchParams(window.location.search).get("next") || "index.html";
-      const incomingMsg = new URLSearchParams(window.location.search).get("msg") || "";
+      // Evita redirecionamento para URL externa/invalidada que pode causar loop de sessao.
+      function sanitizeNextPath(value) {
+        const raw = String(value || "").trim();
+        if (!raw) return "index.html";
+        if (/^[a-z]+:/i.test(raw) || raw.startsWith("//")) return "index.html";
+        if (raw.indexOf("\n") >= 0 || raw.indexOf("\r") >= 0) return "index.html";
+        const lower = raw.toLowerCase();
+        if (lower.includes("login.html") || lower.includes("cadastro.html")) return "index.html";
+        return raw.startsWith("/") ? raw.slice(1) : raw;
+      }
+      const query = new URLSearchParams(window.location.search);
+      const next = sanitizeNextPath(query.get("next") || "index.html");
+      const incomingMsg = query.get("msg") || "";
+      const forceClean = query.get("clean") === "1";
+
+      function readStoredToken() {
+        let token = "";
+        try {
+          token = String(sessionStorage.getItem(SESSION_TOKEN_KEY) || "").trim();
+        } catch (_) {
+          token = "";
+        }
+        if (token) {
+          try { localStorage.setItem(SESSION_TOKEN_BACKUP_KEY, token); } catch (_) {}
+          return token;
+        }
+        try {
+          token = String(localStorage.getItem(SESSION_TOKEN_BACKUP_KEY) || "").trim();
+        } catch (_) {
+          token = "";
+        }
+        if (token) {
+          try { sessionStorage.setItem(SESSION_TOKEN_KEY, token); } catch (_) {}
+        }
+        return token;
+      }
+
+      function writeStoredToken(token) {
+        const raw = String(token || "").trim();
+        if (!raw) {
+          clearStoredToken();
+          return;
+        }
+        try { sessionStorage.setItem(SESSION_TOKEN_KEY, raw); } catch (_) {}
+        try { localStorage.setItem(SESSION_TOKEN_BACKUP_KEY, raw); } catch (_) {}
+      }
+
+      function clearStoredToken() {
+        try { sessionStorage.removeItem(SESSION_TOKEN_KEY); } catch (_) {}
+        try { localStorage.removeItem(SESSION_TOKEN_BACKUP_KEY); } catch (_) {}
+      }
+
+      // Modo "clean=1": limpa sessao/storage automaticamente sem depender do DevTools.
+      if (forceClean) {
+        try {
+          clearStoredToken();
+          sessionStorage.removeItem(PENDING_GOOGLE_CREDENTIAL_KEY);
+          localStorage.removeItem(USER_NAME_KEY);
+          localStorage.removeItem(USER_ROLE_KEY);
+          localStorage.removeItem("SEC_API_ENABLED");
+          if (IS_LOCAL_FRONTEND) {
+            localStorage.setItem(API_BASE_URL_KEY, "http://127.0.0.1:8000");
+          } else {
+            localStorage.removeItem(API_BASE_URL_KEY);
+          }
+        } catch (_) {
+          // Ignora falha de storage para nao quebrar o login.
+        }
+      }
 
       const form = document.getElementById("loginForm");
       const nome = document.getElementById("nome");
@@ -111,7 +181,27 @@
 
       // Verifica se a URL aponta para localhost/loopback.
       function isLoopbackApiBase(value) {
-        return /^https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?::\d+)?(?:\/|$)/i.test(String(value || "").trim());
+        return /^https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(?::\d+)?(?:\/|$)/i.test(String(value || "").trim());
+      }
+
+      function normalizeLoopbackApiBase(value) {
+        const raw = String(value || "").trim();
+        if (!raw) return "";
+        try {
+          const parsed = new URL(raw);
+          const host = String(parsed.hostname || "").toLowerCase();
+          if (["localhost", "127.0.0.1", "0.0.0.0", "::1"].indexOf(host) < 0) return "";
+          const proto = parsed.protocol === "https:" ? "https:" : "http:";
+          const port = parsed.port ? ":" + parsed.port : "";
+          return (proto + "//127.0.0.1" + port).replace(/\/+$/, "");
+        } catch (_) {
+          if (!isLoopbackApiBase(raw)) return "";
+          return raw
+            .replace(/^https?:\/\/(?:localhost|0\.0\.0\.0|\[::1\])/i, function (prefix) {
+              return prefix.toLowerCase().startsWith("https://") ? "https://127.0.0.1" : "http://127.0.0.1";
+            })
+            .replace(/\/+$/, "");
+        }
       }
 
       // Resolve URL base da API com fallback por ambiente.
@@ -120,13 +210,24 @@
         if (!IS_LOCAL_FRONTEND && raw && isLoopbackApiBase(raw)) {
           localStorage.removeItem(API_BASE_URL_KEY);
         }
-        const base = (!IS_LOCAL_FRONTEND && isLoopbackApiBase(raw)) ? DEFAULT_API_BASE_URL : (raw || DEFAULT_API_BASE_URL);
+        if (IS_LOCAL_FRONTEND) {
+          const normalizedRaw = normalizeLoopbackApiBase(raw);
+          if (raw && !normalizedRaw) {
+            localStorage.removeItem(API_BASE_URL_KEY);
+          }
+          const localBase = normalizedRaw || normalizeLoopbackApiBase(DEFAULT_API_BASE_URL) || "http://127.0.0.1:8000";
+          if (localBase && raw !== localBase) {
+            try { localStorage.setItem(API_BASE_URL_KEY, localBase); } catch (_) {}
+          }
+          return localBase.replace(/\/+$/, "");
+        }
+        const base = raw || DEFAULT_API_BASE_URL;
         return base.replace(/\/+$/, "");
       }
 
       // Se houver token salvo, valida no backend e redireciona para a pagina alvo.
       async function validateExistingSession() {
-        const token = String(sessionStorage.getItem(SESSION_TOKEN_KEY) || "").trim();
+        const token = readStoredToken();
         if (!token) return false;
 
         try {
@@ -153,7 +254,7 @@
           window.location.href = next;
           return true;
         } catch (_) {
-          sessionStorage.removeItem(SESSION_TOKEN_KEY);
+          clearStoredToken();
           localStorage.removeItem(USER_NAME_KEY);
           localStorage.removeItem(USER_ROLE_KEY);
           return false;
@@ -206,7 +307,7 @@
 
       // Persiste sessao no browser apos autenticacao bem sucedida.
       function persistSession(data, fallbackName, fallbackRole) {
-        sessionStorage.setItem(SESSION_TOKEN_KEY, String(data.token || ""));
+        writeStoredToken(String(data.token || ""));
         localStorage.setItem(USER_NAME_KEY, String(data.usuario && data.usuario.nome || fallbackName || ""));
         localStorage.setItem(USER_ROLE_KEY, String(data.usuario && data.usuario.perfil || fallbackRole || "CONTABIL"));
       }

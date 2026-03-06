@@ -1,6 +1,6 @@
 /***********************
  * Prototipo SEC Emendas - v3
- * - Status oficial controlado por APG/SUPERVISAO
+ * - Status oficial controlado por usuarios operacionais (supervisao monitora)
  * - Marcacao por usuario e timeline completa
  * - Importacao de XLSX (multiplas abas)
  * - Chave de referencia para duplicidade
@@ -51,6 +51,7 @@ const API_BASE_URL_KEY = "SEC_API_BASE_URL";
 const API_ENABLED_KEY = "SEC_API_ENABLED";
 const API_SHARED_KEY_SESSION_KEY = "SEC_API_SHARED_KEY_SESSION";
 const SESSION_TOKEN_KEY = "SEC_SESSION_TOKEN";
+const SESSION_TOKEN_BACKUP_KEY = "SEC_SESSION_TOKEN_BKP";
 const AUTH_LOGIN_PAGE = "login.html";
 const AUTH_REGISTER_PAGE = "cadastro.html";
 const STORAGE_MODE_KEY = "SEC_STORAGE_MODE";
@@ -90,6 +91,8 @@ const TRACKED_FIELDS = [
   { key: "cod_orgao", label: "Cod Orgao", type: "string" },
   { key: "cod_acao", label: "Cod Acao", type: "string" },
   { key: "descricao_acao", label: "Descricao Acao", type: "string" },
+  { key: "plan_a", label: "Plano A", type: "string" },
+  { key: "plan_b", label: "Plano B", type: "string" },
   { key: "municipio", label: "Municipio", type: "string" },
   { key: "valor_inicial", label: "Valor Inicial", type: "money" },
   { key: "valor_atual", label: "Valor Atual", type: "money" },
@@ -107,6 +110,8 @@ const MODAL_FIELD_ORDER = [
   { key: "cod_subfonte", label: "Cod Subfonte", editable: true },
   { key: "cod_acao", label: "Cod Acao", editable: true },
   { key: "descricao_acao", label: "Descricao Acao", editable: true },
+  { key: "plan_a", label: "Plano A", editable: true },
+  { key: "plan_b", label: "Plano B", editable: true },
   { key: "municipio", label: "Municipio", editable: true },
   { key: "deputado", label: "Deputado", editable: true },
   { key: "cod_uo", label: "Cod UO", editable: true },
@@ -128,6 +133,8 @@ const IMPORT_ALIASES = {
   cod_orgao: ["cod_orgao", "codigo_orgao", "orgao", "cod orgao"],
   cod_acao: ["cod_acao", "codigo_acao", "acao", "cod acao", "cod da acao", "cod. da acao", "codigo da acao"],
   descricao_acao: ["descricao_acao", "descricao da acao", "acao_descricao", "descricao", "descritor da acao"],
+  plan_a: ["plan_a", "plano_a", "plano a", "planoa", "plano a acao", "plano de acao a"],
+  plan_b: ["plan_b", "plano_b", "plano b", "planob", "plano b acao", "plano de acao b"],
   municipio: ["municipio", "cidade", "municipio / estado", "municipio estado"],
   valor_inicial: ["valor_inicial", "valor inicial", "valor_original", "valor original", "valor inicial epi"],
   valor_atual: ["valor_atual", "valor atual", "valor", "valor_emenda", "valor emenda", "valor atual epi"],
@@ -146,6 +153,8 @@ const RAW_PREFERRED_HEADERS = {
   cod_orgao: "Cod. Orgao",
   cod_acao: "Cod. da Acao",
   descricao_acao: "Descritor da Acao",
+  plan_a: "Plano A",
+  plan_b: "Plano B",
   municipio: "Municipio / Estado",
   valor_inicial: "Valor Inicial",
   valor_atual: "Valor Atual",
@@ -231,6 +240,8 @@ let apiSocketReconnectTimer = null;
 let apiSocketBackoffMs = WS_RECONNECT_BASE_MS;
 let apiRefreshTimer = null;
 let apiRefreshRunning = false;
+let presenceByBackendId = {};
+let currentPresenceBackendId = null;
 let latestImportReport = null;
 let latestExportReport = null;
 let lastImportValidation = null;
@@ -259,6 +270,7 @@ const modalSaveGuard = document.getElementById("modalSaveGuard");
 const modalSaveFeedback = document.getElementById("modalSaveFeedback");
 const historyEl = document.getElementById("history");
 const userProgressBox = document.getElementById("userProgressBox");
+const livePresenceText = document.getElementById("livePresenceText");
 
 const markStatus = document.getElementById("markStatus");
 const markReason = document.getElementById("markReason");
@@ -279,6 +291,8 @@ const fileCsv = document.getElementById("fileCsv");
 const importReport = document.getElementById("importReport");
 const importLabel = document.querySelector("label[for='fileCsv']");
 const currentUserInfo = document.getElementById("currentUserInfo");
+const roleNotice = document.getElementById("roleNotice");
+const supervisorQuickPanel = document.getElementById("supervisorQuickPanel");
 const btnProfile = document.getElementById("btnProfile");
 const btnPendingApprovals = document.getElementById("btnPendingApprovals");
 const btnCreateProfile = document.getElementById("btnCreateProfile");
@@ -430,6 +444,7 @@ function render() {
   });
 
   renderImportDashboard();
+  renderSupervisorQuickPanel(rows);
 }
 
 // Aplica filtros de status/ano/texto sobre o estado em memoria.
@@ -536,6 +551,10 @@ btnMarkStatus.addEventListener("click", function (e) { if (e) { e.preventDefault
   clearModalAutoCloseTimer();
   const rec = getSelected();
   if (!rec || !modalDraftState) return;
+  if (!canMutateRecords()) {
+    showModalSaveFeedback("Perfil SUPERVISAO: monitoramento apenas. Edicao bloqueada.", true);
+    return;
+  }
 
   const selectedStatus = markStatus ? (markStatus.value || "").trim() : "";
   if (!selectedStatus) {
@@ -565,6 +584,10 @@ btnAddNote.addEventListener("click", function (e) { if (e) { e.preventDefault();
   clearModalAutoCloseTimer();
   const rec = getSelected();
   if (!rec || !modalDraftState) return;
+  if (!canMutateRecords()) {
+    showModalSaveFeedback("Perfil SUPERVISAO: monitoramento apenas. Edicao bloqueada.", true);
+    return;
+  }
 
   const why = (markReason.value || "").trim();
   if (!why) {
@@ -710,6 +733,10 @@ if (pendingUsersTableWrap) {
 }
 
 btnReset.addEventListener("click", function () {
+  if (!canMutateRecords()) {
+    alert("Perfil SUPERVISAO nao pode resetar dados.");
+    return;
+  }
   if (!confirm("Resetar para dados DEMO? Isso apaga alteracoes locais.")) return;
   state = { records: deepClone(DEMO).map(normalizeRecordShape) };
   idCountersByYear = buildIdCounters(state.records);
@@ -724,6 +751,11 @@ btnReset.addEventListener("click", function () {
 });
 
 fileCsv.addEventListener("change", async function () {
+  if (!canMutateRecords()) {
+    alert("Perfil SUPERVISAO nao pode importar planilhas.");
+    fileCsv.value = "";
+    return;
+  }
   const file = fileCsv.files && fileCsv.files[0];
   if (!file) return;
 
@@ -823,6 +855,7 @@ function hasPendingModalAction() {
 }
 
 function canSaveDraftNow() {
+  if (!canMutateRecords()) return false;
   if (hasPendingModalAction()) return true;
   if (!isModalDraftDirty()) return false;
   const selectedStatus = markStatus ? (markStatus.value || "").trim() : "";
@@ -831,6 +864,9 @@ function canSaveDraftNow() {
 }
 
 function getDraftSaveBlockReason() {
+  if (!canMutateRecords()) {
+    return "Perfil SUPERVISAO: monitoramento apenas, sem alteracao de dados.";
+  }
   if (hasPendingModalAction()) return "";
   if (!isModalDraftDirty()) return "";
   const selectedStatus = markStatus ? (markStatus.value || "").trim() : "";
@@ -908,8 +944,19 @@ function updateModalDraftUi() {
     el.classList.toggle("kv-dirty", isDirty);
   });
 }
+
+function applyModalAccessProfile() {
+  const readOnlyMode = !canMutateRecords();
+  if (markStatus) markStatus.disabled = readOnlyMode;
+  if (markReason) markReason.disabled = readOnlyMode;
+  if (btnMarkStatus) btnMarkStatus.disabled = readOnlyMode;
+  if (btnAddNote) btnAddNote.disabled = readOnlyMode;
+  if (btnKvSave) btnKvSave.style.display = readOnlyMode ? "none" : "inline-block";
+}
+
 function onModalFieldInput(e) {
   if (!modalDraftState) return;
+  if (!canMutateRecords()) return;
   clearModalSaveFeedback();
   const el = e.target;
   const key = el.getAttribute("data-kv-field");
@@ -947,6 +994,7 @@ function renderKvEditor(rec) {
       input.setAttribute("data-kv-field", field.key);
       input.setAttribute("data-kv-type", type);
       input.value = formatDraftInputValue(modalDraftState && modalDraftState.draft ? modalDraftState.draft[field.key] : rec[field.key], type);
+      if (!canMutateRecords()) input.disabled = true;
       input.addEventListener("input", onModalFieldInput);
       v.appendChild(input);
     } else {
@@ -957,12 +1005,17 @@ function renderKvEditor(rec) {
     kv.appendChild(v);
   });
 
+  applyModalAccessProfile();
   updateModalDraftUi();
 }
 
 // Salva alteracoes de campos feitas no modal e registra eventos.
 async function saveModalDraftChanges(keepOpen) {
   clearModalAutoCloseTimer();
+  if (!canMutateRecords()) {
+    showModalSaveFeedback("Perfil SUPERVISAO: monitoramento apenas. Salvamento bloqueado.", true);
+    return false;
+  }
   if (!modalDraftState) return true;
 
   const hasDirty = isModalDraftDirty();
@@ -971,6 +1024,7 @@ async function saveModalDraftChanges(keepOpen) {
 
   const rec = getSelected();
   if (!rec || rec.id !== modalDraftState.recordId) return false;
+  const recSnapshot = deepClone(rec);
 
   const changedEvents = [];
   const dirtyKeys = Object.keys(modalDraftState.dirty || {});
@@ -984,9 +1038,12 @@ async function saveModalDraftChanges(keepOpen) {
 
     rec[key] = next;
     changedEvents.push(mkEvent("EDIT_FIELD", {
+      key: key,
       field: label,
       from: stringifyFieldValue(prev, type),
       to: stringifyFieldValue(next, type),
+      raw_from: prev,
+      raw_to: next,
       note: "Edicao manual confirmada."
     }));
   });
@@ -1049,7 +1106,7 @@ async function saveModalDraftChanges(keepOpen) {
         motivo: String(action.reason || "")
       });
     } catch (err) {
-      handleApiSyncError(err, "marcacao de status para salvar");
+      await rollbackSaveAndReport(err, rec, recSnapshot, "marcacao de status para salvar");
       return false;
     }
   } else if (action && action.type === "NOTE") {
@@ -1059,7 +1116,7 @@ async function saveModalDraftChanges(keepOpen) {
         motivo: String(action.reason || "")
       });
     } catch (err) {
-      handleApiSyncError(err, "nota para salvar");
+      await rollbackSaveAndReport(err, rec, recSnapshot, "nota para salvar");
       return false;
     }
   }
@@ -1067,15 +1124,19 @@ async function saveModalDraftChanges(keepOpen) {
   for (let i = 0; i < changedEvents.length; i += 1) {
     const ev = changedEvents[i];
     try {
+      const fieldKey = String(ev.key || "").trim();
+      const fieldType = getModalFieldType(fieldKey);
+      const rawOld = Object.prototype.hasOwnProperty.call(ev, "raw_from") ? ev.raw_from : ev.from;
+      const rawNew = Object.prototype.hasOwnProperty.call(ev, "raw_to") ? ev.raw_to : ev.to;
       await syncGenericEventToApi(rec, {
         tipo_evento: "EDIT_FIELD",
-        campo_alterado: ev.field || "",
-        valor_antigo: String(ev.from == null ? "" : ev.from),
-        valor_novo: String(ev.to == null ? "" : ev.to),
+        campo_alterado: fieldKey || ev.field || "",
+        valor_antigo: String(rawOld == null ? "" : normalizeDraftFieldValue(rawOld, fieldType)),
+        valor_novo: String(rawNew == null ? "" : normalizeDraftFieldValue(rawNew, fieldType)),
         motivo: ev.note || "Edicao manual confirmada."
       });
     } catch (err) {
-      handleApiSyncError(err, "edicao de campo");
+      await rollbackSaveAndReport(err, rec, recSnapshot, "edicao de campo");
       return false;
     }
   }
@@ -1130,6 +1191,11 @@ async function requestCloseModal() {
 function openModal(id, keepReasons) {
   clearModalAutoCloseTimer();
   clearModalSaveFeedback();
+  const previousId = selectedId;
+  if (previousId && previousId !== id) {
+    const previousRec = (state.records || []).find(function (r) { return r.id === previousId; });
+    if (previousRec) announcePresenceForRecord(previousRec, "leave");
+  }
   lastFocusedElement = document.activeElement;
   selectedId = id;
   const rec = getSelected();
@@ -1198,6 +1264,7 @@ function openModal(id, keepReasons) {
 
   modal.classList.add("show");
   modal.setAttribute("aria-hidden", "false");
+  applyModalAccessProfile();
   setTimeout(function () {
     if (modalClose && typeof modalClose.focus === "function") modalClose.focus();
   }, 0);
@@ -1416,6 +1483,8 @@ function closeModal() {
 }
 
 function forceCloseModal() {
+  const activeRec = getSelected();
+  if (activeRec) announcePresenceForRecord(activeRec, "leave");
   clearModalAutoCloseTimer();
   clearModalSaveFeedback();
   modal.classList.remove("show");
@@ -1557,6 +1626,8 @@ function createRecordFromImport(incoming, ctx, fileName) {
     cod_orgao: incoming.cod_orgao || "",
     cod_acao: incoming.cod_acao || "",
     descricao_acao: incoming.descricao_acao || "",
+    plan_a: incoming.plan_a || "",
+    plan_b: incoming.plan_b || "",
     municipio: incoming.municipio || "-",
     valor_inicial: incoming.valor_inicial != null ? incoming.valor_inicial : (incoming.valor_atual != null ? incoming.valor_atual : 0),
     valor_atual: incoming.valor_atual != null ? incoming.valor_atual : (incoming.valor_inicial != null ? incoming.valor_inicial : 0),
@@ -1672,6 +1743,8 @@ function mapImportRow(ctx) {
     cod_orgao: asText(pickValue(row, IMPORT_ALIASES.cod_orgao)),
     cod_acao: codAcao,
     descricao_acao: asText(pickValue(row, IMPORT_ALIASES.descricao_acao)),
+    plan_a: asText(pickValue(row, IMPORT_ALIASES.plan_a)),
+    plan_b: asText(pickValue(row, IMPORT_ALIASES.plan_b)),
     municipio: municipio,
     valor_inicial: toNumberOrNull(pickValue(row, IMPORT_ALIASES.valor_inicial)),
     valor_atual: toNumberOrNull(pickValue(row, IMPORT_ALIASES.valor_atual)),
@@ -2200,7 +2273,7 @@ function onAuthSuccess(resp) {
     return;
   }
 
-  sessionStorage.setItem(SESSION_TOKEN_KEY, token);
+  writeStoredSessionToken(token);
   setAuthenticatedUser(usuario);
   hideAuthGate();
   applyAccessProfile();
@@ -2232,7 +2305,7 @@ function redirectToAuth(page, query) {
 }
 // Encerra sessao local e tenta logout remoto na API.
 async function logoutCurrentUser() {
-  const token = String(sessionStorage.getItem(SESSION_TOKEN_KEY) || "").trim();
+  const token = readStoredSessionToken();
   if (token && isApiEnabled()) {
     try {
       await apiRequest("POST", "/auth/logout", {});
@@ -2240,10 +2313,57 @@ async function logoutCurrentUser() {
       // ignora erro de logout remoto
     }
   }
-  sessionStorage.removeItem(SESSION_TOKEN_KEY);
+  clearStoredSessionToken();
   localStorage.removeItem(USER_NAME_KEY);
   localStorage.removeItem(USER_ROLE_KEY);
   closeApiSocket();
+}
+
+function isLocalFrontendContext() {
+  const host = (typeof window !== "undefined" && window.location && window.location.hostname)
+    ? String(window.location.hostname)
+    : "";
+  return !host || host === "localhost" || host === "127.0.0.1";
+}
+
+function readStoredSessionToken() {
+  let sessionToken = "";
+  try {
+    sessionToken = String(sessionStorage.getItem(SESSION_TOKEN_KEY) || "").trim();
+  } catch (_err) {
+    sessionToken = "";
+  }
+  if (sessionToken) {
+    try { localStorage.setItem(SESSION_TOKEN_BACKUP_KEY, sessionToken); } catch (_err) {}
+    return sessionToken;
+  }
+
+  let backupToken = "";
+  try {
+    backupToken = String(localStorage.getItem(SESSION_TOKEN_BACKUP_KEY) || "").trim();
+  } catch (_err) {
+    backupToken = "";
+  }
+  if (backupToken) {
+    try { sessionStorage.setItem(SESSION_TOKEN_KEY, backupToken); } catch (_err) {}
+    return backupToken;
+  }
+  return "";
+}
+
+function writeStoredSessionToken(token) {
+  const raw = String(token || "").trim();
+  if (!raw) {
+    clearStoredSessionToken();
+    return;
+  }
+  try { sessionStorage.setItem(SESSION_TOKEN_KEY, raw); } catch (_err) {}
+  try { localStorage.setItem(SESSION_TOKEN_BACKUP_KEY, raw); } catch (_err) {}
+}
+
+function clearStoredSessionToken() {
+  try { sessionStorage.removeItem(SESSION_TOKEN_KEY); } catch (_err) {}
+  try { localStorage.removeItem(SESSION_TOKEN_BACKUP_KEY); } catch (_err) {}
 }
 
 // Ponto de entrada da autenticacao ao abrir index.html.
@@ -2256,24 +2376,56 @@ async function initializeAuthFlow() {
     return;
   }
 
-  const token = String(sessionStorage.getItem(SESSION_TOKEN_KEY) || "").trim();
+  const token = readStoredSessionToken();
   if (!token) {
     closeApiSocket();
     redirectToAuth(AUTH_LOGIN_PAGE, "msg=" + encodeURIComponent("Entre para continuar."));
     return;
   }
 
+  let me = null;
   try {
-    const me = await apiRequest("GET", "/auth/me");
+    me = await apiRequest("GET", "/auth/me");
+  } catch (authErr) {
+    // Fallback robusto para ambiente local:
+    // se houver base antiga/instavel, fixa em 127.0.0.1:8000 e revalida token 1 vez.
+    if (isLocalFrontendContext()) {
+      try {
+        localStorage.setItem(API_BASE_URL_KEY, "http://127.0.0.1:8000");
+        // apiRequest pode limpar token em 401; restaura para a tentativa direta.
+        writeStoredSessionToken(token);
+        const probe = await fetch("http://127.0.0.1:8000/auth/me", {
+          method: "GET",
+          headers: {
+            Authorization: "Bearer " + token,
+            "X-Session-Token": token
+          }
+        });
+        if (probe.ok) {
+          me = await probe.json();
+        }
+      } catch (_fallbackErr) {
+        // segue fluxo padrao de expiracao abaixo
+      }
+    }
+    if (!me) {
+      clearStoredSessionToken();
+      closeApiSocket();
+      redirectToAuth(AUTH_LOGIN_PAGE, "msg=" + encodeURIComponent("Sessao expirada. Faca login novamente."));
+      return;
+    }
+    console.warn("auth/me falhou na API principal, seguindo com fallback local.", authErr);
+  }
+
+  try {
     setAuthenticatedUser(me);
     hideAuthGate();
     applyAccessProfile();
     await bootstrapApiIntegration();
     connectApiSocket();
-  } catch (_err) {
-    sessionStorage.removeItem(SESSION_TOKEN_KEY);
-    closeApiSocket();
-    redirectToAuth(AUTH_LOGIN_PAGE, "msg=" + encodeURIComponent("Sessao expirada. Faca login novamente."));
+  } catch (uiErr) {
+    // Erros de interface nao devem derrubar a sessao valida.
+    console.error("Falha ao inicializar UI apos autenticacao:", uiErr);
   }
 }
 
@@ -2301,11 +2453,99 @@ function loadUserConfig(forcePrompt) {
   }
 }
 
+function isSupervisorUser() {
+  return CURRENT_ROLE === "SUPERVISAO";
+}
+
+function canMutateRecords() {
+  return !isSupervisorUser();
+}
+
+function renderRoleNotice() {
+  if (!roleNotice) return;
+  if (isSupervisorUser()) {
+    roleNotice.classList.remove("hidden");
+    roleNotice.innerHTML = ""
+      + "<h4>Modo supervisao: somente monitoramento</h4>"
+      + "<p class=\"muted small\">Este perfil acompanha andamento e auditoria em tempo real, sem alterar dados.</p>";
+    return;
+  }
+  roleNotice.classList.add("hidden");
+  roleNotice.innerHTML = "";
+}
+
+function renderSupervisorQuickPanel(prefilteredRows) {
+  if (!supervisorQuickPanel) return;
+  if (!isSupervisorUser()) {
+    supervisorQuickPanel.classList.add("hidden");
+    supervisorQuickPanel.innerHTML = "";
+    return;
+  }
+
+  const rows = Array.isArray(prefilteredRows) ? prefilteredRows : getFiltered();
+  const globalStates = rows.map(function (r) {
+    return {
+      record: r,
+      state: getGlobalProgressState(getActiveUsersWithLastMark(r)),
+      staleDays: daysSince(lastEventAt(r))
+    };
+  });
+
+  const attentionCount = globalStates.filter(function (x) { return x.state.code === "attention"; }).length;
+  const noMarkCount = globalStates.filter(function (x) { return x.state.code === "no_marks"; }).length;
+  const staleCount = globalStates.filter(function (x) { return Number.isFinite(x.staleDays) && x.staleDays >= 7; }).length;
+  const inProgressCount = globalStates.filter(function (x) { return x.state.code === "in_progress"; }).length;
+
+  const topDelayed = globalStates
+    .filter(function (x) { return Number.isFinite(x.staleDays); })
+    .sort(function (a, b) { return b.staleDays - a.staleDays; })
+    .slice(0, 6);
+
+  let delayedHtml = "";
+  if (!topDelayed.length) {
+    delayedHtml = "<p class=\"muted small\">Sem pendencias com atraso no filtro atual.</p>";
+  } else {
+    delayedHtml = topDelayed.map(function (x) {
+      return ""
+        + "<div class=\"supervisor-list-row\">"
+        + "  <div>"
+        + "    <div><b>" + escapeHtml(x.record.id || "-") + "</b> - " + escapeHtml(x.record.identificacao || "-") + "</div>"
+        + "    <div class=\"muted small\">" + escapeHtml(x.record.municipio || "-") + " | " + escapeHtml(x.record.deputado || "-") + " | atraso: " + String(x.staleDays) + " dias</div>"
+        + "  </div>"
+        + "  <button class=\"btn\" data-supervisor-open=\"" + escapeHtml(x.record.id || "") + "\">Abrir</button>"
+        + "</div>";
+    }).join("");
+  }
+
+  supervisorQuickPanel.classList.remove("hidden");
+  supervisorQuickPanel.innerHTML = ""
+    + "<h3>Painel rapido da supervisao</h3>"
+    + "<div class=\"supervisor-kpi-grid\">"
+    + "  <div class=\"supervisor-kpi\"><p class=\"supervisor-kpi-label\">Emendas no filtro</p><p class=\"supervisor-kpi-value\">" + String(rows.length) + "</p></div>"
+    + "  <div class=\"supervisor-kpi\"><p class=\"supervisor-kpi-label\">Em atencao</p><p class=\"supervisor-kpi-value\">" + String(attentionCount) + "</p></div>"
+    + "  <div class=\"supervisor-kpi\"><p class=\"supervisor-kpi-label\">Sem marcacao</p><p class=\"supervisor-kpi-value\">" + String(noMarkCount) + "</p></div>"
+    + "  <div class=\"supervisor-kpi\"><p class=\"supervisor-kpi-label\">Paradas >= 7 dias</p><p class=\"supervisor-kpi-value\">" + String(staleCount) + "</p></div>"
+    + "</div>"
+    + "<p class=\"muted small\" style=\"margin-top:10px\">Em andamento: <b>" + String(inProgressCount) + "</b> | filtro atual aplicado.</p>"
+    + "<div class=\"supervisor-list\">"
+    + "<h4>Prioridade de acompanhamento (maior atraso)</h4>"
+    + delayedHtml
+    + "</div>";
+
+  Array.prototype.forEach.call(supervisorQuickPanel.querySelectorAll("button[data-supervisor-open]"), function (btn) {
+    btn.addEventListener("click", function () {
+      const recId = btn.getAttribute("data-supervisor-open") || "";
+      if (!recId) return;
+      openModal(recId);
+    });
+  });
+}
+
 // Aplica regras de permissao por perfil e atualiza botoes/indicadores.
 function applyAccessProfile() {
   const isOwner = CURRENT_ROLE === "PROGRAMADOR";
-  const isSupervisor = CURRENT_ROLE === "SUPERVISAO";
-  const canManageData = isOwner || isSupervisor || CURRENT_ROLE === "APG";
+  const isSupervisor = isSupervisorUser();
+  const canManageData = isOwner || CURRENT_ROLE === "APG";
   const canCreateProfiles = isOwner;
   const apiTag = apiOnline ? "API online" : "modo local";
   const storageTag = getStorageMode() === STORAGE_MODE_LOCAL ? "persistencia local" : "sessao";
@@ -2325,6 +2565,9 @@ function applyAccessProfile() {
   if (btnDemo4Users) btnDemo4Users.style.display = isOwner ? "inline-block" : "none";
   if (btnProfile) btnProfile.style.display = "inline-block";
   if (btnLogout) btnLogout.style.display = "inline-block";
+  renderRoleNotice();
+  renderSupervisorQuickPanel();
+  applyModalAccessProfile();
   refreshProfileModal();
 }
 
@@ -2500,6 +2743,31 @@ function mergeRemoteEmendas(remoteList) {
     localByInternal[r.id] = r;
   });
 
+  function applyRemoteSnapshotToLocalRecord(local, remote) {
+    if (!local || !remote) return;
+
+    if (Object.prototype.hasOwnProperty.call(remote, "ano")) {
+      const nextAno = toInt(remote.ano);
+      if (nextAno > 0) local.ano = nextAno;
+    }
+    if (Object.prototype.hasOwnProperty.call(remote, "identificacao")) local.identificacao = text(remote.identificacao) || "-";
+    if (Object.prototype.hasOwnProperty.call(remote, "cod_subfonte")) local.cod_subfonte = text(remote.cod_subfonte);
+    if (Object.prototype.hasOwnProperty.call(remote, "deputado")) local.deputado = text(remote.deputado) || "-";
+    if (Object.prototype.hasOwnProperty.call(remote, "cod_uo")) local.cod_uo = text(remote.cod_uo);
+    if (Object.prototype.hasOwnProperty.call(remote, "sigla_uo")) local.sigla_uo = text(remote.sigla_uo);
+    if (Object.prototype.hasOwnProperty.call(remote, "cod_orgao")) local.cod_orgao = text(remote.cod_orgao);
+    if (Object.prototype.hasOwnProperty.call(remote, "cod_acao")) local.cod_acao = text(remote.cod_acao);
+    if (Object.prototype.hasOwnProperty.call(remote, "descricao_acao")) local.descricao_acao = text(remote.descricao_acao);
+    if (Object.prototype.hasOwnProperty.call(remote, "plan_a")) local.plan_a = text(remote.plan_a);
+    if (Object.prototype.hasOwnProperty.call(remote, "plan_b")) local.plan_b = text(remote.plan_b);
+    if (Object.prototype.hasOwnProperty.call(remote, "municipio")) local.municipio = text(remote.municipio) || "-";
+    if (Object.prototype.hasOwnProperty.call(remote, "processo_sei")) local.processo_sei = text(remote.processo_sei);
+    if (Object.prototype.hasOwnProperty.call(remote, "valor_inicial")) local.valor_inicial = toNumber(remote.valor_inicial);
+    if (Object.prototype.hasOwnProperty.call(remote, "valor_atual")) local.valor_atual = toNumber(remote.valor_atual);
+    if (Object.prototype.hasOwnProperty.call(remote, "created_at") && remote.created_at) local.created_at = String(remote.created_at);
+    if (Object.prototype.hasOwnProperty.call(remote, "updated_at") && remote.updated_at) local.updated_at = String(remote.updated_at);
+  }
+
   remoteList.forEach(function (re) {
     const idInterno = text(re.id_interno);
     if (!idInterno) return;
@@ -2509,10 +2777,11 @@ function mergeRemoteEmendas(remoteList) {
     const local = localByInternal[idInterno];
     if (local) {
       local.backend_id = Number(re.id);
-      if (re.updated_at) local.updated_at = String(re.updated_at);
+      applyRemoteSnapshotToLocalRecord(local, re);
+      if (toInt(re.row_version) > 0) local.row_version = toInt(re.row_version);
 
       const remoteStatus = normalizeStatus(re.status_oficial || "");
-      if (remoteStatus && !latestMarkedStatus(local)) {
+      if (remoteStatus && remoteStatus !== normalizeStatus(latestMarkedStatus(local) || "")) {
         local.eventos.unshift(mkEvent("MARK_STATUS", {
           to: remoteStatus,
           note: "Status importado da API.",
@@ -2530,6 +2799,21 @@ function mergeRemoteEmendas(remoteList) {
       backend_id: Number(re.id),
       ano: toInt(re.ano) || currentYear(),
       identificacao: text(re.identificacao) || "-",
+      cod_subfonte: text(re.cod_subfonte),
+      deputado: text(re.deputado) || "-",
+      cod_uo: text(re.cod_uo),
+      sigla_uo: text(re.sigla_uo),
+      cod_orgao: text(re.cod_orgao),
+      cod_acao: text(re.cod_acao),
+      descricao_acao: text(re.descricao_acao),
+      plan_a: text(re.plan_a),
+      plan_b: text(re.plan_b),
+      municipio: text(re.municipio) || "-",
+      valor_inicial: toNumber(re.valor_inicial),
+      valor_atual: toNumber(re.valor_atual),
+      processo_sei: text(re.processo_sei),
+      row_version: toInt(re.row_version) > 0 ? toInt(re.row_version) : 1,
+      created_at: re.created_at || isoNow(),
       updated_at: re.updated_at || isoNow(),
       eventos: [mkEvent("IMPORT", { note: "Carregado da API." })]
     });
@@ -2548,14 +2832,23 @@ function mergeRemoteEmendas(remoteList) {
   });
 }
 
+function applySyncResponseToRecord(rec, responsePayload) {
+  if (!rec || !responsePayload || typeof responsePayload !== "object") return;
+  const nextRowVersion = toInt(responsePayload.row_version);
+  if (nextRowVersion > 0) rec.row_version = nextRowVersion;
+  if (responsePayload.updated_at) rec.updated_at = String(responsePayload.updated_at);
+}
+
 // Envia alteracao de status oficial da emenda para backend.
 async function syncOfficialStatusToApi(rec, nextStatus, motivo) {
   if (!isApiEnabled()) return;
   const backendId = await ensureBackendEmenda(rec);
-  await apiRequest("POST", "/emendas/" + String(backendId) + "/status", {
+  const resp = await apiRequest("POST", "/emendas/" + String(backendId) + "/status", {
     novo_status: nextStatus,
-    motivo: motivo
+    motivo: motivo,
+    expected_row_version: toInt(rec.row_version) > 0 ? toInt(rec.row_version) : 1
   }, "UI");
+  applySyncResponseToRecord(rec, resp);
   apiOnline = true;
   apiLastError = "";
   applyAccessProfile();
@@ -2565,7 +2858,11 @@ async function syncOfficialStatusToApi(rec, nextStatus, motivo) {
 async function syncGenericEventToApi(rec, payload) {
   if (!isApiEnabled()) return;
   const backendId = await ensureBackendEmenda(rec);
-  await apiRequest("POST", "/emendas/" + String(backendId) + "/eventos", payload, payload && payload.origem_evento ? payload.origem_evento : "UI");
+  const body = Object.assign({}, payload || {}, {
+    expected_row_version: toInt(rec.row_version) > 0 ? toInt(rec.row_version) : 1
+  });
+  const resp = await apiRequest("POST", "/emendas/" + String(backendId) + "/eventos", body, payload && payload.origem_evento ? payload.origem_evento : "UI");
+  applySyncResponseToRecord(rec, resp);
   apiOnline = true;
   apiLastError = "";
   applyAccessProfile();
@@ -2589,6 +2886,8 @@ async function ensureBackendEmenda(rec) {
   if (found) {
     rec.backend_id = Number(found.id);
     apiEmendaIdByInterno[rec.id] = rec.backend_id;
+    if (toInt(found.row_version) > 0) rec.row_version = toInt(found.row_version);
+    if (found.updated_at) rec.updated_at = String(found.updated_at);
     return rec.backend_id;
   }
 
@@ -2596,11 +2895,26 @@ async function ensureBackendEmenda(rec) {
     id_interno: rec.id,
     ano: toInt(rec.ano) || currentYear(),
     identificacao: rec.identificacao || "-",
+    cod_subfonte: rec.cod_subfonte || "",
+    deputado: rec.deputado || "",
+    cod_uo: rec.cod_uo || "",
+    sigla_uo: rec.sigla_uo || "",
+    cod_orgao: rec.cod_orgao || "",
+    cod_acao: rec.cod_acao || "",
+    descricao_acao: rec.descricao_acao || "",
+    plan_a: rec.plan_a || "",
+    plan_b: rec.plan_b || "",
+    municipio: rec.municipio || "",
+    valor_inicial: toNumber(rec.valor_inicial || 0),
+    valor_atual: toNumber(rec.valor_atual || 0),
+    processo_sei: rec.processo_sei || "",
     status_oficial: deriveStatusForBackend(rec)
   }, "IMPORT");
 
   rec.backend_id = created && created.id != null ? Number(created.id) : null;
   if (rec.backend_id) apiEmendaIdByInterno[rec.id] = rec.backend_id;
+  if (created && toInt(created.row_version) > 0) rec.row_version = toInt(created.row_version);
+  if (created && created.updated_at) rec.updated_at = String(created.updated_at);
   return rec.backend_id;
 }
 
@@ -2621,6 +2935,8 @@ function clearApiSocketReconnectTimer() {
 
 function closeApiSocket() {
   clearApiSocketReconnectTimer();
+  presenceByBackendId = {};
+  currentPresenceBackendId = null;
   if (apiSocket) {
     try { apiSocket.onopen = null; apiSocket.onmessage = null; apiSocket.onerror = null; apiSocket.onclose = null; } catch (_err) {}
     try { apiSocket.close(); } catch (_err) {}
@@ -2630,7 +2946,7 @@ function closeApiSocket() {
 
 function scheduleApiSocketReconnect() {
   clearApiSocketReconnectTimer();
-  const token = String(sessionStorage.getItem(SESSION_TOKEN_KEY) || "").trim();
+  const token = readStoredSessionToken();
   if (!isApiEnabled() || !token) return;
 
   const waitMs = Math.max(WS_RECONNECT_BASE_MS, Math.min(apiSocketBackoffMs, WS_RECONNECT_MAX_MS));
@@ -2657,6 +2973,81 @@ function queueApiRefreshFromSocket() {
   }, WS_REFRESH_DEBOUNCE_MS);
 }
 
+function sendSocketJson(payload) {
+  if (!apiSocket || apiSocket.readyState !== 1) return;
+  try {
+    apiSocket.send(JSON.stringify(payload || {}));
+  } catch (_err) {
+    // no-op
+  }
+}
+
+function getBackendIdForRecord(rec) {
+  if (!rec) return 0;
+  if (rec.backend_id) return Number(rec.backend_id) || 0;
+  const known = apiEmendaIdByInterno[rec.id];
+  return known ? Number(known) || 0 : 0;
+}
+
+function announcePresenceForRecord(rec, action) {
+  if (!isApiEnabled()) return;
+  const backendId = getBackendIdForRecord(rec);
+  if (!backendId) return;
+
+  sendSocketJson({
+    type: "presence",
+    action: String(action || "").toLowerCase(),
+    emenda_id: backendId
+  });
+
+  if (String(action || "").toLowerCase() === "join") {
+    currentPresenceBackendId = backendId;
+  } else if (String(action || "").toLowerCase() === "leave" && currentPresenceBackendId === backendId) {
+    currentPresenceBackendId = null;
+  }
+}
+
+function getPresenceUsersForRecord(rec) {
+  const backendId = getBackendIdForRecord(rec);
+  if (!backendId) return [];
+  return Array.isArray(presenceByBackendId[backendId]) ? presenceByBackendId[backendId] : [];
+}
+
+function renderLivePresence(rec) {
+  if (!livePresenceText) return;
+  const users = getPresenceUsersForRecord(rec);
+  if (!users.length) {
+    livePresenceText.textContent = "Sem outro usuario ativo nesta emenda no momento.";
+    return;
+  }
+  const list = users.map(function (u) {
+    const nome = text(u.usuario_nome || "-");
+    const setor = text(u.setor || "-");
+    return nome + " (" + setor + ")";
+  });
+  livePresenceText.textContent = "Usuarios ativos nesta emenda agora: " + list.join(" | ");
+}
+
+function handlePresencePayload(data) {
+  const backendId = Number(data && data.id ? data.id : 0);
+  if (!backendId) return;
+  const users = Array.isArray(data && data.users) ? data.users.map(function (u) {
+    return {
+      usuario_nome: text(u && u.usuario_nome ? u.usuario_nome : "-"),
+      setor: text(u && u.setor ? u.setor : "-"),
+      at: text(u && u.at ? u.at : "")
+    };
+  }) : [];
+
+  if (!users.length) delete presenceByBackendId[backendId];
+  else presenceByBackendId[backendId] = users;
+
+  const rec = getSelected();
+  if (rec && getBackendIdForRecord(rec) === backendId) {
+    renderLivePresence(rec);
+  }
+}
+
 
 // Abre WebSocket da API para atualizar tela em tempo real.
 function connectApiSocket() {
@@ -2665,13 +3056,16 @@ function connectApiSocket() {
   if (typeof WebSocket === "undefined") return;
   if (!isApiEnabled()) return;
 
-  const token = String(sessionStorage.getItem(SESSION_TOKEN_KEY) || "").trim();
+  const token = readStoredSessionToken();
   if (!token) return;
 
   const wsBase = getApiWebSocketUrl();
   if (!wsBase) return;
 
-  const wsUrl = wsBase + "?token=" + encodeURIComponent(token);
+  const wsUrl = wsBase
+    + "?token=" + encodeURIComponent(token)
+    + "&user_name=" + encodeURIComponent(CURRENT_USER || "")
+    + "&user_role=" + encodeURIComponent(CURRENT_ROLE || "");
   try {
     apiSocket = new WebSocket(wsUrl);
   } catch (_err) {
@@ -2681,6 +3075,8 @@ function connectApiSocket() {
 
   apiSocket.onopen = function () {
     apiSocketBackoffMs = WS_RECONNECT_BASE_MS;
+    const rec = getSelected();
+    if (rec) announcePresenceForRecord(rec, "join");
   };
 
   apiSocket.onmessage = function (evt) {
@@ -2689,8 +3085,14 @@ function connectApiSocket() {
 
     let data = null;
     try { data = JSON.parse(raw); } catch (_err) { return; }
-    if (!data || data.type !== "update") return;
+    if (!data) return;
 
+    if (data.type === "presence") {
+      handlePresencePayload(data);
+      return;
+    }
+
+    if (data.type !== "update") return;
     queueApiRefreshFromSocket();
   };
 
@@ -2728,11 +3130,47 @@ function getApiBaseUrl() {
   const hostBase = text(byHostMap[host]);
   const isHostedUi = !!host && host !== "localhost" && host !== "127.0.0.1";
   const storedBase = text(raw);
-  const hasLoopbackOverride = /^https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0)(?::\d+)?(?:\/|$)/i.test(storedBase);
+  function normalizeLoopbackBase(value) {
+    const candidate = text(value);
+    if (!candidate) return "";
+    try {
+      const parsed = new URL(candidate);
+      const hostName = String(parsed.hostname || "").toLowerCase();
+      const loopbackHosts = ["localhost", "127.0.0.1", "0.0.0.0", "::1"];
+      if (loopbackHosts.indexOf(hostName) < 0) return "";
+      const proto = parsed.protocol === "https:" ? "https:" : "http:";
+      const port = parsed.port ? ":" + parsed.port : "";
+      return (proto + "//127.0.0.1" + port).replace(/\/+$/, "");
+    } catch (_err) {
+      if (!/^https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(?::\d+)?(?:\/|$)/i.test(candidate)) return "";
+      return candidate
+        .replace(/^https?:\/\/(?:localhost|0\.0\.0\.0|\[::1\])/i, function (prefix) {
+          return prefix.toLowerCase().startsWith("https://") ? "https://127.0.0.1" : "http://127.0.0.1";
+        })
+        .replace(/\/+$/, "");
+    }
+  }
+  const normalizedStoredLoopback = normalizeLoopbackBase(storedBase);
+  const hasLoopbackOverride = !!normalizedStoredLoopback;
+  const hasRemoteOverride = !!storedBase && !hasLoopbackOverride;
   if (isHostedUi && hasLoopbackOverride) {
     localStorage.removeItem(API_BASE_URL_KEY);
   }
-  const safeStoredBase = (isHostedUi && hasLoopbackOverride) ? "" : storedBase;
+  if (!isHostedUi) {
+    if (hasRemoteOverride) {
+      localStorage.removeItem(API_BASE_URL_KEY);
+    }
+    const localBase = normalizedStoredLoopback
+      || normalizeLoopbackBase(hostBase)
+      || normalizeLoopbackBase(runtimeBase)
+      || normalizeLoopbackBase(DEFAULT_API_BASE_URL)
+      || "http://127.0.0.1:8000";
+    if (localBase && storedBase !== localBase) {
+      try { localStorage.setItem(API_BASE_URL_KEY, localBase); } catch (_err) {}
+    }
+    return localBase.replace(/\/+$/, "");
+  }
+  const safeStoredBase = (isHostedUi && hasLoopbackOverride) || (!isHostedUi && hasRemoteOverride) ? "" : storedBase;
   const base = safeStoredBase || hostBase || runtimeBase || DEFAULT_API_BASE_URL;
   return base.replace(/\/+$/, "");
 }
@@ -2757,16 +3195,33 @@ async function apiRequest(method, path, body, eventOrigin) {
   }
 
   if (!resp.ok) {
-    const t = await resp.text();
-    apiOnline = false;
-    apiLastError = "HTTP " + resp.status + " " + t;
+    const rawBody = await resp.text();
+    let parsedBody = null;
+    try { parsedBody = rawBody ? JSON.parse(rawBody) : null; } catch (_err) { parsedBody = null; }
+
+    const detail = parsedBody && Object.prototype.hasOwnProperty.call(parsedBody, "detail")
+      ? parsedBody.detail
+      : rawBody;
+    const detailMessage = (typeof detail === "string")
+      ? detail
+      : (detail && typeof detail === "object" && detail.message ? String(detail.message) : String(rawBody || ""));
+
+    const transportError = !resp.status || resp.status >= 500;
+    apiOnline = !transportError;
+    apiLastError = "HTTP " + resp.status + " " + detailMessage;
     applyAccessProfile();
+
     if (resp.status === 401 && isApiEnabled()) {
-      sessionStorage.removeItem(SESSION_TOKEN_KEY);
-  closeApiSocket();
+      clearStoredSessionToken();
+      closeApiSocket();
       showAuthGate("Sessao expirada. Faca login novamente.");
     }
-    throw new Error(apiLastError + "::" + t);
+
+    const err = new Error(detailMessage || ("HTTP " + String(resp.status)));
+    err.status = resp.status;
+    err.payload = parsedBody;
+    err.detail = detail;
+    throw err;
   }
 
   const ct = (resp.headers.get("content-type") || "").toLowerCase();
@@ -2810,7 +3265,7 @@ function buildApiHeaders(eventOrigin) {
   const origin = String(eventOrigin || API_DEFAULT_EVENT_ORIGIN).trim().toUpperCase();
   if (origin) headers["X-Event-Origin"] = origin;
 
-  const token = String(sessionStorage.getItem(SESSION_TOKEN_KEY) || "").trim();
+  const token = readStoredSessionToken();
   if (token) {
     headers["Authorization"] = "Bearer " + token;
     // Compatibilidade com backend antigo.
@@ -2836,9 +3291,71 @@ function getPrimaryStorage() {
 function getSecondaryStorage() {
   return getStorageMode() === STORAGE_MODE_LOCAL ? sessionStorage : localStorage;
 }
+
+function isApiConflictError(err) {
+  return !!(err && Number(err.status) === 409);
+}
+
+function extractConflictDetail(err) {
+  const detail = err && err.detail && typeof err.detail === "object" ? err.detail : null;
+  if (!detail) return null;
+  return {
+    message: String(detail.message || "Conflito de atualizacao."),
+    expected: toInt(detail.expected_row_version),
+    current: toInt(detail.current_row_version),
+    updatedAt: text(detail.current_updated_at || "")
+  };
+}
+
+function conflictMessageFromError(err) {
+  const info = extractConflictDetail(err);
+  if (!info) return "Conflito de atualizacao detectado. Atualize os dados antes de salvar novamente.";
+  const when = info.updatedAt ? fmtDateTime(info.updatedAt) : "-";
+  return "Conflito detectado: versao esperada " + String(info.expected || "-")
+    + ", versao atual " + String(info.current || "-")
+    + ". Ultima alteracao: " + when + ".";
+}
+
+async function refreshRecordConcurrencyFromApi(rec) {
+  if (!rec || !isApiEnabled()) return false;
+  const backendId = getBackendIdForRecord(rec);
+  if (!backendId) return false;
+  try {
+    const remote = await apiRequest("GET", "/emendas/" + String(backendId), undefined, "API");
+    if (remote && remote.updated_at) rec.updated_at = String(remote.updated_at);
+    if (remote && toInt(remote.row_version) > 0) rec.row_version = toInt(remote.row_version);
+    return true;
+  } catch (_err) {
+    return false;
+  }
+}
+
+function restoreRecordFromSnapshot(rec, snapshot) {
+  if (!rec || !snapshot) return;
+  const restored = deepClone(snapshot);
+  Object.keys(rec).forEach(function (key) { delete rec[key]; });
+  Object.keys(restored).forEach(function (key) { rec[key] = restored[key]; });
+}
+
+async function rollbackSaveAndReport(err, rec, snapshot, actionName) {
+  restoreRecordFromSnapshot(rec, snapshot);
+  saveState(true);
+  render();
+  if (selectedId === rec.id) openModal(rec.id, true);
+
+  if (isApiConflictError(err)) {
+    await refreshRecordConcurrencyFromApi(rec);
+    showModalSaveFeedback(conflictMessageFromError(err), true);
+    return;
+  }
+
+  handleApiSyncError(err, actionName);
+}
+
 function handleApiSyncError(err, actionName) {
   const msg = err && err.message ? String(err.message) : "falha desconhecida";
-  apiOnline = false;
+  const status = Number(err && err.status ? err.status : 0);
+  apiOnline = !!status && status < 500;
   apiLastError = msg;
   applyAccessProfile();
   console.warn("Falha ao sincronizar " + actionName + " com API:", msg);
@@ -2856,9 +3373,12 @@ function mkEvent(type, payload) {
     actor_user: p.actor_user || CURRENT_USER,
     actor_role: p.actor_role || CURRENT_ROLE,
     type: type,
+    key: p.key || null,
     field: p.field || null,
     from: p.from || null,
     to: p.to || null,
+    raw_from: Object.prototype.hasOwnProperty.call(p, "raw_from") ? p.raw_from : null,
+    raw_to: Object.prototype.hasOwnProperty.call(p, "raw_to") ? p.raw_to : null,
     note: p.note || ""
   };
 }
@@ -2876,12 +3396,15 @@ function mkRecord(data) {
     cod_orgao: asText(data.cod_orgao),
     cod_acao: asText(data.cod_acao),
     descricao_acao: asText(data.descricao_acao),
+    plan_a: asText(data.plan_a || data.plano_a),
+    plan_b: asText(data.plan_b || data.plano_b),
     municipio: asText(data.municipio) || "-",
     valor_inicial: toNumber(data.valor_inicial != null ? data.valor_inicial : 0),
     valor_atual: toNumber(data.valor_atual != null ? data.valor_atual : (data.valor_inicial != null ? data.valor_inicial : 0)),
     processo_sei: asText(data.processo_sei),
     status_oficial: normalizeStatus(data.status_oficial || "Recebido"),
     backend_id: data.backend_id != null ? Number(data.backend_id) : null,
+    row_version: toInt(data.row_version) > 0 ? toInt(data.row_version) : 1,
     created_at: data.created_at || now,
     updated_at: data.updated_at || now,
     eventos: Array.isArray(data.eventos) && data.eventos.length ? data.eventos : [mkEvent("IMPORT", { note: "Registro criado." })],
@@ -2900,6 +3423,7 @@ function normalizeRecordShape(raw) {
   const rec = mkRecord(raw || {});
   rec.id = asText(raw && raw.id ? raw.id : rec.id);
   rec.backend_id = raw && raw.backend_id != null ? Number(raw.backend_id) : rec.backend_id;
+  rec.row_version = raw && toInt(raw.row_version) > 0 ? toInt(raw.row_version) : rec.row_version;
   rec.parent_id = raw && raw.parent_id != null ? Number(raw.parent_id) : rec.parent_id;
   rec.version = raw && toInt(raw.version) > 0 ? toInt(raw.version) : rec.version;
   rec.is_current = raw && Object.prototype.hasOwnProperty.call(raw, "is_current") ? raw.is_current !== false : rec.is_current;
@@ -3196,6 +3720,8 @@ function syncCanonicalToAllFields(record) {
   upsertRawField(record.all_fields, "cod_orgao", record.cod_orgao);
   upsertRawField(record.all_fields, "cod_acao", record.cod_acao);
   upsertRawField(record.all_fields, "descricao_acao", record.descricao_acao);
+  upsertRawField(record.all_fields, "plan_a", record.plan_a);
+  upsertRawField(record.all_fields, "plan_b", record.plan_b);
   upsertRawField(record.all_fields, "municipio", record.municipio);
   upsertRawField(record.all_fields, "valor_inicial", record.valor_inicial);
   upsertRawField(record.all_fields, "valor_atual", record.valor_atual);
@@ -3972,6 +4498,8 @@ const TEMPLATE_CANONICAL_KEYS = [
   "cod_orgao",
   "cod_acao",
   "descricao_acao",
+  "plan_a",
+  "plan_b",
   "municipio",
   "valor_inicial",
   "valor_atual",
@@ -4112,8 +4640,8 @@ function buildExportTableData(records, options) {
     });
   });
 
-  const normalizedHeaders = ["id", "ano", "identificacao", "cod_subfonte", "deputado", "cod_uo", "sigla_uo", "cod_orgao", "cod_acao", "descricao_acao", "municipio", "valor_inicial", "valor_atual", "processo_sei"];
-  const systemHeaders = ["id_interno_sistema", "backend_id", "parent_id", "version", "is_current", "usuarios_ativos", "progresso", "global_state", "ref_key", "created_at", "updated_at", "source_sheet", "source_row"];
+  const normalizedHeaders = ["id", "ano", "identificacao", "cod_subfonte", "deputado", "cod_uo", "sigla_uo", "cod_orgao", "cod_acao", "descricao_acao", "plan_a", "plan_b", "municipio", "valor_inicial", "valor_atual", "processo_sei"];
+  const systemHeaders = ["id_interno_sistema", "backend_id", "parent_id", "version", "row_version", "is_current", "usuarios_ativos", "progresso", "global_state", "ref_key", "created_at", "updated_at", "source_sheet", "source_row"];
   const headers = (useOriginal ? extraHeaders : normalizedHeaders).concat(systemHeaders);
 
   const rows = records.map(function (r) {
@@ -4137,6 +4665,7 @@ function buildExportTableData(records, options) {
     out.backend_id = r.backend_id == null ? "" : r.backend_id;
     out.parent_id = r.parent_id == null ? "" : r.parent_id;
     out.version = r.version == null ? 1 : r.version;
+    out.row_version = r.row_version == null ? 1 : r.row_version;
     out.is_current = r.is_current !== false;
     out.usuarios_ativos = users.map(function (u) { return u.name + " (" + (u.role || "-") + ")"; }).join(" | ");
     out.progresso = String(progress.concl) + "/" + String(progress.total) + " (" + String(progress.percent) + "%)";

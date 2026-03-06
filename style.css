@@ -69,6 +69,98 @@ h1, h2, h3, h4, p {
   padding: 14px;
 }
 
+.role-notice {
+  margin-bottom: 12px;
+  border-left: 4px solid #d18a00;
+  background: #fff8eb;
+}
+
+.supervisor-panel {
+  margin-bottom: 12px;
+}
+
+.supervisor-panel h3 {
+  margin-bottom: 10px;
+}
+
+.supervisor-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.supervisor-kpi {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+  background: #fbfcff;
+}
+
+.supervisor-kpi-label {
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.supervisor-kpi-value {
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
+.supervisor-list {
+  margin-top: 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+  background: #fff;
+}
+
+.supervisor-list-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.supervisor-list-row:last-child {
+  border-bottom: 0;
+}
+
+.op-budget-card {
+  margin-bottom: 12px;
+}
+
+.op-budget-card h3 {
+  margin-bottom: 10px;
+}
+
+.op-budget-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.op-budget-tier {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+  background: #fbfcff;
+}
+
+.op-budget-label {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.op-budget-value {
+  font-size: 1.2rem;
+  font-weight: 700;
+  margin: 4px 0;
+}
+
 .filters {
   display: flex;
   gap: 12px;
@@ -370,6 +462,18 @@ textarea {
 
   .topbar {
     flex-direction: column;
+  }
+
+  .supervisor-kpi-grid,
+  .op-budget-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .supervisor-kpi-grid,
+  .op-budget-grid {
+    grid-template-columns: 1fr;
   }
 }
 

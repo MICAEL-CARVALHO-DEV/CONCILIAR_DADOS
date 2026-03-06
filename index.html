@@ -7,7 +7,24 @@
   <script>
     (function () {
       try {
-        var token = String(sessionStorage.getItem("SEC_SESSION_TOKEN") || "").trim();
+        var SESSION_TOKEN_KEY = "SEC_SESSION_TOKEN";
+        var SESSION_TOKEN_BACKUP_KEY = "SEC_SESSION_TOKEN_BKP";
+        var token = "";
+        try {
+          token = String(sessionStorage.getItem(SESSION_TOKEN_KEY) || "").trim();
+        } catch (_sessionErr) {
+          token = "";
+        }
+        if (!token) {
+          try {
+            token = String(localStorage.getItem(SESSION_TOKEN_BACKUP_KEY) || "").trim();
+            if (token) {
+              sessionStorage.setItem(SESSION_TOKEN_KEY, token);
+            }
+          } catch (_backupErr) {
+            token = "";
+          }
+        }
         if (token) return;
         var loginUrl = "login.html?next=" + encodeURIComponent("index.html") + "&msg=" + encodeURIComponent("Entre para continuar.");
         window.location.replace(loginUrl);
@@ -24,7 +41,7 @@
     <header class="topbar">
       <div>
         <h1>Prototipo SEC Emendas</h1>
-        <p class="muted">Andamento por usuario, importacao da planilha real e audit log</p>
+        <p class="muted">Andamento em tempo real, monitoramento por supervisao e trilha de auditoria</p>
       </div>
       <div class="actions">
         <span id="currentUserInfo" class="user-chip"></span>
@@ -41,6 +58,10 @@
         <button id="btnDemo4Users" class="btn">Demo 4 usuarios</button>
       </div>
     </header>
+
+    <section id="roleNotice" class="card role-notice hidden"></section>
+
+    <section id="supervisorQuickPanel" class="card supervisor-panel hidden"></section>
 
     <section class="filters card">
       <div class="field">
@@ -129,6 +150,7 @@
         <div class="card">
           <h4>Andamento por usuario (tempo real)</h4>
           <div id="userProgressBox"></div>
+          <p id="livePresenceText" class="muted small" style="margin-top:8px"></p>
         </div>
 
         <div class="card">
@@ -280,6 +302,3 @@
   </script>
 </body>
 </html>
-
-
-
