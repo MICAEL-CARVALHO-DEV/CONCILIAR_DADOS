@@ -65,6 +65,7 @@ const formatUtils = SEC_FRONTEND.formatUtils || null;
 const normalizeUtils = SEC_FRONTEND.normalizeUtils || null;
 const importNormalizationUtils = SEC_FRONTEND.importNormalizationUtils || null;
 const importValidationUtils = SEC_FRONTEND.importValidationUtils || null;
+const importPipelineUtils = SEC_FRONTEND.importPipelineUtils || null;
 const idUtils = SEC_FRONTEND.idUtils || null;
 const statusUtils = SEC_FRONTEND.statusUtils || null;
 const progressUtils = SEC_FRONTEND.progressUtils || null;
@@ -427,6 +428,12 @@ function getImportNormalizationUtil(methodName) {
 function getImportValidationUtil(methodName) {
   if (!importValidationUtils) return null;
   const method = importValidationUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getImportPipelineUtil(methodName) {
+  if (!importPipelineUtils) return null;
+  const method = importPipelineUtils[methodName];
   return typeof method === "function" ? method : null;
 }
 
@@ -1986,6 +1993,11 @@ function processImportedRows(sourceRows, fileName) {
 // Cria um novo registro interno a partir de uma linha importada.
 function createRecordFromImport(incoming, ctx, fileName) {
   const importCtx = getImportPipelineContext();
+  const createRecordFromImportUtil = getImportPipelineUtil("createRecordFromImport");
+  if (createRecordFromImportUtil) {
+    return createRecordFromImportUtil(incoming, ctx, fileName, importCtx);
+  }
+
   const now = importCtx.isoNow();
   const ano = incoming.ano || importCtx.currentYear();
   const id = incoming.id || importCtx.generateInternalIdForYear(ano);
@@ -2032,6 +2044,11 @@ function createRecordFromImport(incoming, ctx, fileName) {
 // Faz merge de uma linha importada em registro existente, preservando historico.
 function mergeImportIntoRecord(target, incoming, ctx, fileName) {
   const importCtx = getImportPipelineContext();
+  const mergeImportIntoRecordUtil = getImportPipelineUtil("mergeImportIntoRecord");
+  if (mergeImportIntoRecordUtil) {
+    return mergeImportIntoRecordUtil(target, incoming, ctx, fileName, importCtx);
+  }
+
   const changedEvents = [];
   let changedAny = false;
 
@@ -2099,6 +2116,11 @@ function mergeImportIntoRecord(target, incoming, ctx, fileName) {
 
 function mapImportRow(ctx) {
   const importCtx = getImportPipelineContext();
+  const mapImportRowUtil = getImportPipelineUtil("mapImportRow");
+  if (mapImportRowUtil) {
+    return mapImportRowUtil(ctx, importCtx);
+  }
+
   const rawOriginal = importCtx.shallowCloneObj(ctx.row || {});
   const row = normalizeRowKeys(rawOriginal);
 
@@ -2141,6 +2163,11 @@ function mapImportRow(ctx) {
 }
 
 function hasUsefulData(record) {
+  const hasUsefulDataUtil = getImportPipelineUtil("hasUsefulData");
+  if (hasUsefulDataUtil) {
+    return hasUsefulDataUtil(record);
+  }
+
   const checks = [record.id, record.identificacao, record.cod_subfonte, record.cod_acao, record.municipio, record.deputado, record.processo_sei, record.ref_key];
   const hasText = checks.some(function (v) {
     return !!String(v || "").trim();
@@ -2150,17 +2177,40 @@ function hasUsefulData(record) {
 }
 
 function hasIncomingValue(value, type) {
+  const hasIncomingValueUtil = getImportPipelineUtil("hasIncomingValue");
+  if (hasIncomingValueUtil) {
+    return hasIncomingValueUtil(value, type);
+  }
+
   if (type === "money" || type === "number") return value != null && String(value).trim() !== "" && Number.isFinite(Number(value));
   return value != null && String(value).trim() !== "";
 }
 
 function hasFieldChanged(prev, next, type) {
+  const hasFieldChangedUtil = getImportPipelineUtil("hasFieldChanged");
+  if (hasFieldChangedUtil) {
+    return hasFieldChangedUtil(prev, next, type, {
+      toNumber: toNumber,
+      toInt: toInt,
+      normalizeLooseText: normalizeLooseText
+    });
+  }
+
   if (type === "money") return toNumber(prev) !== toNumber(next);
   if (type === "number") return toInt(prev) !== toInt(next);
   return normalizeLooseText(prev) !== normalizeLooseText(next);
 }
 
 function stringifyFieldValue(value, type) {
+  const stringifyFieldValueUtil = getImportPipelineUtil("stringifyFieldValue");
+  if (stringifyFieldValueUtil) {
+    return stringifyFieldValueUtil(value, type, {
+      fmtMoney: fmtMoney,
+      toInt: toInt,
+      toNumber: toNumber
+    });
+  }
+
   if (type === "money") return "R$ " + fmtMoney(value);
   if (type === "number") return String(toInt(value));
   return String(value == null ? "" : value);
@@ -2168,6 +2218,11 @@ function stringifyFieldValue(value, type) {
 
 // Padroniza mensagem de auditoria para eventos de importacao.
 function buildImportNote(fileName, ctx) {
+  const buildImportNoteUtil = getImportPipelineUtil("buildImportNote");
+  if (buildImportNoteUtil) {
+    return buildImportNoteUtil(fileName, ctx);
+  }
+
   return "Importado de " + fileName + " | Aba: " + (ctx.sheetName || "XLSX") + " | Linha: " + String(ctx.rowNumber || "-");
 }
 
@@ -4738,6 +4793,7 @@ function getImportPipelineContext() {
     asText: asText,
     pickValue: pickValue,
     toNumberOrNull: toNumberOrNull,
+    normalizeRowKeys: normalizeRowKeys,
     normalizeHeader: normalizeHeader,
     text: text
   };
