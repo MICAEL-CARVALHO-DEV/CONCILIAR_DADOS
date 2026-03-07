@@ -4570,6 +4570,10 @@ function getImportReportUtil(methodName) {
   return typeof method === "function" ? method : null;
 }
 
+function getXlsxApi() {
+  return typeof window !== "undefined" ? window.XLSX : null;
+}
+
 function getImportReportContext() {
   return {
     records: state.records || [],
@@ -4588,6 +4592,29 @@ function getImportReportContext() {
     getEventsSorted: getEventsSorted,
     toInt: toInt,
     text: text
+  };
+}
+
+function getExportDataContext() {
+  return {
+    getActiveUsersWithLastMark: getActiveUsersWithLastMark,
+    calcProgress: calcProgress,
+    getGlobalProgressState: getGlobalProgressState,
+    getEventsSorted: getEventsSorted,
+    exportScopeLabel: exportScopeLabel
+  };
+}
+
+function getExportTemplateContext() {
+  return {
+    importAliases: IMPORT_ALIASES,
+    rawPreferredHeaders: RAW_PREFERRED_HEADERS,
+    normalizeHeader: normalizeHeader,
+    canonicalKeys: TEMPLATE_CANONICAL_KEYS,
+    toNumber: toNumber,
+    normalizeCompareValue: normalizeCompareValue,
+    xlsxApi: getXlsxApi(),
+    inferDemoSeed: inferDemoSeed
   };
 }
 
@@ -5313,7 +5340,7 @@ async function syncExportLogToApi(meta) {
 
 // Exportador padrao: gera abas de dados + auditoria + resumo.
 function exportRecordsToXlsx(records, filename, options) {
-  const xlsxApi = typeof window !== "undefined" ? window.XLSX : null;
+  const xlsxApi = getXlsxApi();
   if (!xlsxApi) {
     alert("Biblioteca XLSX nao carregada.");
     return null;
@@ -5499,12 +5526,13 @@ const TEMPLATE_CANONICAL_KEYS = Array.isArray(getExportTemplateValue("templateCa
   ];
 
 function buildCanonicalColumnMap(headers) {
+  const ctx = getExportTemplateContext();
   const buildCanonicalColumnMapUtil = getExportTemplateUtil("buildCanonicalColumnMap");
   if (buildCanonicalColumnMapUtil) {
-    return buildCanonicalColumnMapUtil(headers, IMPORT_ALIASES, RAW_PREFERRED_HEADERS, normalizeHeader, TEMPLATE_CANONICAL_KEYS);
+    return buildCanonicalColumnMapUtil(headers, ctx.importAliases, ctx.rawPreferredHeaders, ctx.normalizeHeader, ctx.canonicalKeys);
   }
   const map = {};
-  TEMPLATE_CANONICAL_KEYS.forEach(function (key) {
+  ctx.canonicalKeys.forEach(function (key) {
     const idx = findHeaderIndexByAliases(headers, key);
     if (idx >= 0) map[key] = idx;
   });
@@ -5512,41 +5540,43 @@ function buildCanonicalColumnMap(headers) {
 }
 
 function findHeaderIndexByAliases(headers, canonicalKey) {
+  const ctx = getExportTemplateContext();
   const findHeaderIndexByAliasesUtil = getExportTemplateUtil("findHeaderIndexByAliases");
   if (findHeaderIndexByAliasesUtil) {
-    return findHeaderIndexByAliasesUtil(headers, canonicalKey, IMPORT_ALIASES, RAW_PREFERRED_HEADERS, normalizeHeader);
+    return findHeaderIndexByAliasesUtil(headers, canonicalKey, ctx.importAliases, ctx.rawPreferredHeaders, ctx.normalizeHeader);
   }
   const list = [];
-  const aliases = IMPORT_ALIASES[canonicalKey] || [];
+  const aliases = ctx.importAliases[canonicalKey] || [];
   aliases.forEach(function (a) { list.push(a); });
-  if (RAW_PREFERRED_HEADERS[canonicalKey]) list.push(RAW_PREFERRED_HEADERS[canonicalKey]);
+  if (ctx.rawPreferredHeaders[canonicalKey]) list.push(ctx.rawPreferredHeaders[canonicalKey]);
 
-  const wanted = new Set(list.map(function (x) { return normalizeHeader(x); }));
+  const wanted = new Set(list.map(function (x) { return ctx.normalizeHeader(x); }));
   for (let i = 0; i < (headers || []).length; i += 1) {
-    if (wanted.has(normalizeHeader(headers[i]))) return i;
+    if (wanted.has(ctx.normalizeHeader(headers[i]))) return i;
   }
   return -1;
 }
 
 function getRecordValueForTemplate(rec, canonicalKey) {
+  const ctx = getExportTemplateContext();
   const getRecordValueForTemplateUtil = getExportTemplateUtil("getRecordValueForTemplate");
   if (getRecordValueForTemplateUtil) {
-    return getRecordValueForTemplateUtil(rec, canonicalKey, IMPORT_ALIASES, RAW_PREFERRED_HEADERS, normalizeHeader);
+    return getRecordValueForTemplateUtil(rec, canonicalKey, ctx.importAliases, ctx.rawPreferredHeaders, ctx.normalizeHeader);
   }
   if (!rec) return "";
   if (canonicalKey === "status_oficial") return rec.status_oficial || "";
 
   const raw = rec.all_fields && typeof rec.all_fields === "object" ? rec.all_fields : null;
   if (raw) {
-    const aliases = IMPORT_ALIASES[canonicalKey] || [];
-    const wanted = new Set(aliases.map(function (a) { return normalizeHeader(a); }));
-    const preferred = RAW_PREFERRED_HEADERS[canonicalKey];
-    if (preferred) wanted.add(normalizeHeader(preferred));
+    const aliases = ctx.importAliases[canonicalKey] || [];
+    const wanted = new Set(aliases.map(function (a) { return ctx.normalizeHeader(a); }));
+    const preferred = ctx.rawPreferredHeaders[canonicalKey];
+    if (preferred) wanted.add(ctx.normalizeHeader(preferred));
 
     const keys = Object.keys(raw);
     for (let i = 0; i < keys.length; i += 1) {
       const k = keys[i];
-      if (wanted.has(normalizeHeader(k))) {
+      if (wanted.has(ctx.normalizeHeader(k))) {
         const v = raw[k];
         if (v != null && String(v).trim() !== "") return v;
       }
@@ -5557,9 +5587,10 @@ function getRecordValueForTemplate(rec, canonicalKey) {
 }
 
 function setWorksheetCellValue(ws, rowNumber, colIndex, value, canonicalKey, xlsxApi) {
+  const ctx = getExportTemplateContext();
   const setWorksheetCellValueUtil = getExportTemplateUtil("setWorksheetCellValue");
   if (setWorksheetCellValueUtil) {
-    return setWorksheetCellValueUtil(ws, rowNumber, colIndex, value, canonicalKey, xlsxApi, toNumber, normalizeCompareValue);
+    return setWorksheetCellValueUtil(ws, rowNumber, colIndex, value, canonicalKey, xlsxApi, ctx.toNumber, ctx.normalizeCompareValue);
   }
   const addr = xlsxApi.utils.encode_cell({ r: Math.max(0, Number(rowNumber) - 1), c: Math.max(0, Number(colIndex)) });
   const previousCell = ws[addr];
@@ -5569,10 +5600,10 @@ function setWorksheetCellValue(ws, rowNumber, colIndex, value, canonicalKey, xls
   const normalizedNext = value == null ? "" : value;
 
   let nextCell;
-  if (numericField && String(normalizedNext).trim() !== "" && Number.isFinite(toNumber(normalizedNext))) {
+  if (numericField && String(normalizedNext).trim() !== "" && Number.isFinite(ctx.toNumber(normalizedNext))) {
     nextCell = {
       t: "n",
-      v: toNumber(normalizedNext)
+      v: ctx.toNumber(normalizedNext)
     };
   } else {
     nextCell = {
@@ -5581,7 +5612,7 @@ function setWorksheetCellValue(ws, rowNumber, colIndex, value, canonicalKey, xls
     };
   }
 
-  const changed = normalizeCompareValue(prevValue) !== normalizeCompareValue(nextCell.v);
+  const changed = ctx.normalizeCompareValue(prevValue) !== ctx.normalizeCompareValue(nextCell.v);
   if (!changed) return false;
 
   if (previousCell && previousCell.z) nextCell.z = previousCell.z;
@@ -5601,12 +5632,13 @@ function normalizeCompareValue(v) {
 }
 
 function runTemplateRoundTripCheck(workbook, assertions) {
+  const ctx = getExportTemplateContext();
   const runTemplateRoundTripCheckUtil = getExportTemplateUtil("runTemplateRoundTripCheck");
   if (runTemplateRoundTripCheckUtil) {
-    return runTemplateRoundTripCheckUtil(workbook, assertions, normalizeCompareValue, typeof window !== "undefined" ? window.XLSX : null);
+    return runTemplateRoundTripCheckUtil(workbook, assertions, ctx.normalizeCompareValue, ctx.xlsxApi);
   }
   try {
-    const xlsxApi = typeof window !== "undefined" ? window.XLSX : null;
+    const xlsxApi = ctx.xlsxApi;
     if (!xlsxApi) return { ok: true, issues: [] };
 
     const arr = xlsxApi.write(workbook, { type: "array", bookType: "xlsx" });
@@ -5625,8 +5657,8 @@ function runTemplateRoundTripCheck(workbook, assertions) {
       const addr = xlsxApi.utils.encode_cell({ r: Math.max(0, Number(a.rowNumber) - 1), c: Math.max(0, Number(a.colIndex)) });
       const cell = ws[addr];
       const got = cell && Object.prototype.hasOwnProperty.call(cell, "v") ? cell.v : "";
-      if (normalizeCompareValue(got) !== normalizeCompareValue(a.expected)) {
-        issues.push("Divergencia em " + a.sheetName + "!" + addr + ": esperado=" + normalizeCompareValue(a.expected) + " recebido=" + normalizeCompareValue(got));
+      if (ctx.normalizeCompareValue(got) !== ctx.normalizeCompareValue(a.expected)) {
+        issues.push("Divergencia em " + a.sheetName + "!" + addr + ": esperado=" + ctx.normalizeCompareValue(a.expected) + " recebido=" + ctx.normalizeCompareValue(got));
         if (issues.length >= 25) break;
       }
     }
@@ -5639,13 +5671,10 @@ function runTemplateRoundTripCheck(workbook, assertions) {
 
 // Monta tabela principal de exportacao com headers escolhidos.
 function buildExportTableData(records, options) {
+  const ctx = getExportDataContext();
   const buildExportTableDataUtil = getExportDataUtil("buildExportTableData");
   if (buildExportTableDataUtil) {
-    return buildExportTableDataUtil(records, options, {
-      getActiveUsersWithLastMark: getActiveUsersWithLastMark,
-      calcProgress: calcProgress,
-      getGlobalProgressState: getGlobalProgressState
-    });
+    return buildExportTableDataUtil(records, options, ctx);
   }
   const opts = options || {};
   const useOriginal = !!opts.useOriginalHeaders;
@@ -5670,9 +5699,9 @@ function buildExportTableData(records, options) {
   const rows = records.map(function (r) {
     const out = {};
     const raw = r && r.all_fields && typeof r.all_fields === "object" ? r.all_fields : {};
-    const users = getActiveUsersWithLastMark(r);
-    const progress = calcProgress(users);
-    const global = getGlobalProgressState(users);
+    const users = ctx.getActiveUsersWithLastMark(r);
+    const progress = ctx.calcProgress(users);
+    const global = ctx.getGlobalProgressState(users);
 
     if (useOriginal) {
       extraHeaders.forEach(function (h) {
@@ -5706,14 +5735,10 @@ function buildExportTableData(records, options) {
 
 // Monta tabela de auditoria para aba AuditLog do XLSX exportado.
 function buildAuditLogTableData(records) {
+  const ctx = getExportDataContext();
   const buildAuditLogTableDataUtil = getExportDataUtil("buildAuditLogTableData");
   if (buildAuditLogTableDataUtil) {
-    return buildAuditLogTableDataUtil(records, {
-      getEventsSorted: getEventsSorted,
-      getActiveUsersWithLastMark: getActiveUsersWithLastMark,
-      calcProgress: calcProgress,
-      getGlobalProgressState: getGlobalProgressState
-    });
+    return buildAuditLogTableDataUtil(records, ctx);
   }
 
   const headers = [
@@ -5738,10 +5763,10 @@ function buildAuditLogTableData(records) {
 
   const rows = [];
   records.forEach(function (r) {
-    const orderedEvents = getEventsSorted(r);
-    const users = getActiveUsersWithLastMark(r);
-    const progress = calcProgress(users);
-    const global = getGlobalProgressState(users);
+    const orderedEvents = ctx.getEventsSorted(r);
+    const users = ctx.getActiveUsersWithLastMark(r);
+    const progress = ctx.calcProgress(users);
+    const global = ctx.getGlobalProgressState(users);
     const usersList = users.map(function (u) { return u.name; }).join(" | ");
 
     orderedEvents.forEach(function (ev) {
@@ -5777,21 +5802,18 @@ function buildAuditLogTableData(records) {
 }
 
 function buildSummaryAoa(records, totalEvents, exportScope, exportFilters) {
+  const ctx = getExportDataContext();
   const buildSummaryAoaUtil = getExportDataUtil("buildSummaryAoa");
   if (buildSummaryAoaUtil) {
-    return buildSummaryAoaUtil(records, totalEvents, exportScope, exportFilters, {
-      exportScopeLabel: exportScopeLabel,
-      getGlobalProgressState: getGlobalProgressState,
-      getActiveUsersWithLastMark: getActiveUsersWithLastMark
-    });
+    return buildSummaryAoaUtil(records, totalEvents, exportScope, exportFilters, ctx);
   }
   const now = new Date().toISOString();
   const byGlobal = { done: 0, in_progress: 0, attention: 0, no_marks: 0 };
-  const scope = exportScopeLabel(exportScope || EXPORT_SCOPE.ATUAIS);
+  const scope = ctx.exportScopeLabel(exportScope || EXPORT_SCOPE.ATUAIS);
   const filtersJson = JSON.stringify(exportFilters || {});
 
   records.forEach(function (r) {
-    const global = getGlobalProgressState(getActiveUsersWithLastMark(r));
+    const global = ctx.getGlobalProgressState(ctx.getActiveUsersWithLastMark(r));
     byGlobal[global.code] = (byGlobal[global.code] || 0) + 1;
   });
 
@@ -5814,12 +5836,13 @@ function buildSummaryAoa(records, totalEvents, exportScope, exportFilters) {
 }
 
 function runRoundTripCheck(workbook, headers) {
+  const ctx = getExportTemplateContext();
   const runRoundTripCheckUtil = getExportTemplateUtil("runRoundTripCheck");
   if (runRoundTripCheckUtil) {
-    return runRoundTripCheckUtil(workbook, headers, typeof window !== "undefined" ? window.XLSX : null);
+    return runRoundTripCheckUtil(workbook, headers, ctx.xlsxApi);
   }
   try {
-    const xlsxApi = typeof window !== "undefined" ? window.XLSX : null;
+    const xlsxApi = ctx.xlsxApi;
     if (!xlsxApi) return { ok: true, issues: [] };
 
     const arr = xlsxApi.write(workbook, { type: "array", bookType: "xlsx" });
@@ -5864,12 +5887,13 @@ function runRoundTripCheck(workbook, headers) {
 }
 
 function buildPlanilha1Aoa(records) {
+  const ctx = getExportTemplateContext();
   const buildPlanilha1AoaUtil = getExportTemplateUtil("buildPlanilha1Aoa");
   if (buildPlanilha1AoaUtil) {
-    return buildPlanilha1AoaUtil(records, inferDemoSeed);
+    return buildPlanilha1AoaUtil(records, ctx.inferDemoSeed);
   }
   const safeRecords = (records || []).filter(function (r) {
-    return !inferDemoSeed(r);
+    return !ctx.inferDemoSeed(r);
   });
 
   const byDeputado = {};
