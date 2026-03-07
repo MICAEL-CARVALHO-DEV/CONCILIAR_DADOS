@@ -3719,75 +3719,25 @@ function isApiEnabled() {
   if (apiClient && typeof apiClient.isApiEnabled === "function") {
     return apiClient.isApiEnabled();
   }
-  const host = (typeof window !== "undefined" && window.location && window.location.hostname) ? String(window.location.hostname) : "";
-  const isHostedUi = !!host && host !== "localhost" && host !== "127.0.0.1";
-  if (isHostedUi) {
-    const saved = readStorageValue(localStorage, API_ENABLED_KEY);
-    if (saved != null && String(saved).trim().toLowerCase() === "false") {
-      removeStorageValue(localStorage, API_ENABLED_KEY);
-    }
-    return true;
-  }
-  const raw = readStorageValue(localStorage, API_ENABLED_KEY);
-  if (raw == null || raw === "") return true;
-  return String(raw).trim().toLowerCase() !== "false";
+  return true;
 }
 
-// Resolve URL base da API com protecao contra override localhost em host publicado.
+// Resolve URL base da API (compatibilidade local, quando o cliente modular não estiver disponível).
 function getApiBaseUrl() {
   if (apiClient && typeof apiClient.getApiBaseUrl === "function") {
     return apiClient.getApiBaseUrl();
   }
-  const raw = readStorageValue(localStorage, API_BASE_URL_KEY);
-  const runtimeBase = text(RUNTIME_CONFIG.API_BASE_URL);
-  const byHostMap = (RUNTIME_CONFIG && RUNTIME_CONFIG.API_BASE_URL_BY_HOST && typeof RUNTIME_CONFIG.API_BASE_URL_BY_HOST === "object") ? RUNTIME_CONFIG.API_BASE_URL_BY_HOST : {};
   const host = (typeof window !== "undefined" && window.location && window.location.hostname) ? String(window.location.hostname) : "";
-  const hostBase = text(byHostMap[host]);
   const isHostedUi = !!host && host !== "localhost" && host !== "127.0.0.1";
-  const storedBase = text(raw);
-  function normalizeLoopbackBase(value) {
-    const candidate = text(value);
-    if (!candidate) return "";
-    try {
-      const parsed = new URL(candidate);
-      const hostName = String(parsed.hostname || "").toLowerCase();
-      const loopbackHosts = ["localhost", "127.0.0.1", "0.0.0.0", "::1"];
-      if (loopbackHosts.indexOf(hostName) < 0) return "";
-      const proto = parsed.protocol === "https:" ? "https:" : "http:";
-      const port = parsed.port ? ":" + parsed.port : "";
-      return (proto + "//127.0.0.1" + port).replace(/\/+$/, "");
-    } catch (_err) {
-      if (!/^https?:\/\/(?:localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\])(?::\d+)?(?:\/|$)/i.test(candidate)) return "";
-      return candidate
-        .replace(/^https?:\/\/(?:localhost|0\.0\.0\.0|\[::1\])/i, function (prefix) {
-          return prefix.toLowerCase().startsWith("https://") ? "https://127.0.0.1" : "http://127.0.0.1";
-        })
-        .replace(/\/+$/, "");
-    }
-  }
-  const normalizedStoredLoopback = normalizeLoopbackBase(storedBase);
-  const hasLoopbackOverride = !!normalizedStoredLoopback;
-  const hasRemoteOverride = !!storedBase && !hasLoopbackOverride;
-  if (isHostedUi && hasLoopbackOverride) {
-    removeStorageValue(localStorage, API_BASE_URL_KEY);
-  }
+  const local = readStorageValue(localStorage, API_BASE_URL_KEY);
+  const byHostMap = (RUNTIME_CONFIG && RUNTIME_CONFIG.API_BASE_URL_BY_HOST && typeof RUNTIME_CONFIG.API_BASE_URL_BY_HOST === "object")
+    ? RUNTIME_CONFIG.API_BASE_URL_BY_HOST
+    : {};
+  const hostBase = text(byHostMap[host]);
   if (!isHostedUi) {
-    if (hasRemoteOverride) {
-      removeStorageValue(localStorage, API_BASE_URL_KEY);
-    }
-    const localBase = normalizedStoredLoopback
-      || normalizeLoopbackBase(hostBase)
-      || normalizeLoopbackBase(runtimeBase)
-      || normalizeLoopbackBase(DEFAULT_API_BASE_URL)
-      || "http://127.0.0.1:8000";
-    if (localBase && storedBase !== localBase) {
-      writeStorageValue(localStorage, API_BASE_URL_KEY, localBase);
-    }
-    return localBase.replace(/\/+$/, "");
+    return (text(local || DEFAULT_API_BASE_URL) || "http://127.0.0.1:8000").replace(/\/+$/, "");
   }
-  const safeStoredBase = (isHostedUi && hasLoopbackOverride) || (!isHostedUi && hasRemoteOverride) ? "" : storedBase;
-  const base = safeStoredBase || hostBase || runtimeBase || DEFAULT_API_BASE_URL;
-  return base.replace(/\/+$/, "");
+  return (text(local || hostBase || (RUNTIME_CONFIG && RUNTIME_CONFIG.API_BASE_URL) || DEFAULT_API_BASE_URL) || "http://127.0.0.1:8000").replace(/\/+$/, "");
 }
 
 // Wrapper autenticado para chamadas privadas da API.
