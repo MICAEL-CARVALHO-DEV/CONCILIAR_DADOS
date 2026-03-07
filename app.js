@@ -73,6 +73,7 @@ const statusUtils = SEC_FRONTEND.statusUtils || null;
 const progressUtils = SEC_FRONTEND.progressUtils || null;
 const filterUtils = SEC_FRONTEND.filterUtils || null;
 const exportUtils = SEC_FRONTEND.exportUtils || null;
+const exportFlowUtils = SEC_FRONTEND.exportFlowUtils || null;
 const exportWorkbookWriterUtils = SEC_FRONTEND.exportWorkbookWriterUtils || null;
 const exportTemplateUtils = SEC_FRONTEND.exportTemplateUtils || null;
 const exportTemplateWriterUtils = SEC_FRONTEND.exportTemplateWriterUtils || null;
@@ -456,6 +457,12 @@ function getImportReaderUtil(methodName) {
 function getExportUtil(methodName) {
   if (!exportUtils) return null;
   const method = exportUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getExportFlowUtil(methodName) {
+  if (!exportFlowUtils) return null;
+  const method = exportFlowUtils[methodName];
   return typeof method === "function" ? method : null;
 }
 
@@ -5491,6 +5498,18 @@ function matchesTextFilter(value, term) {
 }
 
 function filterRecordsForExport(scope, customFilters) {
+  const filterRecordsForExportUtil = getExportFlowUtil("filterRecordsForExport");
+  if (filterRecordsForExportUtil) {
+    return filterRecordsForExportUtil(scope, customFilters, state.records, {
+      exportScope: EXPORT_SCOPE,
+      isCurrentRecord: isCurrentRecord,
+      toInt: toInt,
+      getRecordCurrentStatus: getRecordCurrentStatus,
+      normalizeStatus: normalizeStatus,
+      matchesTextFilter: matchesTextFilter
+    });
+  }
+
   const records = Array.isArray(state.records) ? state.records.slice() : [];
 
   if (scope === EXPORT_SCOPE.HISTORICO) {
@@ -5588,6 +5607,30 @@ function refreshCustomExportSummary() {
 
 // Orquestra exportacao por escopo (atuais, historico ou personalizado).
 async function runExportByScope(scope, options) {
+  const runExportByScopeUtil = getExportFlowUtil("runExportByScope");
+  if (runExportByScopeUtil) {
+    return runExportByScopeUtil(scope, options, {
+      exportScope: EXPORT_SCOPE,
+      confirm: confirm,
+      alert: alert,
+      exportScopeLabel: exportScopeLabel,
+      filterRecordsForExport: function (currentScope, customFilters) {
+        return filterRecordsForExport(currentScope, customFilters);
+      },
+      templateReady: !!(lastImportedWorkbookTemplate && lastImportedWorkbookTemplate.buffer),
+      buildExportFilename: buildExportFilename,
+      buildExportFiltersSnapshot: buildExportFiltersSnapshot,
+      exportRecordsToXlsx: exportRecordsToXlsx,
+      onLatestExportReport: function (report) {
+        latestExportReport = report;
+      },
+      isoNow: isoNow,
+      renderImportDashboard: renderImportDashboard,
+      countAuditEvents: countAuditEvents,
+      syncExportLogToApi: syncExportLogToApi
+    });
+  }
+
   const opts = options || {};
   const exportScope = scope || EXPORT_SCOPE.ATUAIS;
   const customFilters = opts.customFilters || null;
