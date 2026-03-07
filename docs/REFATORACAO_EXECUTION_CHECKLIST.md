@@ -37,6 +37,7 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Criar `getFormatUtil()`, `getNormalizeUtil()`, `getStatusUtil()`, `getIdUtil()` e `getImportNormalizationUtil()` no `app.js` para centralizar bridges de utilitários puros.
 - [DONE] Criar `getStorageUtil()`, `getAuthStoreUtil()`, `getAuthGuardUtil()`, `getApiClientUtil()` e `getConcurrencyUtil()` no `app.js` para centralizar bridges de infraestrutura.
 - [DONE] Conectar `exportUtils`, `exportTemplateUtils` e `exportDataUtils` ao `SEC_FRONTEND` no `app.js`, removendo acesso inconsistente por globais soltas.
+- [DONE] Criar `getDomUtil()` e `getEscapeUtil()` no `app.js` para centralizar bridges de DOM/escape e remover checagens diretas restantes.
 
-Active: ID-FE-33
+Active: ID-FE-34
 Risks: validar comportamento em dispositivos com storage bloqueado.

@@ -471,6 +471,18 @@ function getConcurrencyUtil(methodName) {
   return typeof method === "function" ? method : null;
 }
 
+function getDomUtil(methodName) {
+  if (!domUtils) return null;
+  const method = domUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getEscapeUtil(methodName) {
+  if (!escapeUtils) return null;
+  const method = escapeUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
 // Inicializa os filtros da UI principal e prepara os selects dependentes.
 function initSelects() {
   const initSelectsUtil = getFilterUtil("initSelects");
@@ -5955,8 +5967,9 @@ function text(v) {
 
 function clearNodeChildren(node) {
   if (!node) return;
-  if (domUtils && typeof domUtils.clearChildren === "function") {
-    domUtils.clearChildren(node);
+  const clearChildrenUtil = getDomUtil("clearChildren");
+  if (clearChildrenUtil) {
+    clearChildrenUtil(node);
     return;
   }
   while (node.firstChild) {
@@ -5966,8 +5979,9 @@ function clearNodeChildren(node) {
 
 function appendRenderedMarkup(container, rendered) {
   if (!container) return;
-  if (domUtils && typeof domUtils.appendRenderedMarkup === "function") {
-    domUtils.appendRenderedMarkup(container, rendered);
+  const appendRenderedMarkupUtil = getDomUtil("appendRenderedMarkup");
+  if (appendRenderedMarkupUtil) {
+    appendRenderedMarkupUtil(container, rendered);
     return;
   }
 
@@ -6008,8 +6022,9 @@ function appendRenderedMarkup(container, rendered) {
 }
 
 function escapeHtml(str) {
-  if (escapeUtils && typeof escapeUtils.escapeHtml === "function") {
-    return escapeUtils.escapeHtml(str);
+  const escapeHtmlUtil = getEscapeUtil("escapeHtml");
+  if (escapeHtmlUtil) {
+    return escapeHtmlUtil(str);
   }
   return String(str).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll("\"", "&quot;").replaceAll("'", "&#039;");
 }
