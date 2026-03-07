@@ -2662,6 +2662,9 @@ function readStoredSessionToken() {
   var cfg = (AUTH_KEYS && typeof AUTH_KEYS === "object") ? AUTH_KEYS : {};
   var tokenKey = cfg.sessionToken || "SEC_SESSION_TOKEN";
   var backupTokenKey = cfg.sessionTokenBackup || "SEC_SESSION_TOKEN_BKP";
+  if (storageUtils && typeof storageUtils.readSessionToken === "function") {
+    return storageUtils.readSessionToken(tokenKey, backupTokenKey);
+  }
   try {
     if (typeof sessionStorage !== "undefined") {
       var sessionToken = String(sessionStorage.getItem(tokenKey) || "").trim();
@@ -2693,6 +2696,10 @@ function writeStoredSessionToken(token) {
   var cfg = (AUTH_KEYS && typeof AUTH_KEYS === "object") ? AUTH_KEYS : {};
   var tokenKey = cfg.sessionToken || "SEC_SESSION_TOKEN";
   var backupTokenKey = cfg.sessionTokenBackup || "SEC_SESSION_TOKEN_BKP";
+  if (storageUtils && typeof storageUtils.writeSessionToken === "function") {
+    storageUtils.writeSessionToken(token, tokenKey, backupTokenKey);
+    return;
+  }
   var raw = String(token == null ? "" : token).trim();
   if (!raw) {
     clearStoredSessionToken();
@@ -2718,6 +2725,10 @@ function clearStoredSessionToken() {
   var cfg = (AUTH_KEYS && typeof AUTH_KEYS === "object") ? AUTH_KEYS : {};
   var tokenKey = cfg.sessionToken || "SEC_SESSION_TOKEN";
   var backupTokenKey = cfg.sessionTokenBackup || "SEC_SESSION_TOKEN_BKP";
+  if (storageUtils && typeof storageUtils.clearSessionToken === "function") {
+    storageUtils.clearSessionToken(tokenKey, backupTokenKey);
+    return;
+  }
   try {
     if (typeof sessionStorage !== "undefined") {
       sessionStorage.removeItem(tokenKey);
