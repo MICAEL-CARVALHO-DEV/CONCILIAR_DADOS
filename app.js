@@ -6004,9 +6004,19 @@ function appendRenderedMarkup(container, rendered) {
     return;
   }
 
-  const temp = document.createElement("div");
-  temp.innerHTML = html;
-  while (temp.firstChild) container.appendChild(temp.firstChild);
+  if (typeof DOMParser === "function") {
+    try {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString("<body>" + html + "</body>", "text/html");
+      const body = doc && doc.body;
+      if (body && body.childNodes) {
+        while (body.firstChild) container.appendChild(body.firstChild);
+        return;
+      }
+    } catch (_err) {}
+  }
+
+  container.appendChild(document.createTextNode(html));
 }
 
 function escapeHtml(str) {
