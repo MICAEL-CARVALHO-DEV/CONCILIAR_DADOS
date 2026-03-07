@@ -5815,9 +5815,10 @@ function configureFrontendModules() {
       return readStoredSessionToken();
     },
     getSharedApiKey: function () {
-      return storageUtils
-        ? storageUtils.safeGetItem(sessionStorage, API_SHARED_KEY_SESSION_KEY).trim()
-        : readStorageValue(sessionStorage, API_SHARED_KEY_SESSION_KEY);
+      if (storageUtils && typeof storageUtils.readStorageValue === "function") {
+        return storageUtils.readStorageValue(sessionStorage, API_SHARED_KEY_SESSION_KEY);
+      }
+      return readStorageValue(sessionStorage, API_SHARED_KEY_SESSION_KEY);
     },
     onNetworkError: function (message) {
       apiOnline = false;
