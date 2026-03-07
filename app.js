@@ -64,6 +64,7 @@ const escapeUtils = SEC_FRONTEND.escapeUtils || null;
 const formatUtils = SEC_FRONTEND.formatUtils || null;
 const normalizeUtils = SEC_FRONTEND.normalizeUtils || null;
 const importNormalizationUtils = SEC_FRONTEND.importNormalizationUtils || null;
+const importValidationUtils = SEC_FRONTEND.importValidationUtils || null;
 const idUtils = SEC_FRONTEND.idUtils || null;
 const statusUtils = SEC_FRONTEND.statusUtils || null;
 const progressUtils = SEC_FRONTEND.progressUtils || null;
@@ -420,6 +421,12 @@ function getIdUtil(methodName) {
 function getImportNormalizationUtil(methodName) {
   if (!importNormalizationUtils) return null;
   const method = importNormalizationUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getImportValidationUtil(methodName) {
+  if (!importValidationUtils) return null;
+  const method = importValidationUtils[methodName];
   return typeof method === "function" ? method : null;
 }
 
@@ -2280,6 +2287,23 @@ function extractPlanilha1AoaFromWorkbook(workbook, xlsxApi) {
 // Gera diagnostico estrutural da planilha (cabecalhos, tipos e faltas criticas).
 function buildImportValidationReport(sourceRows) {
   const validationCtx = getImportValidationContext();
+  const buildImportValidationReportUtil = getImportValidationUtil("buildImportValidationReport");
+  if (buildImportValidationReportUtil) {
+    return buildImportValidationReportUtil(sourceRows, {
+      buildKnownHeaderSet: function () {
+        return buildKnownHeaderSet();
+      },
+      countCriticalEmpties: function (rows) {
+        return countCriticalEmpties(rows);
+      },
+      detectImportTypes: function (rows) {
+        return detectImportTypes(rows);
+      },
+      shallowCloneObj: validationCtx.shallowCloneObj,
+      normalizeHeader: validationCtx.normalizeHeader
+    });
+  }
+
   const rows = Array.isArray(sourceRows) ? sourceRows : [];
   const knownSet = buildKnownHeaderSet();
   const headersFound = [];
@@ -2339,6 +2363,11 @@ function buildImportValidationReport(sourceRows) {
 
 function buildKnownHeaderSet() {
   const importCtx = getImportPipelineContext();
+  const buildKnownHeaderSetUtil = getImportValidationUtil("buildKnownHeaderSet");
+  if (buildKnownHeaderSetUtil) {
+    return buildKnownHeaderSetUtil(importCtx.importAliases, importCtx.normalizeHeader);
+  }
+
   const set = new Set();
   Object.keys(importCtx.importAliases).forEach(function (key) {
     (importCtx.importAliases[key] || []).forEach(function (alias) {
@@ -2350,6 +2379,11 @@ function buildKnownHeaderSet() {
 
 function countCriticalEmpties(rows) {
   const validationCtx = getImportValidationContext();
+  const countCriticalEmptiesUtil = getImportValidationUtil("countCriticalEmpties");
+  if (countCriticalEmptiesUtil) {
+    return countCriticalEmptiesUtil(rows, validationCtx.mapImportRow, validationCtx.text);
+  }
+
   const counters = { identificacao: 0, deputado: 0, municipio: 0 };
   rows.forEach(function (ctx) {
     const mapped = validationCtx.mapImportRow(ctx);
@@ -2362,6 +2396,11 @@ function countCriticalEmpties(rows) {
 
 function detectImportTypes(rows) {
   const validationCtx = getImportValidationContext();
+  const detectImportTypesUtil = getImportValidationUtil("detectImportTypes");
+  if (detectImportTypesUtil) {
+    return detectImportTypesUtil(rows, validationCtx.mapImportRow, validationCtx.detectType);
+  }
+
   const sample = rows.slice(0, 50).map(function (ctx) { return validationCtx.mapImportRow(ctx); });
   return {
     ano: validationCtx.detectType(sample.map(function (r) { return r.ano; })),
@@ -2373,6 +2412,11 @@ function detectImportTypes(rows) {
 }
 
 function detectType(values) {
+  const detectTypeUtil = getImportValidationUtil("detectType");
+  if (detectTypeUtil) {
+    return detectTypeUtil(values);
+  }
+
   const v = (values || []).filter(function (x) { return x != null && String(x).trim() !== ""; });
   if (!v.length) return "vazio";
   const allNum = v.every(function (x) { return Number.isFinite(Number(x)); });
@@ -2381,6 +2425,11 @@ function detectType(values) {
 }
 function detectHeaderRow(matrix) {
   const validationCtx = getImportValidationContext();
+  const detectHeaderRowUtil = getImportValidationUtil("detectHeaderRow");
+  if (detectHeaderRowUtil) {
+    return detectHeaderRowUtil(matrix, validationCtx.text, validationCtx.normalizeHeader, buildHeadersFromRow);
+  }
+
   if (!Array.isArray(matrix) || !matrix.length) return null;
 
   const scanLimit = Math.min(matrix.length, 40);
@@ -2415,6 +2464,11 @@ function detectHeaderRow(matrix) {
 
 function buildHeadersFromRow(rawHeader) {
   const validationCtx = getImportValidationContext();
+  const buildHeadersFromRowUtil = getImportValidationUtil("buildHeadersFromRow");
+  if (buildHeadersFromRowUtil) {
+    return buildHeadersFromRowUtil(rawHeader, validationCtx.text);
+  }
+
   const out = [];
   const used = {};
   const total = Math.max(rawHeader.length, 1);
@@ -2437,6 +2491,11 @@ function buildHeadersFromRow(rawHeader) {
 }
 
 function rowArrayToObject(arr, headers) {
+  const rowArrayToObjectUtil = getImportValidationUtil("rowArrayToObject");
+  if (rowArrayToObjectUtil) {
+    return rowArrayToObjectUtil(arr, headers);
+  }
+
   const obj = {};
   for (let c = 0; c < headers.length; c += 1) {
     const key = headers[c];
@@ -2448,6 +2507,11 @@ function rowArrayToObject(arr, headers) {
 
 function isRowEmpty(arr) {
   const validationCtx = getImportValidationContext();
+  const isRowEmptyUtil = getImportValidationUtil("isRowEmpty");
+  if (isRowEmptyUtil) {
+    return isRowEmptyUtil(arr, validationCtx.text);
+  }
+
   if (!Array.isArray(arr)) return true;
   return !arr.some(function (v) {
     return validationCtx.text(v) !== "";
