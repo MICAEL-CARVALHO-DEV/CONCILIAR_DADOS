@@ -1,4 +1,4 @@
-﻿/***********************
+/***********************
  * Prototipo SEC Emendas - v3
  * - Status oficial controlado por usuarios operacionais (supervisao monitora)
  * - Marcacao por usuario e timeline completa
@@ -65,6 +65,7 @@ const domUtils = SEC_FRONTEND.domUtils || null;
 const escapeUtils = SEC_FRONTEND.escapeUtils || null;
 const formatUtils = SEC_FRONTEND.formatUtils || null;
 const normalizeUtils = SEC_FRONTEND.normalizeUtils || null;
+const idUtils = SEC_FRONTEND.idUtils || null;
 const authStore = SEC_FRONTEND.authStore || null;
 const authGuard = SEC_FRONTEND.authGuard || null;
 const apiClient = SEC_FRONTEND.apiClient || null;
@@ -4040,6 +4041,10 @@ function syncActiveUsersCache(records) {
   });
 }
 function buildIdCounters(records) {
+  if (idUtils && typeof idUtils.buildIdCounters === "function") {
+    return idUtils.buildIdCounters(records);
+  }
+
   const counters = {};
   records.forEach(function (r) {
     const id = String(r.id || "");
@@ -4053,6 +4058,10 @@ function buildIdCounters(records) {
 }
 
 function assignMissingIds(records, counters) {
+  if (idUtils && typeof idUtils.assignMissingIds === "function") {
+    return idUtils.assignMissingIds(records, counters, generateInternalId, toInt, currentYear);
+  }
+
   records.forEach(function (r) {
     if (String(r.id || "").trim()) return;
     r.id = generateInternalId(r.ano, counters);
@@ -4060,12 +4069,15 @@ function assignMissingIds(records, counters) {
 }
 
 function generateInternalId(ano, counters) {
+  if (idUtils && typeof idUtils.generateInternalId === "function") {
+    return idUtils.generateInternalId(ano, counters, toInt, currentYear);
+  }
+
   const year = String(toInt(ano) || currentYear());
   const next = (counters[year] || 0) + 1;
   counters[year] = next;
   return "EPI-" + year + "-" + String(next).padStart(6, "0");
 }
-
 function syncReferenceKeys(records) {
   records.forEach(function (r) {
     r.ref_key = buildReferenceKey(r);
@@ -5532,4 +5544,3 @@ function configureFrontendModules() {
     }
   });
 }
-
