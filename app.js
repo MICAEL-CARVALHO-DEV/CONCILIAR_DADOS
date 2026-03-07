@@ -2278,6 +2278,7 @@ function extractPlanilha1AoaFromWorkbook(workbook, xlsxApi) {
 
 // Gera diagnostico estrutural da planilha (cabecalhos, tipos e faltas criticas).
 function buildImportValidationReport(sourceRows) {
+  const validationCtx = getImportValidationContext();
   const rows = Array.isArray(sourceRows) ? sourceRows : [];
   const knownSet = buildKnownHeaderSet();
   const headersFound = [];
@@ -2290,7 +2291,7 @@ function buildImportValidationReport(sourceRows) {
     preview.push({
       aba: ctx && ctx.sheetName ? ctx.sheetName : "XLSX",
       linha: ctx && ctx.rowNumber != null ? Number(ctx.rowNumber) : null,
-      dados: shallowCloneObj((ctx && ctx.row) || {})
+      dados: validationCtx.shallowCloneObj((ctx && ctx.row) || {})
     });
   });
 
@@ -2301,7 +2302,7 @@ function buildImportValidationReport(sourceRows) {
         headerSeen.add(k);
         headersFound.push(k);
       }
-      const nk = normalizeHeader(k);
+      const nk = validationCtx.normalizeHeader(k);
       headerNormalizedCount[nk] = (headerNormalizedCount[nk] || 0) + 1;
     });
   });
@@ -2309,7 +2310,7 @@ function buildImportValidationReport(sourceRows) {
   const recognized = [];
   const unrecognized = [];
   headersFound.forEach(function (h) {
-    if (knownSet.has(normalizeHeader(h))) recognized.push(h);
+    if (knownSet.has(validationCtx.normalizeHeader(h))) recognized.push(h);
     else unrecognized.push(h);
   });
 
@@ -2347,24 +2348,26 @@ function buildKnownHeaderSet() {
 }
 
 function countCriticalEmpties(rows) {
+  const validationCtx = getImportValidationContext();
   const counters = { identificacao: 0, deputado: 0, municipio: 0 };
   rows.forEach(function (ctx) {
-    const mapped = mapImportRow(ctx);
-    if (!text(mapped.identificacao)) counters.identificacao += 1;
-    if (!text(mapped.deputado)) counters.deputado += 1;
-    if (!text(mapped.municipio)) counters.municipio += 1;
+    const mapped = validationCtx.mapImportRow(ctx);
+    if (!validationCtx.text(mapped.identificacao)) counters.identificacao += 1;
+    if (!validationCtx.text(mapped.deputado)) counters.deputado += 1;
+    if (!validationCtx.text(mapped.municipio)) counters.municipio += 1;
   });
   return counters;
 }
 
 function detectImportTypes(rows) {
-  const sample = rows.slice(0, 50).map(function (ctx) { return mapImportRow(ctx); });
+  const validationCtx = getImportValidationContext();
+  const sample = rows.slice(0, 50).map(function (ctx) { return validationCtx.mapImportRow(ctx); });
   return {
-    ano: detectType(sample.map(function (r) { return r.ano; })),
-    valor_inicial: detectType(sample.map(function (r) { return r.valor_inicial; })),
-    valor_atual: detectType(sample.map(function (r) { return r.valor_atual; })),
-    identificacao: detectType(sample.map(function (r) { return r.identificacao; })),
-    processo_sei: detectType(sample.map(function (r) { return r.processo_sei; }))
+    ano: validationCtx.detectType(sample.map(function (r) { return r.ano; })),
+    valor_inicial: validationCtx.detectType(sample.map(function (r) { return r.valor_inicial; })),
+    valor_atual: validationCtx.detectType(sample.map(function (r) { return r.valor_atual; })),
+    identificacao: validationCtx.detectType(sample.map(function (r) { return r.identificacao; })),
+    processo_sei: validationCtx.detectType(sample.map(function (r) { return r.processo_sei; }))
   };
 }
 
@@ -2376,6 +2379,7 @@ function detectType(values) {
   return "texto";
 }
 function detectHeaderRow(matrix) {
+  const validationCtx = getImportValidationContext();
   if (!Array.isArray(matrix) || !matrix.length) return null;
 
   const scanLimit = Math.min(matrix.length, 40);
@@ -2385,11 +2389,11 @@ function detectHeaderRow(matrix) {
   for (let i = 0; i < scanLimit; i += 1) {
     const row = Array.isArray(matrix[i]) ? matrix[i] : [];
     const nonEmpty = row.filter(function (v) {
-      return text(v) !== "";
+      return validationCtx.text(v) !== "";
     }).length;
     if (nonEmpty < 3) continue;
 
-    const normalized = row.map(function (v) { return normalizeHeader(v); });
+    const normalized = row.map(function (v) { return validationCtx.normalizeHeader(v); });
     let score = nonEmpty;
     const hints = ["identificacao", "deputado", "status", "municipio", "cod_uo", "cod_subfonte", "cod_da_acao", "descritor_da_acao"];
     hints.forEach(function (h) {
@@ -2409,12 +2413,13 @@ function detectHeaderRow(matrix) {
 }
 
 function buildHeadersFromRow(rawHeader) {
+  const validationCtx = getImportValidationContext();
   const out = [];
   const used = {};
   const total = Math.max(rawHeader.length, 1);
 
   for (let i = 0; i < total; i += 1) {
-    let base = text(rawHeader[i]);
+    let base = validationCtx.text(rawHeader[i]);
     if (!base) base = "COL_" + String(i + 1);
 
     let key = base;
@@ -2441,9 +2446,10 @@ function rowArrayToObject(arr, headers) {
 }
 
 function isRowEmpty(arr) {
+  const validationCtx = getImportValidationContext();
   if (!Array.isArray(arr)) return true;
   return !arr.some(function (v) {
-    return text(v) !== "";
+    return validationCtx.text(v) !== "";
   });
 }
 
@@ -4662,6 +4668,16 @@ function getImportPipelineContext() {
     toNumberOrNull: toNumberOrNull,
     normalizeHeader: normalizeHeader,
     text: text
+  };
+}
+
+function getImportValidationContext() {
+  return {
+    text: text,
+    normalizeHeader: normalizeHeader,
+    shallowCloneObj: shallowCloneObj,
+    mapImportRow: mapImportRow,
+    detectType: detectType
   };
 }
 
