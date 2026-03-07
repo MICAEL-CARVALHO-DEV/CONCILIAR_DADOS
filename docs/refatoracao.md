@@ -30,9 +30,10 @@ Sair de um projeto "funciona, mas esta pesado" para um projeto:
 - [DONE] [ID-FE-14] Adicionar fallback defensivo de token no `app.js` para carregar sem regressao quando `authStore` nao for inicializado.
 - [DONE] [ID-FE-15] Extrair helpers de template/export do `app.js` para `frontend/js/utils/exportTemplate.js` (mapa/cabeçalhos/round-trip/Planilha1).
 - [DONE] [ID-FE-16] Extrair builders de exportação do `app.js` para `frontend/js/utils/exportData.js` (`buildExportTableData`, `buildAuditLogTableData`, `buildSummaryAoa`).
+- [DONE] [ID-FE-17] Extrair render de Planilha1 para `frontend/js/ui/importReport.js` (`buildPlanilha1Html`).
 - [TODO] Continuar migracao do `app.js` para os modulos novos (foco em componentes da tela principal e filtros adicionais).
 
-Active: ID-FE-16 — migrar restante do pipeline de exportação para módulo de dados.
+Active: ID-FE-17 — migrar renderizações auxiliares da área de importação.
 Risks: manter compatibilidade incremental com ambiente legado.
 
 ## Fase 0 - Preparacao

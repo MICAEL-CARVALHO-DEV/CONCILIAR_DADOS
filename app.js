@@ -4573,6 +4573,12 @@ function wireImportReportTabs(defaultTab) {
 }
 
 function buildPlanilha1Html(aoa) {
+  if (typeof importReportUtils !== "undefined" && importReportUtils && typeof importReportUtils.buildPlanilha1Html === "function") {
+    return importReportUtils.buildPlanilha1Html(aoa, {
+      escapeHtml: escapeHtml,
+      normalizeLooseText: normalizeLooseText
+    });
+  }
   if (!Array.isArray(aoa) || aoa.length === 0) {
     return "<p class=\"muted small\">Sem dados para resumo por deputado.</p>";
   }
