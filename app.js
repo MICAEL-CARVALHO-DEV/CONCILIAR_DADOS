@@ -3800,7 +3800,9 @@ function buildApiHeaders(eventOrigin) {
     headers["X-Session-Token"] = token;
   }
 
-  const key = readStorageValue(sessionStorage, API_SHARED_KEY_SESSION_KEY);
+  const key = storageUtils && typeof storageUtils.readStorageValue === "function"
+    ? storageUtils.readStorageValue(sessionStorage, API_SHARED_KEY_SESSION_KEY)
+    : readStorageValue(sessionStorage, API_SHARED_KEY_SESSION_KEY);
   if (key) headers["X-API-Key"] = key;
 
   return headers;
