@@ -30,6 +30,7 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Usar `storageUtils.readStorageValue` ao montar headers da API para `X-API-Key`.
 - [DONE] Normalizar a assinatura de `wireImportReportTabs` entre `app.js` e `frontend/js/ui/importReport.js`, mantendo compatibilidade retroativa.
 - [DONE] Passar `buildExportSummaryBadgeHtml` e `exportScopeLabel` explicitamente para `renderImportDashboard`, reduzindo dependência de fallback implícito.
+- [DONE] Padronizar o acesso a `importReportUtils` no topo do `app.js`, removendo verificações repetidas por `typeof`.
 
-Active: ID-FE-26
+Active: ID-FE-27
 Risks: validar comportamento em dispositivos com storage bloqueado.

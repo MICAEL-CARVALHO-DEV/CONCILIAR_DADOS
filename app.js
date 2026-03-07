@@ -69,6 +69,7 @@ const statusUtils = SEC_FRONTEND.statusUtils || null;
 const progressUtils = SEC_FRONTEND.progressUtils || null;
 const filterUtils = SEC_FRONTEND.filterUtils || null;
 const exportUtils = SEC_FRONTEND.exportUtils || null;
+const importReportUtils = SEC_FRONTEND.importReportUtils || null;
 const authStore = SEC_FRONTEND.authStore || null;
 const authGuard = SEC_FRONTEND.authGuard || null;
 const apiClient = SEC_FRONTEND.apiClient || null;
@@ -4361,7 +4362,7 @@ function upsertRawField(rawObj, canonicalKey, value) {
 }
 
 function renderImportDashboard() {
-  if (typeof importReportUtils !== "undefined" && importReportUtils && typeof importReportUtils.renderImportDashboard === "function") {
+  if (importReportUtils && typeof importReportUtils.renderImportDashboard === "function") {
     importReportUtils.renderImportDashboard(
       state.records || [],
       latestImportReport,
@@ -4406,7 +4407,7 @@ function renderImportDashboard() {
 }
 
 function buildExportSummaryBadgeHtml(report) {
-  if (typeof importReportUtils !== "undefined" && importReportUtils && typeof importReportUtils.buildExportSummaryBadgeHtml === "function") {
+  if (importReportUtils && typeof importReportUtils.buildExportSummaryBadgeHtml === "function") {
     return importReportUtils.buildExportSummaryBadgeHtml(
       report,
       escapeHtml,
@@ -4432,7 +4433,7 @@ function buildExportSummaryBadgeHtml(report) {
     + '</div>';
 }
 function buildImportSummaryPlaceholderHtml() {
-  if (typeof importReportUtils !== "undefined" && importReportUtils && typeof importReportUtils.buildImportSummaryPlaceholderHtml === "function") {
+  if (importReportUtils && typeof importReportUtils.buildImportSummaryPlaceholderHtml === "function") {
     return importReportUtils.buildImportSummaryPlaceholderHtml(
       state.records || [],
       lastImportedPlanilha1Aoa,
@@ -4472,7 +4473,7 @@ function buildImportSummaryPlaceholderHtml() {
 }
 
 function buildImportSummaryHtml(report) {
-  if (typeof importReportUtils !== "undefined" && importReportUtils && typeof importReportUtils.buildImportSummaryHtml === "function") {
+  if (importReportUtils && typeof importReportUtils.buildImportSummaryHtml === "function") {
     return importReportUtils.buildImportSummaryHtml(
       report,
       state.records || [],
@@ -4526,7 +4527,7 @@ function buildImportSummaryHtml(report) {
 }
 
 function buildImportValidationHtml(validation) {
-  if (typeof importReportUtils !== "undefined" && importReportUtils && typeof importReportUtils.buildImportValidationHtml === "function") {
+  if (importReportUtils && typeof importReportUtils.buildImportValidationHtml === "function") {
     return importReportUtils.buildImportValidationHtml(validation, escapeHtml);
   }
   const v = validation || {};
@@ -4562,7 +4563,7 @@ function buildImportValidationHtml(validation) {
   return html;
 }
 function buildRecentChangesPanelHtml(items) {
-  if (typeof importReportUtils !== "undefined" && importReportUtils && typeof importReportUtils.buildRecentChangesPanelHtml === "function") {
+  if (importReportUtils && typeof importReportUtils.buildRecentChangesPanelHtml === "function") {
     return importReportUtils.buildRecentChangesPanelHtml(items, escapeHtml, fmtDateTime, function (item) { return describeEventForPanel(item); }, text);
   }
   if (!items.length) {
@@ -4594,7 +4595,7 @@ function buildRecentChangesPanelHtml(items) {
 }
 
 function getRecentChangesForPanel(limit) {
-  if (typeof importReportUtils !== "undefined" && importReportUtils && typeof importReportUtils.getRecentChangesForPanel === "function") {
+  if (importReportUtils && typeof importReportUtils.getRecentChangesForPanel === "function") {
     return importReportUtils.getRecentChangesForPanel(state.records || [], getEventsSorted, toInt, limit);
   }
   const out = [];
@@ -4630,7 +4631,7 @@ function getRecentChangesForPanel(limit) {
 }
 
 function describeEventForPanel(item) {
-  if (typeof importReportUtils !== "undefined" && importReportUtils && typeof importReportUtils.describeEventForPanel === "function") {
+  if (importReportUtils && typeof importReportUtils.describeEventForPanel === "function") {
     return importReportUtils.describeEventForPanel(item, text);
   }
   if (!item) return "Alteracao registrada";
@@ -4663,7 +4664,7 @@ function wireImportReportTabs(targetOrTab, maybeDefaultTab) {
   const target = targetOrTab && typeof targetOrTab.querySelectorAll === "function" ? targetOrTab : importReport;
   const defaultTab = target === targetOrTab ? maybeDefaultTab : targetOrTab;
 
-  if (typeof importReportUtils !== "undefined" && importReportUtils && typeof importReportUtils.wireImportReportTabs === "function") {
+  if (importReportUtils && typeof importReportUtils.wireImportReportTabs === "function") {
     importReportUtils.wireImportReportTabs(target, defaultTab);
     return;
   }
@@ -4700,7 +4701,7 @@ function wireImportReportTabs(targetOrTab, maybeDefaultTab) {
 }
 
 function buildPlanilha1Html(aoa) {
-  if (typeof importReportUtils !== "undefined" && importReportUtils && typeof importReportUtils.buildPlanilha1Html === "function") {
+  if (importReportUtils && typeof importReportUtils.buildPlanilha1Html === "function") {
     return importReportUtils.buildPlanilha1Html(aoa, {
       escapeHtml: escapeHtml,
       normalizeLooseText: normalizeLooseText
