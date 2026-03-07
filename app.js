@@ -4570,41 +4570,62 @@ function getImportReportUtil(methodName) {
   return typeof method === "function" ? method : null;
 }
 
+function getImportReportContext() {
+  return {
+    records: state.records || [],
+    lastImportedPlanilha1Aoa: lastImportedPlanilha1Aoa,
+    importReportEl: importReport,
+    fmtDateTime: fmtDateTime,
+    escapeHtml: escapeHtml,
+    buildPlanilha1Aoa: buildPlanilha1Aoa,
+    normalizeLooseText: normalizeLooseText,
+    buildPlanilha1Html: buildPlanilha1Html,
+    getRecentChangesForPanel: getRecentChangesForPanel,
+    wireImportReportTabs: wireImportReportTabs,
+    latestExportReport: latestExportReport,
+    buildExportSummaryBadgeHtml: buildExportSummaryBadgeHtml,
+    exportScopeLabel: exportScopeLabel,
+    getEventsSorted: getEventsSorted,
+    toInt: toInt,
+    text: text
+  };
+}
+
 function renderImportDashboard() {
+  const ctx = getImportReportContext();
   const renderImportDashboardUtil = getImportReportUtil("renderImportDashboard");
   if (renderImportDashboardUtil) {
     renderImportDashboardUtil(
-      state.records || [],
+      ctx.records,
       latestImportReport,
-      lastImportedPlanilha1Aoa,
-      importReport,
-      fmtDateTime,
-      escapeHtml,
-      buildPlanilha1Aoa,
-      normalizeLooseText,
-      buildPlanilha1Html,
-      function (limit) {
-        return getRecentChangesForPanel(limit);
-      },
-      wireImportReportTabs,
-      latestExportReport,
-      buildExportSummaryBadgeHtml,
-      exportScopeLabel
+      ctx.lastImportedPlanilha1Aoa,
+      ctx.importReportEl,
+      ctx.fmtDateTime,
+      ctx.escapeHtml,
+      ctx.buildPlanilha1Aoa,
+      ctx.normalizeLooseText,
+      ctx.buildPlanilha1Html,
+      ctx.getRecentChangesForPanel,
+      ctx.wireImportReportTabs,
+      ctx.latestExportReport,
+      ctx.buildExportSummaryBadgeHtml,
+      ctx.exportScopeLabel,
+      HOME_CHANGES_LIMIT
     );
     return;
   }
 
-  if (!importReport) return;
-  importReport.classList.remove("hidden");
+  if (!ctx.importReportEl) return;
+  ctx.importReportEl.classList.remove("hidden");
 
   const left = latestImportReport ? buildImportSummaryHtml(latestImportReport) : buildImportSummaryPlaceholderHtml();
-  const recent = getRecentChangesForPanel(HOME_CHANGES_LIMIT);
-  const exportSummary = buildExportSummaryBadgeHtml(latestExportReport);
+  const recent = ctx.getRecentChangesForPanel(HOME_CHANGES_LIMIT);
+  const exportSummary = ctx.buildExportSummaryBadgeHtml(ctx.latestExportReport);
 
-  clearNodeChildren(importReport);
-  appendRenderedMarkup(importReport, exportSummary);
+  clearNodeChildren(ctx.importReportEl);
+  appendRenderedMarkup(ctx.importReportEl, exportSummary);
   appendRenderedMarkup(
-    importReport,
+    ctx.importReportEl,
     "<div class=\"import-dashboard-grid\">"
     + "  <section class=\"import-dashboard-left\">" + left + "</section>"
     + "  <section class=\"import-dashboard-right\">" + buildRecentChangesPanelHtml(recent) + "</section>"
@@ -4612,7 +4633,7 @@ function renderImportDashboard() {
   );
 
   if (latestImportReport) {
-    wireImportReportTabs("planilha1");
+    ctx.wireImportReportTabs(ctx.importReportEl, "planilha1");
   }
 }
 
@@ -4644,30 +4665,31 @@ function buildExportSummaryBadgeHtml(report) {
     + '</div>';
 }
 function buildImportSummaryPlaceholderHtml() {
+  const ctx = getImportReportContext();
   const buildImportSummaryPlaceholderHtmlUtil = getImportReportUtil("buildImportSummaryPlaceholderHtml");
   if (buildImportSummaryPlaceholderHtmlUtil) {
     return buildImportSummaryPlaceholderHtmlUtil(
-      state.records || [],
-      lastImportedPlanilha1Aoa,
-      escapeHtml,
-      fmtDateTime,
-      buildPlanilha1Aoa,
-      normalizeLooseText,
-      buildPlanilha1Html,
-      function (limit) { return getRecentChangesForPanel(limit); }
+      ctx.records,
+      ctx.lastImportedPlanilha1Aoa,
+      ctx.escapeHtml,
+      ctx.fmtDateTime,
+      ctx.buildPlanilha1Aoa,
+      ctx.normalizeLooseText,
+      ctx.buildPlanilha1Html,
+      ctx.getRecentChangesForPanel
     );
   }
-  const totalRegistros = (state.records || []).length;
-  const totalEventos = (state.records || []).reduce(function (acc, rec) {
+  const totalRegistros = ctx.records.length;
+  const totalEventos = ctx.records.reduce(function (acc, rec) {
     return acc + ((rec && rec.eventos && rec.eventos.length) ? rec.eventos.length : 0);
   }, 0);
-  const last = getRecentChangesForPanel(1)[0] || null;
-  const lastAt = last ? fmtDateTime(last.at) : "-";
-  const lastBy = last ? (escapeHtml(last.actor_user) + " (" + escapeHtml(last.actor_role) + ")") : "-";
-  const planilha1Aoa = (Array.isArray(lastImportedPlanilha1Aoa) && lastImportedPlanilha1Aoa.length)
-    ? lastImportedPlanilha1Aoa
-    : buildPlanilha1Aoa(state.records || []);
-  const planilha1Html = buildPlanilha1Html(planilha1Aoa);
+  const last = ctx.getRecentChangesForPanel(1)[0] || null;
+  const lastAt = last ? ctx.fmtDateTime(last.at) : "-";
+  const lastBy = last ? (ctx.escapeHtml(last.actor_user) + " (" + ctx.escapeHtml(last.actor_role) + ")") : "-";
+  const planilha1Aoa = (Array.isArray(ctx.lastImportedPlanilha1Aoa) && ctx.lastImportedPlanilha1Aoa.length)
+    ? ctx.lastImportedPlanilha1Aoa
+    : ctx.buildPlanilha1Aoa(ctx.records);
+  const planilha1Html = ctx.buildPlanilha1Html(planilha1Aoa);
 
   return ""
     + '<h4>Resumo da base atual</h4>'
@@ -4685,30 +4707,31 @@ function buildImportSummaryPlaceholderHtml() {
 }
 
 function buildImportSummaryHtml(report) {
+  const ctx = getImportReportContext();
   const buildImportSummaryHtmlUtil = getImportReportUtil("buildImportSummaryHtml");
   if (buildImportSummaryHtmlUtil) {
     return buildImportSummaryHtmlUtil(
       report,
-      state.records || [],
-      lastImportedPlanilha1Aoa,
-      escapeHtml,
-      fmtDateTime,
-      buildPlanilha1Aoa,
-      normalizeLooseText,
-      buildPlanilha1Html
+      ctx.records,
+      ctx.lastImportedPlanilha1Aoa,
+      ctx.escapeHtml,
+      ctx.fmtDateTime,
+      ctx.buildPlanilha1Aoa,
+      ctx.normalizeLooseText,
+      ctx.buildPlanilha1Html
     );
   }
   const sheets = report && report.sheetNames && report.sheetNames.length ? report.sheetNames.join(", ") : "-";
   const fileName = report && report.fileName ? report.fileName : "-";
 
-  const planilha1Aoa = (Array.isArray(lastImportedPlanilha1Aoa) && lastImportedPlanilha1Aoa.length)
-    ? lastImportedPlanilha1Aoa
-    : buildPlanilha1Aoa(state.records || []);
-  const planilha1Html = buildPlanilha1Html(planilha1Aoa);
+  const planilha1Aoa = (Array.isArray(ctx.lastImportedPlanilha1Aoa) && ctx.lastImportedPlanilha1Aoa.length)
+    ? ctx.lastImportedPlanilha1Aoa
+    : ctx.buildPlanilha1Aoa(ctx.records);
+  const planilha1Html = ctx.buildPlanilha1Html(planilha1Aoa);
 
   return ""
     + "<h4>Resumo da importacao</h4>"
-    + "<p class=\"muted small\">Arquivo: " + escapeHtml(fileName) + " | Abas lidas: " + escapeHtml(sheets) + "</p>"
+    + "<p class=\"muted small\">Arquivo: " + ctx.escapeHtml(fileName) + " | Abas lidas: " + ctx.escapeHtml(sheets) + "</p>"
     + "<div class=\"import-tabs\" role=\"tablist\" aria-label=\"Abas do relatorio de importacao\">"
     + "  <button type=\"button\" class=\"import-tab-btn active\" data-import-tab=\"resumo\" role=\"tab\" aria-selected=\"true\">Resumo da importacao</button>"
     + "  <button type=\"button\" class=\"import-tab-btn\" data-import-tab=\"planilha1\" role=\"tab\" aria-selected=\"false\">Planilha1 (Deputados)</button>"
@@ -4740,9 +4763,10 @@ function buildImportSummaryHtml(report) {
 }
 
 function buildImportValidationHtml(validation) {
+  const ctx = getImportReportContext();
   const buildImportValidationHtmlUtil = getImportReportUtil("buildImportValidationHtml");
   if (buildImportValidationHtmlUtil) {
-    return buildImportValidationHtmlUtil(validation, escapeHtml);
+    return buildImportValidationHtmlUtil(validation, ctx.escapeHtml);
   }
   const v = validation || {};
   const recognized = Array.isArray(v.recognizedHeaders) ? v.recognizedHeaders : [];
@@ -4755,21 +4779,21 @@ function buildImportValidationHtml(validation) {
   let html = ""
     + "<h4>Relatorio de validacao</h4>"
     + "<div class=\"kv\" style=\"margin-top:8px\">"
-    + "  <div class=\"k\">Colunas reconhecidas</div><div class=\"v\">" + escapeHtml(recognized.join(", ") || "-") + "</div>"
-    + "  <div class=\"k\">Colunas nao reconhecidas</div><div class=\"v\">" + escapeHtml(unrecognized.join(", ") || "-") + "</div>"
-    + "  <div class=\"k\">Colunas duplicadas</div><div class=\"v\">" + escapeHtml(duplicated.join(", ") || "-") + "</div>"
-    + "  <div class=\"k\">Tipos detectados</div><div class=\"v\">" + escapeHtml(JSON.stringify(types)) + "</div>"
+    + "  <div class=\"k\">Colunas reconhecidas</div><div class=\"v\">" + ctx.escapeHtml(recognized.join(", ") || "-") + "</div>"
+    + "  <div class=\"k\">Colunas nao reconhecidas</div><div class=\"v\">" + ctx.escapeHtml(unrecognized.join(", ") || "-") + "</div>"
+    + "  <div class=\"k\">Colunas duplicadas</div><div class=\"v\">" + ctx.escapeHtml(duplicated.join(", ") || "-") + "</div>"
+    + "  <div class=\"k\">Tipos detectados</div><div class=\"v\">" + ctx.escapeHtml(JSON.stringify(types)) + "</div>"
     + "</div>";
 
   if (alerts.length) {
-    html += "<div style=\"margin-top:8px\"><b>Alertas</b><ul>" + alerts.map(function (a) { return "<li>" + escapeHtml(a) + "</li>"; }).join("") + "</ul></div>";
+    html += "<div style=\"margin-top:8px\"><b>Alertas</b><ul>" + alerts.map(function (a) { return "<li>" + ctx.escapeHtml(a) + "</li>"; }).join("") + "</ul></div>";
   }
 
   if (preview.length) {
     html += "<div style=\"margin-top:8px\"><b>Preview (5 linhas)</b>";
     html += "<div class=\"table-wrap\"><table class=\"table\" style=\"min-width:720px\"><thead><tr><th>Aba</th><th>Linha</th><th>Dados</th></tr></thead><tbody>";
     preview.forEach(function (row) {
-      html += "<tr><td>" + escapeHtml(row.aba || "-") + "</td><td>" + escapeHtml(String(row.linha || "-")) + "</td><td><code>" + escapeHtml(JSON.stringify(row.dados)) + "</code></td></tr>";
+      html += "<tr><td>" + ctx.escapeHtml(row.aba || "-") + "</td><td>" + ctx.escapeHtml(String(row.linha || "-")) + "</td><td><code>" + ctx.escapeHtml(JSON.stringify(row.dados)) + "</code></td></tr>";
     });
     html += "</tbody></table></div></div>";
   }
@@ -4777,9 +4801,10 @@ function buildImportValidationHtml(validation) {
   return html;
 }
 function buildRecentChangesPanelHtml(items) {
+  const ctx = getImportReportContext();
   const buildRecentChangesPanelHtmlUtil = getImportReportUtil("buildRecentChangesPanelHtml");
   if (buildRecentChangesPanelHtmlUtil) {
-    return buildRecentChangesPanelHtmlUtil(items, escapeHtml, fmtDateTime, function (item) { return describeEventForPanel(item); }, text);
+    return buildRecentChangesPanelHtmlUtil(items, ctx.escapeHtml, ctx.fmtDateTime, function (item) { return describeEventForPanel(item); }, ctx.text);
   }
   if (!items.length) {
     return ""
@@ -4796,12 +4821,12 @@ function buildRecentChangesPanelHtml(items) {
     html += ""
       + "<article class=\"recent-item\">"
       + "  <div class=\"recent-item-top\">"
-      + "    <strong>" + escapeHtml(item.actor_user) + "</strong>"
-      + "    <span class=\"muted small\">" + escapeHtml(item.actor_role) + " | " + fmtDateTime(item.at) + "</span>"
+      + "    <strong>" + ctx.escapeHtml(item.actor_user) + "</strong>"
+      + "    <span class=\"muted small\">" + ctx.escapeHtml(item.actor_role) + " | " + ctx.fmtDateTime(item.at) + "</span>"
       + "  </div>"
-      + "  <div class=\"recent-item-action\">" + escapeHtml(describeEventForPanel(item)) + "</div>"
-      + "  <div class=\"recent-item-target\"><code>" + escapeHtml(item.id) + "</code> | " + escapeHtml(item.identificacao) + "</div>"
-      + (item.note ? ("<div class=\"recent-item-note muted small\">Obs: " + escapeHtml(item.note) + "</div>") : "")
+      + "  <div class=\"recent-item-action\">" + ctx.escapeHtml(describeEventForPanel(item)) + "</div>"
+      + "  <div class=\"recent-item-target\"><code>" + ctx.escapeHtml(item.id) + "</code> | " + ctx.escapeHtml(item.identificacao) + "</div>"
+      + (item.note ? ("<div class=\"recent-item-note muted small\">Obs: " + ctx.escapeHtml(item.note) + "</div>") : "")
       + "</article>";
   });
 
@@ -4810,14 +4835,15 @@ function buildRecentChangesPanelHtml(items) {
 }
 
 function getRecentChangesForPanel(limit) {
+  const ctx = getImportReportContext();
   const getRecentChangesForPanelUtil = getImportReportUtil("getRecentChangesForPanel");
   if (getRecentChangesForPanelUtil) {
-    return getRecentChangesForPanelUtil(state.records || [], getEventsSorted, toInt, limit);
+    return getRecentChangesForPanelUtil(ctx.records, ctx.getEventsSorted, ctx.toInt, limit);
   }
   const out = [];
 
-  (state.records || []).forEach(function (rec) {
-    getEventsSorted(rec).forEach(function (ev) {
+  ctx.records.forEach(function (rec) {
+    ctx.getEventsSorted(rec).forEach(function (ev) {
       if (!ev || !ev.at) return;
       const ts = new Date(ev.at).getTime();
       if (!Number.isFinite(ts) || ts <= 0) return;
@@ -4825,12 +4851,12 @@ function getRecentChangesForPanel(limit) {
       out.push({
         at: ev.at,
         atTs: ts,
-        actor_user: text(ev.actor_user) || "sistema",
-        actor_role: text(ev.actor_role) || "-",
-        type: text(ev.type) || "EVENTO",
-        note: text(ev.note),
-        id: text(rec.id) || "-",
-        identificacao: text(rec.identificacao) || "-",
+        actor_user: ctx.text(ev.actor_user) || "sistema",
+        actor_role: ctx.text(ev.actor_role) || "-",
+        type: ctx.text(ev.type) || "EVENTO",
+        note: ctx.text(ev.note),
+        id: ctx.text(rec.id) || "-",
+        identificacao: ctx.text(rec.identificacao) || "-",
         from: ev.from,
         to: ev.to,
         field: ev.field
@@ -4842,25 +4868,26 @@ function getRecentChangesForPanel(limit) {
     return b.atTs - a.atTs;
   });
 
-  const max = Math.max(1, toInt(limit) || 10);
+  const max = Math.max(1, ctx.toInt(limit) || 10);
   return out.slice(0, max);
 }
 
 function describeEventForPanel(item) {
+  const ctx = getImportReportContext();
   const describeEventForPanelUtil = getImportReportUtil("describeEventForPanel");
   if (describeEventForPanelUtil) {
-    return describeEventForPanelUtil(item, text);
+    return describeEventForPanelUtil(item, ctx.text);
   }
   if (!item) return "Alteracao registrada";
 
   if (item.type === "OFFICIAL_STATUS") {
-    return "Status oficial legado: " + text(item.from || "-") + " -> " + text(item.to || "-");
+    return "Status oficial legado: " + ctx.text(item.from || "-") + " -> " + ctx.text(item.to || "-");
   }
   if (item.type === "MARK_STATUS") {
-    return "Marcacao de status: " + text(item.to || "-");
+    return "Marcacao de status: " + ctx.text(item.to || "-");
   }
   if (item.type === "EDIT_FIELD") {
-    return "Edicao de campo: " + text(item.field || "-");
+    return "Edicao de campo: " + ctx.text(item.field || "-");
   }
   if (item.type === "NOTE") {
     return "Nota adicionada";
@@ -4869,7 +4896,7 @@ function describeEventForPanel(item) {
     return "Importacao/atualizacao de registro";
   }
 
-  return text(item.type || "Evento");
+  return ctx.text(item.type || "Evento");
 }
 
 function showImportReport(report) {
@@ -4878,7 +4905,8 @@ function showImportReport(report) {
 }
 
 function wireImportReportTabs(targetOrTab, maybeDefaultTab) {
-  const target = targetOrTab && typeof targetOrTab.querySelectorAll === "function" ? targetOrTab : importReport;
+  const ctx = getImportReportContext();
+  const target = targetOrTab && typeof targetOrTab.querySelectorAll === "function" ? targetOrTab : ctx.importReportEl;
   const defaultTab = target === targetOrTab ? maybeDefaultTab : targetOrTab;
 
   const wireImportReportTabsUtil = getImportReportUtil("wireImportReportTabs");
@@ -4919,25 +4947,26 @@ function wireImportReportTabs(targetOrTab, maybeDefaultTab) {
 }
 
 function buildPlanilha1Html(aoa) {
+  const ctx = getImportReportContext();
   const buildPlanilha1HtmlUtil = getImportReportUtil("buildPlanilha1Html");
   if (buildPlanilha1HtmlUtil) {
     return buildPlanilha1HtmlUtil(aoa, {
-      escapeHtml: escapeHtml,
-      normalizeLooseText: normalizeLooseText
+      escapeHtml: ctx.escapeHtml,
+      normalizeLooseText: ctx.normalizeLooseText
     });
   }
   if (!Array.isArray(aoa) || aoa.length === 0) {
     return "<p class=\"muted small\">Sem dados para resumo por deputado.</p>";
   }
 
-  let html = "<div class=\"table-wrap\"><table class=\"table\" style=\"min-width:420px\"><thead><tr><th>" + escapeHtml(String(aoa[0][0] || "Rotulos de Linha")) + "</th><th>" + escapeHtml(String(aoa[0][1] || "Contagem")) + "</th></tr></thead><tbody>";
+  let html = "<div class=\"table-wrap\"><table class=\"table\" style=\"min-width:420px\"><thead><tr><th>" + ctx.escapeHtml(String(aoa[0][0] || "Rotulos de Linha")) + "</th><th>" + ctx.escapeHtml(String(aoa[0][1] || "Contagem")) + "</th></tr></thead><tbody>";
 
   for (let i = 1; i < aoa.length; i += 1) {
     const row = aoa[i] || [];
     const label = row[0] == null ? "" : String(row[0]);
     const val = row[1] == null ? "" : String(row[1]);
-    const isTotal = normalizeLooseText(label) === "total geral";
-    html += "<tr" + (isTotal ? " style=\"font-weight:700\"" : "") + "><td>" + escapeHtml(label) + "</td><td>" + escapeHtml(val) + "</td></tr>";
+    const isTotal = ctx.normalizeLooseText(label) === "total geral";
+    html += "<tr" + (isTotal ? " style=\"font-weight:700\"" : "") + "><td>" + ctx.escapeHtml(label) + "</td><td>" + ctx.escapeHtml(val) + "</td></tr>";
   }
 
   html += "</tbody></table></div>";

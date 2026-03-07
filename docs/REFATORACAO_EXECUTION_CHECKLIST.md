@@ -41,6 +41,8 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Criar `focusIfPossible()` e `getOptionFunction()` no `app.js` para reduzir guardas repetidos de foco/callback opcional na UI.
 - [DONE] Exportar `buildPlanilha1Html` em `frontend/js/ui/importReport.js` para o `app.js` delegar a renderizacao da Planilha1 ao modulo.
 - [DONE] Criar `getExportTemplateValue()` no `app.js` para remover acesso direto restante a `exportTemplateUtils.templateCanonicalKeys`.
+- [DONE] Criar `getImportReportContext()` no `app.js` para centralizar dependencias dos wrappers de relatorio/importacao e reduzir repeticao de contexto.
+- [DONE] Alinhar `renderImportDashboard` do modulo `importReport` com `HOME_CHANGES_LIMIT`, removendo o limite fixo `10` e o reset redundante de `innerHTML`.
 
-Active: ID-FE-37
+Active: ID-FE-39
 Risks: validar comportamento em dispositivos com storage bloqueado.

@@ -88,9 +88,10 @@
     return [];
   }
 
-  function renderImportDashboard(stateRecords, latestImportReport, lastImportedPlanilha1Aoa, importReportEl, fmtDateTimeFn, escapeHtmlFn, buildPlanilha1AoaFn, normalizeLooseTextFn, buildPlanilha1HtmlFn, getRecentChangesForPanelFn, wireImportReportTabsFn, latestExportReport, buildExportSummaryBadgeHtmlFn, exportScopeLabelFn) {
+  function renderImportDashboard(stateRecords, latestImportReport, lastImportedPlanilha1Aoa, importReportEl, fmtDateTimeFn, escapeHtmlFn, buildPlanilha1AoaFn, normalizeLooseTextFn, buildPlanilha1HtmlFn, getRecentChangesForPanelFn, wireImportReportTabsFn, latestExportReport, buildExportSummaryBadgeHtmlFn, exportScopeLabelFn, recentChangesLimit) {
     if (!importReportEl) return;
     importReportEl.classList.remove("hidden");
+    var recentLimit = Number.isFinite(Number(recentChangesLimit)) ? Number(recentChangesLimit) : 10;
 
     var left = latestImportReport ? buildImportSummaryHtml(
       latestImportReport,
@@ -112,7 +113,7 @@
       getRecentChangesForPanelFn
     );
 
-    var recent = typeof getRecentChangesForPanelFn === "function" ? getRecentChangesForPanelFn(10) : [];
+    var recent = typeof getRecentChangesForPanelFn === "function" ? getRecentChangesForPanelFn(recentLimit) : [];
     var badgeBuilder = typeof buildExportSummaryBadgeHtmlFn === "function" ? buildExportSummaryBadgeHtmlFn : buildExportSummaryBadgeHtml;
     var right = buildRecentChangesPanelHtml(
       recent,
@@ -122,8 +123,6 @@
       text
     );
 
-    importReportEl.innerHTML = "";
-    importReportEl.appendChild(document.createTextNode(""));
     importReportEl.innerHTML =
       badgeBuilder(
         latestExportReport,
