@@ -45,8 +45,6 @@ const SYSTEM_MIGRATION_USER = "sistema";
 const SYSTEM_MIGRATION_ROLE = "PROGRAMADOR";
 const USER_ROLE_OPTIONS = ["APG", "SUPERVISAO", "CONTABIL", "POWERBI", "PROGRAMADOR"];
 const PUBLIC_SELF_REGISTER_ROLE_OPTIONS = ["APG", "SUPERVISAO", "CONTABIL", "POWERBI"];
-const USER_NAME_KEY = "SEC_USER_NAME";
-const USER_ROLE_KEY = "SEC_USER_ROLE";
 const API_BASE_URL_KEY = "SEC_API_BASE_URL";
 const API_ENABLED_KEY = "SEC_API_ENABLED";
 const API_SHARED_KEY_SESSION_KEY = "SEC_API_SHARED_KEY_SESSION";
@@ -76,8 +74,8 @@ const apiClient = SEC_FRONTEND.apiClient || null;
 const concurrencyService = SEC_FRONTEND.concurrencyService || null;
 const uiRender = SEC_FRONTEND.uiRender || null;
 const AUTH_KEYS = Object.freeze({
-  userName: USER_NAME_KEY,
-  userRole: USER_ROLE_KEY,
+  userName: "SEC_USER_NAME",
+  userRole: "SEC_USER_ROLE",
   sessionToken: SESSION_TOKEN_KEY,
   sessionTokenBackup: SESSION_TOKEN_BACKUP_KEY
 });
@@ -2609,9 +2607,6 @@ function setAuthenticatedUser(usuario) {
       name: CURRENT_USER,
       role: CURRENT_ROLE
     }, AUTH_KEYS);
-  } else {
-    writeStorageValue(localStorage, USER_NAME_KEY, CURRENT_USER);
-    writeStorageValue(localStorage, USER_ROLE_KEY, CURRENT_ROLE);
   }
 }
 
@@ -2644,8 +2639,6 @@ async function logoutCurrentUser() {
     authStore.clearSessionAndProfile(AUTH_KEYS);
   } else {
     clearStoredSessionToken();
-    removeStorageValue(localStorage, USER_NAME_KEY);
-    removeStorageValue(localStorage, USER_ROLE_KEY);
   }
   closeApiSocket();
 }
@@ -2782,9 +2775,6 @@ function loadUserConfig(forcePrompt) {
         name: CURRENT_USER,
         role: CURRENT_ROLE
       }, AUTH_KEYS);
-    } else {
-      writeStorageValue(localStorage, USER_NAME_KEY, CURRENT_USER);
-      writeStorageValue(localStorage, USER_ROLE_KEY, CURRENT_ROLE);
     }
   }
 }

@@ -1,4 +1,4 @@
-# CHECKLIST
+﻿# CHECKLIST
 Goal: reduzir acoplamento do `app.js` extraindo blocos de utilitarios para modulos pequenos.
 Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js` com fallback seguro.
 
@@ -12,6 +12,7 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Validar sintaxe de `app.js` e `frontend/js/ui/metrics.js`.
 - [DONE] Consolidar fluxo de sessao/autenticacao no modulo `frontend/js/auth/authStore.js` e consumir o novo API no `app.js` (token + perfil do usuario com fallback local).
 - [DONE] Consolidar `loadUserConfig` para priorizar leitura de perfil via `authStore`.
+- [DONE] Remover escrita/leitura direta de `SEC_USER_NAME`/`SEC_USER_ROLE` fora do `authStore` no `app.js`.
 
 Active: ID-FE-12
-Risks: sem risco crítico; acompanhar regressao em cenarios de `SEC_USER_ID` legado.
+Risks: necessidade de validar fluxo de cadastro/local sem API no primeiro acesso.
