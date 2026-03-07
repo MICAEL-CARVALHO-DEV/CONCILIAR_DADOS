@@ -67,6 +67,7 @@ const importNormalizationUtils = SEC_FRONTEND.importNormalizationUtils || null;
 const importValidationUtils = SEC_FRONTEND.importValidationUtils || null;
 const importPipelineUtils = SEC_FRONTEND.importPipelineUtils || null;
 const importProcessorUtils = SEC_FRONTEND.importProcessorUtils || null;
+const importReaderUtils = SEC_FRONTEND.importReaderUtils || null;
 const idUtils = SEC_FRONTEND.idUtils || null;
 const statusUtils = SEC_FRONTEND.statusUtils || null;
 const progressUtils = SEC_FRONTEND.progressUtils || null;
@@ -441,6 +442,12 @@ function getImportPipelineUtil(methodName) {
 function getImportProcessorUtil(methodName) {
   if (!importProcessorUtils) return null;
   const method = importProcessorUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getImportReaderUtil(methodName) {
+  if (!importReaderUtils) return null;
+  const method = importReaderUtils[methodName];
   return typeof method === "function" ? method : null;
 }
 
@@ -2247,6 +2254,27 @@ function buildImportNote(fileName, ctx) {
 
 // Le arquivo XLSX, detecta cabecalho e extrai linhas validas para importacao.
 async function parseInputFile(file) {
+  const parseInputFileUtil = getImportReaderUtil("parseInputFile");
+  if (parseInputFileUtil) {
+    const result = await parseInputFileUtil(file, {
+      xlsxApi: getXlsxApi(),
+      buildKnownHeaderSet: buildKnownHeaderSet,
+      detectHeaderRow: detectHeaderRow,
+      normalizeHeader: normalizeHeader,
+      isRowEmpty: isRowEmpty,
+      rowArrayToObject: rowArrayToObject,
+      extractPlanilha1AoaFromWorkbook: extractPlanilha1AoaFromWorkbook,
+      isoNow: isoNow,
+      buildImportValidationReport: buildImportValidationReport,
+      text: text,
+      normalizeLooseText: normalizeLooseText
+    });
+    lastImportedPlanilha1Aoa = result && Array.isArray(result.planilha1Aoa) ? result.planilha1Aoa : null;
+    lastImportedWorkbookTemplate = result && result.templateSnapshot ? result.templateSnapshot : null;
+    lastImportValidation = result ? result.validation || null : null;
+    return result && Array.isArray(result.rows) ? result.rows : [];
+  }
+
   const name = String(file.name || "").toLowerCase();
 
   if (!name.endsWith(".xlsx")) {
@@ -2312,6 +2340,15 @@ async function parseInputFile(file) {
 
 
 function extractPlanilha1AoaFromWorkbook(workbook, xlsxApi) {
+  const extractPlanilha1AoaFromWorkbookUtil = getImportReaderUtil("extractPlanilha1AoaFromWorkbook");
+  if (extractPlanilha1AoaFromWorkbookUtil) {
+    return extractPlanilha1AoaFromWorkbookUtil(workbook, xlsxApi, {
+      normalizeHeader: normalizeHeader,
+      text: text,
+      normalizeLooseText: normalizeLooseText
+    });
+  }
+
   try {
     if (!workbook || !xlsxApi || !workbook.Sheets) return null;
     const ws = workbook.Sheets["Planilha1"];

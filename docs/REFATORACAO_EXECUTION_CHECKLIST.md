@@ -55,6 +55,7 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Extrair utilitarios de validacao/parsing de importacao para `frontend/js/utils/importValidation.js` e delegar o bloco correspondente do `app.js` com fallback preservado.
 - [DONE] Extrair o nucleo do pipeline de importacao para `frontend/js/utils/importPipeline.js` e delegar criacao/merge/mapeamento do `app.js` com fallback preservado.
 - [DONE] Extrair a orquestracao de `processImportedRows()` para `frontend/js/utils/importProcessor.js`, mantendo a assinatura do `app.js` e fallback preservado.
+- [DONE] Extrair a leitura do XLSX e a captura da `Planilha1` para `frontend/js/utils/importReader.js`, mantendo `parseInputFile()` no `app.js` apenas como wrapper de estado.
 
-Active: ID-FE-51
+Active: ID-FE-52
 Risks: validar comportamento em dispositivos com storage bloqueado.
