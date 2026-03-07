@@ -80,6 +80,16 @@
     return new Date().getFullYear();
   }
 
+  function extractApiError(err, fallback) {
+    var msg = err && err.message ? String(err.message) : "";
+    if (!msg) return fallback;
+    var mark = "::";
+    if (msg.indexOf(mark) >= 0) {
+      return msg.split(mark)[1] || fallback;
+    }
+    return msg;
+  }
+
   root.formatUtils = {
     asText: asText,
     text: text,
@@ -93,6 +103,7 @@
     fmtDateTime: fmtDateTime,
     isoNow: isoNow,
     dateStamp: dateStamp,
-    currentYear: currentYear
+    currentYear: currentYear,
+    extractApiError: extractApiError
   };
 })(window);

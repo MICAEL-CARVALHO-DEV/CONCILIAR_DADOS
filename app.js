@@ -2530,6 +2530,9 @@ function hideAuthGate() {
 }
 
 function extractApiError(err, fallback) {
+  if (formatUtils && typeof formatUtils.extractApiError === "function") {
+    return formatUtils.extractApiError(err, fallback);
+  }
   const msg = err && err.message ? String(err.message) : "";
   if (!msg) return fallback;
   const mark = "::";
