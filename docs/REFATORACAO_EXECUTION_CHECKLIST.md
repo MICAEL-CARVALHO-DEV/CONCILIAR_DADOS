@@ -64,6 +64,7 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Extrair a atualizacao visual do rascunho e o perfil de acesso do modal para `frontend/js/ui/renderers.js`, deixando `app.js` com estado e regras.
 - [DONE] Criar fila operacional da IA ORQ em `docs/ORQ_REFATORACAO_FRONTEND_QUEUE.md` para usar planejamento e revisao multi-IA sem conflito de arquivo.
 - [DONE] Definir `STACK-01` em `docs/ORQ_REFATORACAO_FRONTEND_QUEUE.md` com ordem oficial: ORQ frontend -> execucao FE -> ORQ backend.
+- [DONE] Extrair helpers visuais de feedback e visibilidade de modais auxiliares para `frontend/js/ui/renderers.js`, deixando `app.js` com wrappers simples para perfil/aprovacao e feedback do modal.
 
-Active: ID-FE-60
+Active: ID-FE-61
 Risks: validar comportamento em dispositivos com storage bloqueado.

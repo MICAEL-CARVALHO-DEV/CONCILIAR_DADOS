@@ -1177,10 +1177,15 @@ function clearModalAutoCloseTimer() {
 }
 
 function clearModalSaveFeedback() {
-  if (!modalSaveFeedback) return;
   if (modalSaveFeedbackTimer) {
     clearTimeout(modalSaveFeedbackTimer);
     modalSaveFeedbackTimer = null;
+  }
+  if (!modalSaveFeedback) return;
+  const setModalSaveFeedbackStateUtil = getUiRenderUtil("setModalSaveFeedbackState");
+  if (setModalSaveFeedbackStateUtil) {
+    setModalSaveFeedbackStateUtil(modalSaveFeedback, "", { hidden: true, isError: false });
+    return;
   }
   modalSaveFeedback.textContent = "";
   modalSaveFeedback.classList.add("hidden");
@@ -1190,9 +1195,14 @@ function clearModalSaveFeedback() {
 function showModalSaveFeedback(message, isError) {
   if (!modalSaveFeedback) return;
   clearModalSaveFeedback();
-  modalSaveFeedback.textContent = message;
-  modalSaveFeedback.classList.remove("hidden");
-  modalSaveFeedback.classList.add(isError ? "error" : "success");
+  const setModalSaveFeedbackStateUtil = getUiRenderUtil("setModalSaveFeedbackState");
+  if (setModalSaveFeedbackStateUtil) {
+    setModalSaveFeedbackStateUtil(modalSaveFeedback, message, { hidden: false, isError: isError });
+  } else {
+    modalSaveFeedback.textContent = message;
+    modalSaveFeedback.classList.remove("hidden");
+    modalSaveFeedback.classList.add(isError ? "error" : "success");
+  }
   modalSaveFeedbackTimer = setTimeout(function () {
     clearModalSaveFeedback();
   }, 2600);
@@ -3587,23 +3597,47 @@ function applyAccessProfile() {
 }
 
 function refreshProfileModal() {
+  const syncProfileModalFieldsUtil = getUiRenderUtil("syncProfileModalFields");
+  if (syncProfileModalFieldsUtil) {
+    syncProfileModalFieldsUtil({
+      profileName: profileName,
+      profileRole: profileRole,
+      profileMode: profileMode,
+      profileApi: profileApi
+    }, {
+      userName: CURRENT_USER,
+      userRole: CURRENT_ROLE,
+      apiEnabled: isApiEnabled(),
+      apiOnline: apiOnline
+    });
+    return;
+  }
   if (profileName) profileName.value = CURRENT_USER || "-";
   if (profileRole) profileRole.value = CURRENT_ROLE || "-";
   if (profileMode) profileMode.value = isApiEnabled() ? "Nuvem/API" : "Local";
   if (profileApi) profileApi.value = apiOnline ? "Conectada" : "Indisponivel";
 }
 
+function setAuxModalVisibility(modalEl, visible) {
+  const setModalVisibilityUtil = getUiRenderUtil("setModalVisibility");
+  if (setModalVisibilityUtil) {
+    setModalVisibilityUtil(modalEl, visible);
+    return;
+  }
+  if (!modalEl) return;
+  modalEl.classList.toggle("show", !!visible);
+  modalEl.setAttribute("aria-hidden", visible ? "false" : "true");
+}
+
 function openProfileModal() {
   if (!profileModal) return;
   refreshProfileModal();
-  profileModal.classList.add("show");
-  profileModal.setAttribute("aria-hidden", "false");
+  setAuxModalVisibility(profileModal, true);
 }
 
 function closeProfileModal() {
   if (!profileModal) return;
-  profileModal.classList.remove("show");
-  profileModal.setAttribute("aria-hidden", "true");
+  setAuxModalVisibility(profileModal, false);
 }
 
 function isOwnerUser() {
@@ -3612,14 +3646,18 @@ function isOwnerUser() {
 
 function setPendingUsersFeedback(msg, isError) {
   if (!pendingUsersFeedback) return;
+  const setPendingUsersFeedbackStateUtil = getUiRenderUtil("setPendingUsersFeedbackState");
+  if (setPendingUsersFeedbackStateUtil) {
+    setPendingUsersFeedbackStateUtil(pendingUsersFeedback, msg, isError);
+    return;
+  }
   pendingUsersFeedback.textContent = msg || "";
   pendingUsersFeedback.style.color = isError ? "#b4233d" : "";
 }
 
 function closePendingUsersModal() {
   if (!pendingUsersModal) return;
-  pendingUsersModal.classList.remove("show");
-  pendingUsersModal.setAttribute("aria-hidden", "true");
+  setAuxModalVisibility(pendingUsersModal, false);
 }
 
 function renderPendingUsersTable(items) {
@@ -3695,8 +3733,7 @@ async function approvePendingUser(userId) {
 // Abre modal de aprovacao e dispara refresh inicial.
 function openPendingUsersModal() {
   if (!pendingUsersModal) return;
-  pendingUsersModal.classList.add("show");
-  pendingUsersModal.setAttribute("aria-hidden", "false");
+  setAuxModalVisibility(pendingUsersModal, true);
   refreshPendingUsersModal().catch(function (err) {
     setPendingUsersFeedback(extractApiError(err, "Falha ao abrir cadastros pendentes."), true);
   });

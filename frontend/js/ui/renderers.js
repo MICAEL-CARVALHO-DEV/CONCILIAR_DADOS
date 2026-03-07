@@ -752,6 +752,41 @@
     container.textContent = "";
   }
 
+  function setModalVisibility(modalEl, visible) {
+    if (!modalEl) return;
+    var isVisible = !!visible;
+    modalEl.classList.toggle("show", isVisible);
+    modalEl.setAttribute("aria-hidden", isVisible ? "false" : "true");
+  }
+
+  function syncProfileModalFields(fields, state) {
+    var refs = fields && typeof fields === "object" ? fields : {};
+    var nextState = state && typeof state === "object" ? state : {};
+    if (refs.profileName) refs.profileName.value = String(nextState.userName || "-");
+    if (refs.profileRole) refs.profileRole.value = String(nextState.userRole || "-");
+    if (refs.profileMode) refs.profileMode.value = nextState.apiEnabled ? "Nuvem/API" : "Local";
+    if (refs.profileApi) refs.profileApi.value = nextState.apiOnline ? "Conectada" : "Indisponivel";
+  }
+
+  function setPendingUsersFeedbackState(container, message, isError) {
+    if (!container) return;
+    container.textContent = String(message || "");
+    container.style.color = isError ? "#b4233d" : "";
+  }
+
+  function setModalSaveFeedbackState(container, message, options) {
+    if (!container) return;
+    var opts = options || {};
+    var text = String(message || "");
+    var hidden = !!opts.hidden || !text;
+    var isError = !!opts.isError;
+
+    container.textContent = text;
+    container.classList.toggle("hidden", hidden);
+    container.classList.toggle("success", !hidden && !isError);
+    container.classList.toggle("error", !hidden && isError);
+  }
+
   function renderModalAccessState(container, record, options) {
     if (!container) return;
     var opts = options || {};
@@ -877,6 +912,10 @@
     renderUserProgressBox,
     updateModalDraftUi,
     applyModalAccessProfile,
+    setModalVisibility,
+    syncProfileModalFields,
+    setPendingUsersFeedbackState,
+    setModalSaveFeedbackState,
     renderModalAccessState,
     renderEmendaLockInfo,
     renderLivePresence
