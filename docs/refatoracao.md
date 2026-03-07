@@ -29,9 +29,10 @@ Sair de um projeto "funciona, mas esta pesado" para um projeto:
 - [DONE] [ID-FE-13] Consolidar fluxo de token de sessão no `authStore` e remover fallback duplicado no `app.js`.
 - [DONE] [ID-FE-14] Adicionar fallback defensivo de token no `app.js` para carregar sem regressao quando `authStore` nao for inicializado.
 - [DONE] [ID-FE-15] Extrair helpers de template/export do `app.js` para `frontend/js/utils/exportTemplate.js` (mapa/cabeçalhos/round-trip/Planilha1).
+- [DONE] [ID-FE-16] Extrair builders de exportação do `app.js` para `frontend/js/utils/exportData.js` (`buildExportTableData`, `buildAuditLogTableData`, `buildSummaryAoa`).
 - [TODO] Continuar migracao do `app.js` para os modulos novos (foco em componentes da tela principal e filtros adicionais).
 
-Active: ID-FE-15 — refatorar próximo bloco da tela principal (render e filtros).
+Active: ID-FE-16 — migrar restante do pipeline de exportação para módulo de dados.
 Risks: manter compatibilidade incremental com ambiente legado.
 
 ## Fase 0 - Preparacao

@@ -5243,6 +5243,13 @@ function runTemplateRoundTripCheck(workbook, assertions) {
 
 // Monta tabela principal de exportacao com headers escolhidos.
 function buildExportTableData(records, options) {
+  if (typeof exportDataUtils !== "undefined" && exportDataUtils && typeof exportDataUtils.buildExportTableData === "function") {
+    return exportDataUtils.buildExportTableData(records, options, {
+      getActiveUsersWithLastMark: getActiveUsersWithLastMark,
+      calcProgress: calcProgress,
+      getGlobalProgressState: getGlobalProgressState
+    });
+  }
   const opts = options || {};
   const useOriginal = !!opts.useOriginalHeaders;
 
@@ -5302,6 +5309,15 @@ function buildExportTableData(records, options) {
 
 // Monta tabela de auditoria para aba AuditLog do XLSX exportado.
 function buildAuditLogTableData(records) {
+  if (typeof exportDataUtils !== "undefined" && exportDataUtils && typeof exportDataUtils.buildAuditLogTableData === "function") {
+    return exportDataUtils.buildAuditLogTableData(records, {
+      getEventsSorted: getEventsSorted,
+      getActiveUsersWithLastMark: getActiveUsersWithLastMark,
+      calcProgress: calcProgress,
+      getGlobalProgressState: getGlobalProgressState
+    });
+  }
+
   const headers = [
     "id_interno_sistema",
     "identificacao",
@@ -5363,6 +5379,13 @@ function buildAuditLogTableData(records) {
 }
 
 function buildSummaryAoa(records, totalEvents, exportScope, exportFilters) {
+  if (typeof exportDataUtils !== "undefined" && exportDataUtils && typeof exportDataUtils.buildSummaryAoa === "function") {
+    return exportDataUtils.buildSummaryAoa(records, totalEvents, exportScope, exportFilters, {
+      exportScopeLabel: exportScopeLabel,
+      getGlobalProgressState: getGlobalProgressState,
+      getActiveUsersWithLastMark: getActiveUsersWithLastMark
+    });
+  }
   const now = new Date().toISOString();
   const byGlobal = { done: 0, in_progress: 0, attention: 0, no_marks: 0 };
   const scope = exportScopeLabel(exportScope || EXPORT_SCOPE.ATUAIS);

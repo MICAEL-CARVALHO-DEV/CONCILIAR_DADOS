@@ -17,6 +17,7 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Centralizar recuperação/gravação/limpeza de token no `authStore` (incluindo fallback de session/localStorage) e remover lógica de fallback duplicada no `app.js`.
 - [DONE] Garantir fallback de token no `app.js` caso `authStore` não esteja disponível no carregamento (session/localStorage direto).
 - [DONE] Extrair helpers de template/export (`buildCanonicalColumnMap`, `findHeaderIndexByAliases`, `setWorksheetCellValue`, `runRoundTripCheck`, `buildPlanilha1Aoa`) para `frontend/js/utils/exportTemplate.js`.
+- [DONE] Extrair builders de dados de exportação (`buildExportTableData`, `buildAuditLogTableData`, `buildSummaryAoa`) para `frontend/js/utils/exportData.js`.
 
-Active: ID-FE-15
+Active: ID-FE-16
 Risks: validar comportamento em dispositivos com storage bloqueado.
