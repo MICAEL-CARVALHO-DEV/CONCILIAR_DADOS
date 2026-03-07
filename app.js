@@ -767,7 +767,7 @@ document.addEventListener("keydown", function (e) {
     e.preventDefault();
     e.stopPropagation();
     showModalSaveFeedback("ATENCAO: salve as edicoes antes de recarregar a pagina.", true);
-    if (btnKvSave && typeof btnKvSave.focus === "function") btnKvSave.focus();
+    focusIfPossible(btnKvSave);
     return;
   }
 
@@ -1525,15 +1525,15 @@ function openModal(id, keepReasons) {
     renderEmendaLockInfo(rec);
   });
   setTimeout(function () {
-    if (modalClose && typeof modalClose.focus === "function") modalClose.focus();
+    focusIfPossible(modalClose);
   }, 0);
 }
 
 function renderUserProgressBox(progressContainer, progress, delays, options) {
   if (!progressContainer) return;
   const opts = options || {};
-  const progressRenderer = typeof opts.renderProgressBar === "function" ? opts.renderProgressBar : null;
-  const chipsRenderer = typeof opts.renderMemberChips === "function" ? opts.renderMemberChips : null;
+  const progressRenderer = getOptionFunction(opts, "renderProgressBar");
+  const chipsRenderer = getOptionFunction(opts, "renderMemberChips");
   const users = Array.isArray(opts.users) ? opts.users : [];
 
   clearNodeChildren(progressContainer);
@@ -1894,9 +1894,7 @@ function forceCloseModal() {
   selectedId = null;
   modalDraftState = null;
   updateModalDraftUi();
-  if (lastFocusedElement && typeof lastFocusedElement.focus === "function") {
-    lastFocusedElement.focus();
-  }
+  focusIfPossible(lastFocusedElement);
 }
 
 function getSelected() {
@@ -5963,6 +5961,17 @@ function text(v) {
     return textUtil(v);
   }
   return asText(v);
+}
+
+function focusIfPossible(target) {
+  if (!target || typeof target.focus !== "function") return;
+  target.focus();
+}
+
+function getOptionFunction(options, key) {
+  if (!options) return null;
+  const candidate = options[key];
+  return typeof candidate === "function" ? candidate : null;
 }
 
 function clearNodeChildren(node) {
