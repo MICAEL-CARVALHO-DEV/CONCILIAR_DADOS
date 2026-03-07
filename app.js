@@ -3225,6 +3225,20 @@ function emendaLockOwnerText(payload) {
 }
 
 function renderModalAccessState(rec) {
+  const renderModalAccessStateUtil = getUiRenderUtil("renderModalAccessState");
+  if (renderModalAccessStateUtil) {
+    renderModalAccessStateUtil(modalAccessState, rec, {
+      modalShown: !!(modal && modal.classList.contains("show")),
+      canMutateRecords: canMutateRecords(),
+      apiEnabled: isApiEnabled(),
+      isReadOnly: isEmendaLockReadOnly(),
+      lockState: getEmendaLockState(),
+      fmtDateTime: fmtDateTime,
+      emendaLockOwnerText: emendaLockOwnerText
+    });
+    return;
+  }
+
   if (!modalAccessState) return;
   if (!modal || !modal.classList.contains("show") || !rec) {
     modalAccessState.classList.add("hidden");
@@ -3284,6 +3298,20 @@ function renderModalAccessState(rec) {
 }
 
 function renderEmendaLockInfo(rec) {
+  const renderEmendaLockInfoUtil = getUiRenderUtil("renderEmendaLockInfo");
+  if (renderEmendaLockInfoUtil) {
+    renderEmendaLockInfoUtil(livePresenceText, rec, {
+      apiEnabled: isApiEnabled(),
+      isSupervisor: isSupervisorUser(),
+      isReadOnly: isEmendaLockReadOnly(),
+      lockState: getEmendaLockState(),
+      fmtDateTime: fmtDateTime,
+      emendaLockOwnerText: emendaLockOwnerText
+    });
+    renderModalAccessState(rec);
+    return;
+  }
+
   let message = "";
   if (rec) {
     if (!isApiEnabled()) {
@@ -3977,6 +4005,14 @@ function getPresenceUsersForRecord(rec) {
 }
 
 function renderLivePresence(rec) {
+  const renderLivePresenceUtil = getUiRenderUtil("renderLivePresence");
+  if (renderLivePresenceUtil) {
+    renderLivePresenceUtil(livePresenceText, getPresenceUsersForRecord(rec), {
+      text: text
+    });
+    return;
+  }
+
   if (!livePresenceText) return;
   const users = getPresenceUsersForRecord(rec);
   if (!users.length) {

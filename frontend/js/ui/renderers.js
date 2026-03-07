@@ -600,6 +600,126 @@
     container.appendChild(table);
   }
 
+  function resetAccessState(container) {
+    if (!container) return;
+    container.classList.add("hidden");
+    container.classList.remove("access-mode-readonly", "access-mode-edit", "access-mode-warning");
+    container.textContent = "";
+  }
+
+  function renderModalAccessState(container, record, options) {
+    if (!container) return;
+    var opts = options || {};
+    var modalShown = !!opts.modalShown;
+    var canMutate = !!opts.canMutateRecords;
+    var apiEnabled = !!opts.apiEnabled;
+    var isReadOnly = !!opts.isReadOnly;
+    var lockState = opts.lockState || null;
+    var fmtDateTime = typeof opts.fmtDateTime === "function" ? opts.fmtDateTime : fallbackDateTime;
+    var ownerText = typeof opts.emendaLockOwnerText === "function" ? opts.emendaLockOwnerText : function () { return ""; };
+
+    if (!modalShown || !record) {
+      resetAccessState(container);
+      return;
+    }
+
+    function showAccessState(mode, message) {
+      container.textContent = String(message || "");
+      container.classList.remove("access-mode-readonly", "access-mode-edit", "access-mode-warning");
+      if (mode === "readonly") container.classList.add("access-mode-readonly");
+      else if (mode === "edit") container.classList.add("access-mode-edit");
+      else if (mode === "warning") container.classList.add("access-mode-warning");
+      container.classList.remove("hidden");
+    }
+
+    if (!apiEnabled) {
+      if (!canMutate) {
+        showAccessState("readonly", "MODO LEITURA: perfil SUPERVISAO monitora, sem alterar dados.");
+        return;
+      }
+      resetAccessState(container);
+      return;
+    }
+
+    if (!canMutate) {
+      showAccessState("readonly", "MODO LEITURA: perfil SUPERVISAO monitora, sem alterar dados.");
+      return;
+    }
+
+    if (!isReadOnly) {
+      resetAccessState(container);
+      return;
+    }
+
+    if (!lockState) {
+      showAccessState("warning", "MODO LEITURA: verificando disponibilidade de edicao...");
+      return;
+    }
+
+    var owner = ownerText(lockState);
+    var expiresAt = lockState && lockState.expires_at ? fmtDateTime(lockState.expires_at) : "";
+    var ownerMsg = owner ? (" por " + owner) : " por outro usuario";
+    var when = expiresAt ? (" Ate: " + expiresAt + ".") : "";
+    showAccessState("readonly", "MODO LEITURA: esta emenda esta em edicao" + ownerMsg + "." + when);
+  }
+
+  function renderEmendaLockInfo(container, record, options) {
+    if (!container) return;
+    var opts = options || {};
+    var apiEnabled = !!opts.apiEnabled;
+    var isSupervisor = !!opts.isSupervisor;
+    var isReadOnly = !!opts.isReadOnly;
+    var lockState = opts.lockState || null;
+    var fmtDateTime = typeof opts.fmtDateTime === "function" ? opts.fmtDateTime : fallbackDateTime;
+    var ownerText = typeof opts.emendaLockOwnerText === "function" ? opts.emendaLockOwnerText : function () { return ""; };
+    var message = "";
+
+    if (record) {
+      if (!apiEnabled) {
+        message = "Modo local: lock de edicao indisponivel.";
+      } else if (isSupervisor) {
+        var supervisorOwner = ownerText(lockState);
+        message = supervisorOwner
+          ? ("Modo supervisao (leitura). Em edicao por: " + supervisorOwner + ".")
+          : "Modo supervisao (leitura).";
+      } else {
+        var expiresAt = lockState && lockState.expires_at ? fmtDateTime(lockState.expires_at) : "";
+        if (isReadOnly) {
+          var owner = ownerText(lockState);
+          var ownerMsg = owner ? ("por " + owner) : "por outro usuario";
+          var when = expiresAt ? (" Ate: " + expiresAt + ".") : "";
+          message = "Modo leitura ativo: emenda em edicao " + ownerMsg + "." + when;
+        } else if (lockState && lockState.locked && lockState.is_owner) {
+          var ownerWhen = expiresAt ? (" Ate: " + expiresAt + ".") : "";
+          message = "Voce esta com edicao exclusiva desta emenda." + ownerWhen;
+        } else {
+          message = "Edicao disponivel nesta emenda.";
+        }
+      }
+    }
+
+    container.textContent = message;
+  }
+
+  function renderLivePresence(container, users, options) {
+    if (!container) return;
+    var opts = options || {};
+    var text = typeof opts.text === "function" ? opts.text : function (value) { return String(value == null ? "" : value); };
+    var list = Array.isArray(users) ? users : [];
+
+    if (!list.length) {
+      container.textContent = "Sem outro usuario ativo nesta emenda no momento.";
+      return;
+    }
+
+    var labels = list.map(function (user) {
+      var nome = text(user && user.usuario_nome ? user.usuario_nome : "-");
+      var setor = text(user && user.setor ? user.setor : "-");
+      return nome + " (" + setor + ")";
+    });
+    container.textContent = "Usuarios ativos nesta emenda agora: " + labels.join(" | ");
+  }
+
   SECFrontend.uiRender = {
     renderHistoryToContainer,
     renderRawFields,
@@ -607,6 +727,9 @@
     renderMainRow,
     renderRoleNotice,
     renderSupervisorQuickPanel,
-    renderPendingUsersTable
+    renderPendingUsersTable,
+    renderModalAccessState,
+    renderEmendaLockInfo,
+    renderLivePresence
   };
 })(typeof window !== "undefined" ? window : globalThis);
