@@ -28,9 +28,10 @@ Sair de um projeto "funciona, mas esta pesado" para um projeto:
 - [DONE] [ID-FE-12] Centralizar autenticacao de frontend no `app.js` via `frontend/js/auth/authStore.js` (perfil/token/session).
 - [DONE] [ID-FE-13] Consolidar fluxo de token de sessão no `authStore` e remover fallback duplicado no `app.js`.
 - [DONE] [ID-FE-14] Adicionar fallback defensivo de token no `app.js` para carregar sem regressao quando `authStore` nao for inicializado.
+- [DONE] [ID-FE-15] Extrair helpers de template/export do `app.js` para `frontend/js/utils/exportTemplate.js` (mapa/cabeçalhos/round-trip/Planilha1).
 - [TODO] Continuar migracao do `app.js` para os modulos novos (foco em componentes da tela principal e filtros adicionais).
 
-Active: ID-FE-14 — continuar migracao do app.js para modulos de tela sem impactar fluxo de autenticacao.
+Active: ID-FE-15 — refatorar próximo bloco da tela principal (render e filtros).
 Risks: manter compatibilidade incremental com ambiente legado.
 
 ## Fase 0 - Preparacao

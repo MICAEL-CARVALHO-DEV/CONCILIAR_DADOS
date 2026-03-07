@@ -16,6 +16,7 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Mover leitura de legado `SEC_USER_ID` para `authStore` e usá-la via API de perfil no `app.js`.
 - [DONE] Centralizar recuperação/gravação/limpeza de token no `authStore` (incluindo fallback de session/localStorage) e remover lógica de fallback duplicada no `app.js`.
 - [DONE] Garantir fallback de token no `app.js` caso `authStore` não esteja disponível no carregamento (session/localStorage direto).
+- [DONE] Extrair helpers de template/export (`buildCanonicalColumnMap`, `findHeaderIndexByAliases`, `setWorksheetCellValue`, `runRoundTripCheck`, `buildPlanilha1Aoa`) para `frontend/js/utils/exportTemplate.js`.
 
-Active: ID-FE-14
+Active: ID-FE-15
 Risks: validar comportamento em dispositivos com storage bloqueado.

@@ -5088,25 +5088,30 @@ function resolveTemplateTargetSheets(workbook, records) {
   return out.length ? out : workbook.SheetNames.slice();
 }
 
-const TEMPLATE_CANONICAL_KEYS = [
-  "identificacao",
-  "cod_subfonte",
-  "deputado",
-  "cod_uo",
-  "sigla_uo",
-  "cod_orgao",
-  "cod_acao",
-  "descricao_acao",
-  "plan_a",
-  "plan_b",
-  "municipio",
-  "valor_inicial",
-  "valor_atual",
-  "processo_sei",
-  "status_oficial"
-];
+const TEMPLATE_CANONICAL_KEYS = (typeof exportTemplateUtils !== "undefined" && exportTemplateUtils && Array.isArray(exportTemplateUtils.templateCanonicalKeys))
+  ? exportTemplateUtils.templateCanonicalKeys.slice(0)
+  : [
+    "identificacao",
+    "cod_subfonte",
+    "deputado",
+    "cod_uo",
+    "sigla_uo",
+    "cod_orgao",
+    "cod_acao",
+    "descricao_acao",
+    "plan_a",
+    "plan_b",
+    "municipio",
+    "valor_inicial",
+    "valor_atual",
+    "processo_sei",
+    "status_oficial"
+  ];
 
 function buildCanonicalColumnMap(headers) {
+  if (typeof exportTemplateUtils !== "undefined" && exportTemplateUtils && typeof exportTemplateUtils.buildCanonicalColumnMap === "function") {
+    return exportTemplateUtils.buildCanonicalColumnMap(headers, IMPORT_ALIASES, RAW_PREFERRED_HEADERS, normalizeHeader, TEMPLATE_CANONICAL_KEYS);
+  }
   const map = {};
   TEMPLATE_CANONICAL_KEYS.forEach(function (key) {
     const idx = findHeaderIndexByAliases(headers, key);
@@ -5116,6 +5121,9 @@ function buildCanonicalColumnMap(headers) {
 }
 
 function findHeaderIndexByAliases(headers, canonicalKey) {
+  if (typeof exportTemplateUtils !== "undefined" && exportTemplateUtils && typeof exportTemplateUtils.findHeaderIndexByAliases === "function") {
+    return exportTemplateUtils.findHeaderIndexByAliases(headers, canonicalKey, IMPORT_ALIASES, RAW_PREFERRED_HEADERS, normalizeHeader);
+  }
   const list = [];
   const aliases = IMPORT_ALIASES[canonicalKey] || [];
   aliases.forEach(function (a) { list.push(a); });
@@ -5129,6 +5137,9 @@ function findHeaderIndexByAliases(headers, canonicalKey) {
 }
 
 function getRecordValueForTemplate(rec, canonicalKey) {
+  if (typeof exportTemplateUtils !== "undefined" && exportTemplateUtils && typeof exportTemplateUtils.getRecordValueForTemplate === "function") {
+    return exportTemplateUtils.getRecordValueForTemplate(rec, canonicalKey, IMPORT_ALIASES, RAW_PREFERRED_HEADERS, normalizeHeader);
+  }
   if (!rec) return "";
   if (canonicalKey === "status_oficial") return rec.status_oficial || "";
 
@@ -5153,6 +5164,9 @@ function getRecordValueForTemplate(rec, canonicalKey) {
 }
 
 function setWorksheetCellValue(ws, rowNumber, colIndex, value, canonicalKey, xlsxApi) {
+  if (typeof exportTemplateUtils !== "undefined" && exportTemplateUtils && typeof exportTemplateUtils.setWorksheetCellValue === "function") {
+    return exportTemplateUtils.setWorksheetCellValue(ws, rowNumber, colIndex, value, canonicalKey, xlsxApi, toNumber, normalizeCompareValue);
+  }
   const addr = xlsxApi.utils.encode_cell({ r: Math.max(0, Number(rowNumber) - 1), c: Math.max(0, Number(colIndex)) });
   const previousCell = ws[addr];
   const prevValue = previousCell && Object.prototype.hasOwnProperty.call(previousCell, "v") ? previousCell.v : "";
@@ -5183,12 +5197,18 @@ function setWorksheetCellValue(ws, rowNumber, colIndex, value, canonicalKey, xls
 }
 
 function normalizeCompareValue(v) {
+  if (typeof exportTemplateUtils !== "undefined" && exportTemplateUtils && typeof exportTemplateUtils.normalizeCompareValue === "function") {
+    return exportTemplateUtils.normalizeCompareValue(v);
+  }
   if (v == null) return "";
   if (typeof v === "number") return Number(v).toString();
   return String(v).trim();
 }
 
 function runTemplateRoundTripCheck(workbook, assertions) {
+  if (typeof exportTemplateUtils !== "undefined" && exportTemplateUtils && typeof exportTemplateUtils.runTemplateRoundTripCheck === "function") {
+    return exportTemplateUtils.runTemplateRoundTripCheck(workbook, assertions, normalizeCompareValue, typeof window !== "undefined" ? window.XLSX : null);
+  }
   try {
     const xlsxApi = typeof window !== "undefined" ? window.XLSX : null;
     if (!xlsxApi) return { ok: true, issues: [] };
@@ -5372,6 +5392,9 @@ function buildSummaryAoa(records, totalEvents, exportScope, exportFilters) {
 }
 
 function runRoundTripCheck(workbook, headers) {
+  if (typeof exportTemplateUtils !== "undefined" && exportTemplateUtils && typeof exportTemplateUtils.runRoundTripCheck === "function") {
+    return exportTemplateUtils.runRoundTripCheck(workbook, headers, typeof window !== "undefined" ? window.XLSX : null);
+  }
   try {
     const xlsxApi = typeof window !== "undefined" ? window.XLSX : null;
     if (!xlsxApi) return { ok: true, issues: [] };
@@ -5418,6 +5441,9 @@ function runRoundTripCheck(workbook, headers) {
 }
 
 function buildPlanilha1Aoa(records) {
+  if (typeof exportTemplateUtils !== "undefined" && exportTemplateUtils && typeof exportTemplateUtils.buildPlanilha1Aoa === "function") {
+    return exportTemplateUtils.buildPlanilha1Aoa(records, inferDemoSeed);
+  }
   const safeRecords = (records || []).filter(function (r) {
     return !inferDemoSeed(r);
   });
