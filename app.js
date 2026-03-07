@@ -4307,6 +4307,26 @@ function upsertRawField(rawObj, canonicalKey, value) {
 }
 
 function renderImportDashboard() {
+  if (typeof importReportUtils !== "undefined" && importReportUtils && typeof importReportUtils.renderImportDashboard === "function") {
+    importReportUtils.renderImportDashboard(
+      state.records || [],
+      latestImportReport,
+      lastImportedPlanilha1Aoa,
+      importReport,
+      fmtDateTime,
+      escapeHtml,
+      buildPlanilha1Aoa,
+      normalizeLooseText,
+      buildPlanilha1Html,
+      function (limit) {
+        return getRecentChangesForPanel(limit);
+      },
+      wireImportReportTabs,
+      latestExportReport
+    );
+    return;
+  }
+
   if (!importReport) return;
   importReport.classList.remove("hidden");
 

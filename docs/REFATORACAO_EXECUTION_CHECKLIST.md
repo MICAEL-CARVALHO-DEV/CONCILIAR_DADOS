@@ -20,6 +20,7 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Extrair builders de dados de exportação (`buildExportTableData`, `buildAuditLogTableData`, `buildSummaryAoa`) para `frontend/js/utils/exportData.js`.
 - [DONE] Extrair utilitário de render da Planilha1 para `frontend/js/ui/importReport.js` com fallback local.
 - [DONE] Extrair badge de resumo de exportação (`buildExportSummaryBadgeHtml`) para `frontend/js/ui/importReport.js`.
+- [DONE] Delegar `renderImportDashboard` em `frontend/js/ui/importReport.js` com fallback para implementação local.
 
-Active: ID-FE-18
+Active: ID-FE-19
 Risks: validar comportamento em dispositivos com storage bloqueado.

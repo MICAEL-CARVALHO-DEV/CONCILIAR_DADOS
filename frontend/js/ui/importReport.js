@@ -61,7 +61,7 @@
     return [];
   }
 
-  function renderImportDashboard(stateRecords, latestImportReport, lastImportedPlanilha1Aoa, importReportEl, fmtDateTimeFn, escapeHtmlFn, buildPlanilha1AoaFn, normalizeLooseTextFn, buildPlanilha1HtmlFn, getRecentChangesForPanelFn, wireImportReportTabsFn) {
+  function renderImportDashboard(stateRecords, latestImportReport, lastImportedPlanilha1Aoa, importReportEl, fmtDateTimeFn, escapeHtmlFn, buildPlanilha1AoaFn, normalizeLooseTextFn, buildPlanilha1HtmlFn, getRecentChangesForPanelFn, wireImportReportTabsFn, latestExportReport, buildExportSummaryBadgeHtmlFn, exportScopeLabelFn) {
     if (!importReportEl) return;
     importReportEl.classList.remove("hidden");
 
@@ -86,6 +86,7 @@
     );
 
     var recent = typeof getRecentChangesForPanelFn === "function" ? getRecentChangesForPanelFn(10) : [];
+    var badgeBuilder = typeof buildExportSummaryBadgeHtmlFn === "function" ? buildExportSummaryBadgeHtmlFn : buildExportSummaryBadgeHtml;
     var right = buildRecentChangesPanelHtml(
       recent,
       escapeHtmlFn,
@@ -97,7 +98,12 @@
     importReportEl.innerHTML = "";
     importReportEl.appendChild(document.createTextNode(""));
     importReportEl.innerHTML =
-      buildExportSummaryBadgeHtml(latestImportReport) +
+      badgeBuilder(
+        latestExportReport,
+        escapeHtmlFn,
+        exportScopeLabelFn,
+        fmtDateTimeFn
+      ) +
       "<div class=\"import-dashboard-grid\"><section class=\"import-dashboard-left\">" + left + "</section><section class=\"import-dashboard-right\">" + right + "</section></div>";
 
     if (latestImportReport && typeof wireImportReportTabsFn === "function") {
