@@ -3792,58 +3792,7 @@ async function apiRequest(method, path, body, eventOrigin, options) {
   if (apiClient && typeof apiClient.apiRequest === "function") {
     return await apiClient.apiRequest(method, path, body, eventOrigin, options);
   }
-  const requestOpts = options && typeof options === "object" ? options : {};
-  const handleAuthFailure = Object.prototype.hasOwnProperty.call(requestOpts, "handleAuthFailure") ? !!requestOpts.handleAuthFailure : false;
-  const url = getApiBaseUrl() + path;
-  const opts = { method: method, headers: buildApiHeaders(eventOrigin) };
-  if (body !== undefined) {
-    opts.headers["Content-Type"] = "application/json";
-    opts.body = JSON.stringify(body);
-  }
-
-  let resp;
-  try {
-    resp = await fetch(url, opts);
-  } catch (err) {
-    apiOnline = false;
-    apiLastError = "sem conexao com API";
-    applyAccessProfile();
-    throw err;
-  }
-
-  if (!resp.ok) {
-    const rawBody = await resp.text();
-    let parsedBody = null;
-    try { parsedBody = rawBody ? JSON.parse(rawBody) : null; } catch (_err) { parsedBody = null; }
-
-    const detail = parsedBody && Object.prototype.hasOwnProperty.call(parsedBody, "detail")
-      ? parsedBody.detail
-      : rawBody;
-    const detailMessage = (typeof detail === "string")
-      ? detail
-      : (detail && typeof detail === "object" && detail.message ? String(detail.message) : String(rawBody || ""));
-
-    const transportError = !resp.status || resp.status >= 500;
-    apiOnline = !transportError;
-    apiLastError = "HTTP " + resp.status + " " + detailMessage;
-    applyAccessProfile();
-
-    if (resp.status === 401 && isApiEnabled() && handleAuthFailure) {
-      clearStoredSessionToken();
-      closeApiSocket();
-      showAuthGate("Sessao expirada. Faca login novamente.");
-    }
-
-    const err = new Error(detailMessage || ("HTTP " + String(resp.status)));
-    err.status = resp.status;
-    err.payload = parsedBody;
-    err.detail = detail;
-    throw err;
-  }
-
-  const ct = (resp.headers.get("content-type") || "").toLowerCase();
-  if (ct.includes("application/json")) return await resp.json();
-  return null;
+  throw new Error("Cliente de API indisponivel. Recarregue a pagina.");
 }
 
 // Wrapper publico para login/cadastro sem token.
@@ -3851,28 +3800,7 @@ async function apiRequestPublic(method, path, body) {
   if (apiClient && typeof apiClient.apiRequestPublic === "function") {
     return await apiClient.apiRequestPublic(method, path, body);
   }
-  const url = getApiBaseUrl() + path;
-  const opts = { method: method, headers: {} };
-  if (body !== undefined) {
-    opts.headers["Content-Type"] = "application/json";
-    opts.body = JSON.stringify(body);
-  }
-
-  let resp;
-  try {
-    resp = await fetch(url, opts);
-  } catch (err) {
-    throw new Error("Sem conexao com API.");
-  }
-
-  if (!resp.ok) {
-    const t = await resp.text();
-    throw new Error("HTTP " + resp.status + "::" + t);
-  }
-
-  const ct = (resp.headers.get("content-type") || "").toLowerCase();
-  if (ct.includes("application/json")) return await resp.json();
-  return null;
+  throw new Error("Cliente de API indisponivel. Recarregue a pagina.");
 }
 
 // Monta headers padrao de auditoria/autenticacao para chamadas privadas.
