@@ -21,9 +21,10 @@ Sair de um projeto "funciona, mas esta pesado" para um projeto:
 - [DONE] [ID-FE-05] Extrair utilitarios de normalizacao e clones para `frontend/js/utils/normalize.js`
 - [DONE] [ID-FE-06] Extrair utilitarios de geracao de ID em `frontend/js/utils/id.js`
 - [DONE] [ID-FE-07] Extrair utilitarios de status e hash em `frontend/js/utils/status.js`
+- [DONE] [ID-FE-08] Extrair utilitarios de filtro/select em `frontend/js/ui/filters.js`
 - [TODO] Continuar migracao do `app.js` para os modulos novos
 
-Active: ID-FE-08 — continuidade da migracao do frontend por blocos pequenos
+Active: ID-FE-09 — continuidade da migracao do frontend por blocos pequenos
 Risks: arquivo `app.js` grande, backend ainda concentrado, regressao em auth/import/export e lock
 
 ## Fase 0 - Preparacao

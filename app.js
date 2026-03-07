@@ -67,6 +67,7 @@ const formatUtils = SEC_FRONTEND.formatUtils || null;
 const normalizeUtils = SEC_FRONTEND.normalizeUtils || null;
 const idUtils = SEC_FRONTEND.idUtils || null;
 const statusUtils = SEC_FRONTEND.statusUtils || null;
+const filterUtils = SEC_FRONTEND.filterUtils || null;
 const authStore = SEC_FRONTEND.authStore || null;
 const authGuard = SEC_FRONTEND.authGuard || null;
 const apiClient = SEC_FRONTEND.apiClient || null;
@@ -364,6 +365,21 @@ initializeAuthFlow();
 
 // Inicializa os filtros da UI principal e prepara os selects dependentes.
 function initSelects() {
+  if (filterUtils && typeof filterUtils.initSelects === "function") {
+    filterUtils.initSelects({
+      statusFilter: statusFilter,
+      markStatus: markStatus,
+      yearFilter: yearFilter,
+      exportCustomYear: exportCustomYear,
+      exportCustomStatus: exportCustomStatus,
+      statusFilters: STATUS_FILTERS,
+      statusValues: STATUS,
+      records: state.records,
+      toInt: toInt
+    });
+    return;
+  }
+
   setSelectOptions(statusFilter, STATUS_FILTERS);
 
   setSelectOptions(markStatus, [{ label: "Selecione um status", value: "" }].concat(STATUS.map(function (s) {
@@ -375,6 +391,16 @@ function initSelects() {
 }
 
 function syncYearFilter() {
+  if (filterUtils && typeof filterUtils.syncYearFilter === "function") {
+    filterUtils.syncYearFilter({
+      select: yearFilter,
+      current: yearFilter.value,
+      records: state.records,
+      toInt: toInt
+    });
+    return;
+  }
+
   const current = yearFilter.value;
   const years = Array.from(new Set(state.records.map(function (r) {
     return toInt(r.ano);
@@ -392,6 +418,19 @@ function syncYearFilter() {
 }
 
 function syncCustomExportFilters() {
+  if (filterUtils && typeof filterUtils.syncCustomExportFilters === "function") {
+    filterUtils.syncCustomExportFilters({
+      exportCustomYear: exportCustomYear,
+      exportCustomStatus: exportCustomStatus,
+      records: state.records,
+      statusValues: STATUS,
+      toInt: toInt,
+      currentYear: exportCustomYear ? exportCustomYear.value : "",
+      currentStatus: exportCustomStatus ? exportCustomStatus.value : ""
+    });
+    return;
+  }
+
   if (!exportCustomYear || !exportCustomStatus) return;
 
   const years = Array.from(new Set((state.records || []).map(function (r) {
@@ -416,6 +455,10 @@ function syncCustomExportFilters() {
 
 // Preenche um <select> mantendo valor anterior quando ainda for valido.
 function setSelectOptions(select, options, preferredValue) {
+  if (filterUtils && typeof filterUtils.setSelectOptions === "function") {
+    return filterUtils.setSelectOptions(select, options, preferredValue);
+  }
+
   const prev = preferredValue !== undefined ? preferredValue : select.value;
   select.innerHTML = "";
   options.forEach(function (opt) {
