@@ -18,6 +18,14 @@
       .replaceAll("'", "&#039;");
   }
 
+  function normalizeLooseTextValue(value) {
+    return String(value == null ? "" : value)
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+  }
+
   function buildExportSummaryBadgeHtml(report, escapeHtmlFn, exportScopeLabelFn, fmtDateTimeFn) {
     var escapeHtml = typeof escapeHtmlFn === "function" ? escapeHtmlFn : escape;
     var scopeLabel = typeof exportScopeLabelFn === "function" ? exportScopeLabelFn : function (value) {
@@ -44,12 +52,31 @@
       + '</div>';
   }
 
-  function buildPlanilha1HtmlFromUtils(aoa, escapeHtmlFn, normalizeLooseTextFn) {
-    if (!root.importReportUtils || typeof root.importReportUtils.buildPlanilha1Html !== "function") {
-      return "";
+  function buildPlanilha1Html(aoa, options) {
+    var opts = options || {};
+    var escapeHtml = typeof opts.escapeHtml === "function" ? opts.escapeHtml : escape;
+    var normalizeLooseText = typeof opts.normalizeLooseText === "function" ? opts.normalizeLooseText : normalizeLooseTextValue;
+
+    if (!Array.isArray(aoa) || aoa.length === 0) {
+      return '<p class="muted small">Sem dados para resumo por deputado.</p>';
     }
 
-    return root.importReportUtils.buildPlanilha1Html(aoa, {
+    var html = '<div class="table-wrap"><table class="table" style="min-width:420px"><thead><tr><th>' + escapeHtml(String(aoa[0][0] || "Rotulos de Linha")) + '</th><th>' + escapeHtml(String(aoa[0][1] || "Contagem")) + '</th></tr></thead><tbody>';
+
+    for (var i = 1; i < aoa.length; i += 1) {
+      var row = aoa[i] || [];
+      var label = row[0] == null ? "" : String(row[0]);
+      var val = row[1] == null ? "" : String(row[1]);
+      var isTotal = normalizeLooseText(label) === "total geral";
+      html += '<tr' + (isTotal ? ' style="font-weight:700"' : "") + '><td>' + escapeHtml(label) + '</td><td>' + escapeHtml(val) + '</td></tr>';
+    }
+
+    html += "</tbody></table></div>";
+    return html;
+  }
+
+  function buildPlanilha1HtmlFromUtils(aoa, escapeHtmlFn, normalizeLooseTextFn) {
+    return buildPlanilha1Html(aoa, {
       escapeHtml: escapeHtmlFn,
       normalizeLooseText: normalizeLooseTextFn
     });
@@ -366,6 +393,7 @@
   root.importReportUtils.buildImportSummaryHtml = buildImportSummaryHtml;
   root.importReportUtils.buildImportValidationHtml = buildImportValidationHtml;
   root.importReportUtils.buildRecentChangesPanelHtml = buildRecentChangesPanelHtml;
+  root.importReportUtils.buildPlanilha1Html = buildPlanilha1Html;
   root.importReportUtils.getRecentChangesForPanel = getRecentChangesForPanel;
   root.importReportUtils.describeEventForPanel = describeEventForPanel;
   root.importReportUtils.wireImportReportTabs = wireImportReportTabs;
