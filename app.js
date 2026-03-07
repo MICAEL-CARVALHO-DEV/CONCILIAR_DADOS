@@ -4348,6 +4348,18 @@ function buildExportSummaryBadgeHtml(report) {
     + '</div>';
 }
 function buildImportSummaryPlaceholderHtml() {
+  if (typeof importReportUtils !== "undefined" && importReportUtils && typeof importReportUtils.buildImportSummaryPlaceholderHtml === "function") {
+    return importReportUtils.buildImportSummaryPlaceholderHtml(
+      state.records || [],
+      lastImportedPlanilha1Aoa,
+      escapeHtml,
+      fmtDateTime,
+      buildPlanilha1Aoa,
+      normalizeLooseText,
+      buildPlanilha1Html,
+      function (limit) { return getRecentChangesForPanel(limit); }
+    );
+  }
   const totalRegistros = (state.records || []).length;
   const totalEventos = (state.records || []).reduce(function (acc, rec) {
     return acc + ((rec && rec.eventos && rec.eventos.length) ? rec.eventos.length : 0);
@@ -4376,6 +4388,18 @@ function buildImportSummaryPlaceholderHtml() {
 }
 
 function buildImportSummaryHtml(report) {
+  if (typeof importReportUtils !== "undefined" && importReportUtils && typeof importReportUtils.buildImportSummaryHtml === "function") {
+    return importReportUtils.buildImportSummaryHtml(
+      report,
+      state.records || [],
+      lastImportedPlanilha1Aoa,
+      escapeHtml,
+      fmtDateTime,
+      buildPlanilha1Aoa,
+      normalizeLooseText,
+      buildPlanilha1Html
+    );
+  }
   const sheets = report && report.sheetNames && report.sheetNames.length ? report.sheetNames.join(", ") : "-";
   const fileName = report && report.fileName ? report.fileName : "-";
 
@@ -4418,6 +4442,9 @@ function buildImportSummaryHtml(report) {
 }
 
 function buildImportValidationHtml(validation) {
+  if (typeof importReportUtils !== "undefined" && importReportUtils && typeof importReportUtils.buildImportValidationHtml === "function") {
+    return importReportUtils.buildImportValidationHtml(validation, escapeHtml);
+  }
   const v = validation || {};
   const recognized = Array.isArray(v.recognizedHeaders) ? v.recognizedHeaders : [];
   const unrecognized = Array.isArray(v.unrecognizedHeaders) ? v.unrecognizedHeaders : [];
@@ -4451,6 +4478,9 @@ function buildImportValidationHtml(validation) {
   return html;
 }
 function buildRecentChangesPanelHtml(items) {
+  if (typeof importReportUtils !== "undefined" && importReportUtils && typeof importReportUtils.buildRecentChangesPanelHtml === "function") {
+    return importReportUtils.buildRecentChangesPanelHtml(items, escapeHtml, fmtDateTime, function (item) { return describeEventForPanel(item); }, text);
+  }
   if (!items.length) {
     return ""
       + "<h4>Painel de alteracoes</h4>"
@@ -4480,6 +4510,9 @@ function buildRecentChangesPanelHtml(items) {
 }
 
 function getRecentChangesForPanel(limit) {
+  if (typeof importReportUtils !== "undefined" && importReportUtils && typeof importReportUtils.getRecentChangesForPanel === "function") {
+    return importReportUtils.getRecentChangesForPanel(state.records || [], getEventsSorted, toInt, limit);
+  }
   const out = [];
 
   (state.records || []).forEach(function (rec) {
@@ -4513,6 +4546,9 @@ function getRecentChangesForPanel(limit) {
 }
 
 function describeEventForPanel(item) {
+  if (typeof importReportUtils !== "undefined" && importReportUtils && typeof importReportUtils.describeEventForPanel === "function") {
+    return importReportUtils.describeEventForPanel(item, text);
+  }
   if (!item) return "Alteracao registrada";
 
   if (item.type === "OFFICIAL_STATUS") {
@@ -4540,6 +4576,10 @@ function showImportReport(report) {
 }
 
 function wireImportReportTabs(defaultTab) {
+  if (typeof importReportUtils !== "undefined" && importReportUtils && typeof importReportUtils.wireImportReportTabs === "function") {
+    importReportUtils.wireImportReportTabs(importReport, defaultTab);
+    return;
+  }
   if (!importReport) return;
   const tabButtons = Array.from(importReport.querySelectorAll("[data-import-tab]"));
   const tabPanels = Array.from(importReport.querySelectorAll("[data-import-panel]"));
