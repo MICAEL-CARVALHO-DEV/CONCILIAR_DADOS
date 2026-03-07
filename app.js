@@ -391,6 +391,36 @@ function getProgressUtil(methodName) {
   return typeof method === "function" ? method : null;
 }
 
+function getFormatUtil(methodName) {
+  if (!formatUtils) return null;
+  const method = formatUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getNormalizeUtil(methodName) {
+  if (!normalizeUtils) return null;
+  const method = normalizeUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getStatusUtil(methodName) {
+  if (!statusUtils) return null;
+  const method = statusUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getIdUtil(methodName) {
+  if (!idUtils) return null;
+  const method = idUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getImportNormalizationUtil(methodName) {
+  if (!importNormalizationUtils) return null;
+  const method = importNormalizationUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
 // Inicializa os filtros da UI principal e prepara os selects dependentes.
 function initSelects() {
   const initSelectsUtil = getFilterUtil("initSelects");
@@ -961,8 +991,9 @@ function getModalFieldLabel(fieldKey, fallback) {
 }
 
 function normalizeDraftFieldValue(value, type) {
-  if (formatUtils && typeof formatUtils.normalizeDraftFieldValue === "function") {
-    return formatUtils.normalizeDraftFieldValue(value, type);
+  const normalizeDraftFieldValueUtil = getFormatUtil("normalizeDraftFieldValue");
+  if (normalizeDraftFieldValueUtil) {
+    return normalizeDraftFieldValueUtil(value, type);
   }
   if (type === "money") return toNumber(value);
   if (type === "number") return toInt(value);
@@ -970,8 +1001,9 @@ function normalizeDraftFieldValue(value, type) {
 }
 
 function formatDraftInputValue(value, type) {
-  if (formatUtils && typeof formatUtils.formatDraftInputValue === "function") {
-    return formatUtils.formatDraftInputValue(value, type);
+  const formatDraftInputValueUtil = getFormatUtil("formatDraftInputValue");
+  if (formatDraftInputValueUtil) {
+    return formatDraftInputValueUtil(value, type);
   }
   if (type === "money") return fmtMoney(value || 0);
   if (type === "number") return String(toInt(value));
@@ -979,8 +1011,9 @@ function formatDraftInputValue(value, type) {
 }
 
 function parseDraftFieldValue(raw, type) {
-  if (formatUtils && typeof formatUtils.parseDraftFieldValue === "function") {
-    return formatUtils.parseDraftFieldValue(raw, type);
+  const parseDraftFieldValueUtil = getFormatUtil("parseDraftFieldValue");
+  if (parseDraftFieldValueUtil) {
+    return parseDraftFieldValueUtil(raw, type);
   }
   const v = String(raw == null ? "" : raw);
   if (type === "money") return toNumber(v);
@@ -1589,8 +1622,9 @@ function getInitials(name) {
 }
 
 function statusClass(status) {
-  if (statusUtils && typeof statusUtils.statusClass === "function") {
-    return statusUtils.statusClass(status, normalizeLooseText);
+  const statusClassUtil = getStatusUtil("statusClass");
+  if (statusClassUtil) {
+    return statusClassUtil(status, normalizeLooseText);
   }
 
   const s = normalizeLooseText(status);
@@ -2384,8 +2418,9 @@ function isRowEmpty(arr) {
 }
 
 function renderStatus(status) {
-  if (statusUtils && typeof statusUtils.renderStatus === "function") {
-    return statusUtils.renderStatus(status, statusColor, escapeHtml);
+  const renderStatusUtil = getStatusUtil("renderStatus");
+  if (renderStatusUtil) {
+    return renderStatusUtil(status, statusColor, escapeHtml);
   }
 
   const color = statusColor(status);
@@ -2393,8 +2428,9 @@ function renderStatus(status) {
 }
 
 function statusColor(status) {
-  if (statusUtils && typeof statusUtils.statusColor === "function") {
-    return statusUtils.statusColor(status);
+  const statusColorUtil = getStatusUtil("statusColor");
+  if (statusColorUtil) {
+    return statusColorUtil(status);
   }
   if (status === "Concluido") return "#2ecc71";
   if (status === "Cancelado") return "#ff4f6d";
@@ -2407,8 +2443,9 @@ function statusColor(status) {
 }
 
 function normalizeStatus(input) {
-  if (statusUtils && typeof statusUtils.normalizeStatus === "function") {
-    return statusUtils.normalizeStatus(input, STATUS, normalizeLooseText);
+  const normalizeStatusUtil = getStatusUtil("normalizeStatus");
+  if (normalizeStatusUtil) {
+    return normalizeStatusUtil(input, STATUS, normalizeLooseText);
   }
   const cleaned = normalizeLooseText(input);
   if (!cleaned) return "Recebido";
@@ -2573,8 +2610,9 @@ function hideAuthGate() {
 }
 
 function extractApiError(err, fallback) {
-  if (formatUtils && typeof formatUtils.extractApiError === "function") {
-    return formatUtils.extractApiError(err, fallback);
+  const extractApiErrorUtil = getFormatUtil("extractApiError");
+  if (extractApiErrorUtil) {
+    return extractApiErrorUtil(err, fallback);
   }
   const msg = err && err.message ? String(err.message) : "";
   if (!msg) return fallback;
@@ -4204,8 +4242,9 @@ function syncActiveUsersCache(records) {
   });
 }
 function buildIdCounters(records) {
-  if (idUtils && typeof idUtils.buildIdCounters === "function") {
-    return idUtils.buildIdCounters(records);
+  const buildIdCountersUtil = getIdUtil("buildIdCounters");
+  if (buildIdCountersUtil) {
+    return buildIdCountersUtil(records);
   }
 
   const counters = {};
@@ -4221,8 +4260,9 @@ function buildIdCounters(records) {
 }
 
 function assignMissingIds(records, counters) {
-  if (idUtils && typeof idUtils.assignMissingIds === "function") {
-    return idUtils.assignMissingIds(records, counters, generateInternalId, toInt, currentYear);
+  const assignMissingIdsUtil = getIdUtil("assignMissingIds");
+  if (assignMissingIdsUtil) {
+    return assignMissingIdsUtil(records, counters, generateInternalId, toInt, currentYear);
   }
 
   records.forEach(function (r) {
@@ -4232,8 +4272,9 @@ function assignMissingIds(records, counters) {
 }
 
 function generateInternalId(ano, counters) {
-  if (idUtils && typeof idUtils.generateInternalId === "function") {
-    return idUtils.generateInternalId(ano, counters, toInt, currentYear);
+  const generateInternalIdUtil = getIdUtil("generateInternalId");
+  if (generateInternalIdUtil) {
+    return generateInternalIdUtil(ano, counters, toInt, currentYear);
   }
 
   const year = String(toInt(ano) || currentYear());
@@ -4242,8 +4283,9 @@ function generateInternalId(ano, counters) {
   return "EPI-" + year + "-" + String(next).padStart(6, "0");
 }
 function syncReferenceKeys(records) {
-  if (typeof importNormalizationUtils !== "undefined" && importNormalizationUtils && typeof importNormalizationUtils.syncReferenceKeys === "function") {
-    return importNormalizationUtils.syncReferenceKeys(records, REFERENCE_FIELDS, buildReferenceKey);
+  const syncReferenceKeysUtil = getImportNormalizationUtil("syncReferenceKeys");
+  if (syncReferenceKeysUtil) {
+    return syncReferenceKeysUtil(records, REFERENCE_FIELDS, buildReferenceKey);
   }
   records.forEach(function (r) {
     r.ref_key = buildReferenceKey(r);
@@ -4251,8 +4293,9 @@ function syncReferenceKeys(records) {
 }
 
 function buildReferenceKey(record) {
-  if (typeof importNormalizationUtils !== "undefined" && importNormalizationUtils && typeof importNormalizationUtils.buildReferenceKey === "function") {
-    return importNormalizationUtils.buildReferenceKey(record, REFERENCE_FIELDS, normalizeReferencePart);
+  const buildReferenceKeyUtil = getImportNormalizationUtil("buildReferenceKey");
+  if (buildReferenceKeyUtil) {
+    return buildReferenceKeyUtil(record, REFERENCE_FIELDS, normalizeReferencePart);
   }
   const parts = REFERENCE_FIELDS.map(function (field) {
     return normalizeReferencePart(record[field]);
@@ -4262,18 +4305,21 @@ function buildReferenceKey(record) {
 }
 
 function normalizeReferencePart(value) {
-  if (typeof importNormalizationUtils !== "undefined" && importNormalizationUtils && typeof importNormalizationUtils.normalizeReferencePart === "function") {
-    return importNormalizationUtils.normalizeReferencePart(value, normalizeLooseText);
+  const normalizeReferencePartUtil = getImportNormalizationUtil("normalizeReferencePart");
+  if (normalizeReferencePartUtil) {
+    return normalizeReferencePartUtil(value, normalizeLooseText);
   }
-  if (normalizeUtils && typeof normalizeUtils.normalizeReferencePart === "function") {
-    return normalizeUtils.normalizeReferencePart(value);
+  const normalizeReferencePartFallbackUtil = getNormalizeUtil("normalizeReferencePart");
+  if (normalizeReferencePartFallbackUtil) {
+    return normalizeReferencePartFallbackUtil(value);
   }
   return normalizeLooseText(value).replace(/\s+/g, " ").trim();
 }
 
 function normalizeLooseText(value) {
-  if (normalizeUtils && typeof normalizeUtils.normalizeLooseText === "function") {
-    return normalizeUtils.normalizeLooseText(value);
+  const normalizeLooseTextUtil = getNormalizeUtil("normalizeLooseText");
+  if (normalizeLooseTextUtil) {
+    return normalizeLooseTextUtil(value);
   }
   return String(value == null ? "" : value)
     .normalize("NFD")
@@ -4283,8 +4329,9 @@ function normalizeLooseText(value) {
 }
 
 function normalizeRowKeys(row) {
-  if (normalizeUtils && typeof normalizeUtils.normalizeRowKeys === "function") {
-    return normalizeUtils.normalizeRowKeys(row);
+  const normalizeRowKeysUtil = getNormalizeUtil("normalizeRowKeys");
+  if (normalizeRowKeysUtil) {
+    return normalizeRowKeysUtil(row);
   }
   const out = {};
   Object.keys(row || {}).forEach(function (k) {
@@ -4296,15 +4343,17 @@ function normalizeRowKeys(row) {
 }
 
 function normalizeHeader(key) {
-  if (normalizeUtils && typeof normalizeUtils.normalizeHeader === "function") {
-    return normalizeUtils.normalizeHeader(key);
+  const normalizeHeaderUtil = getNormalizeUtil("normalizeHeader");
+  if (normalizeHeaderUtil) {
+    return normalizeHeaderUtil(key);
   }
   return normalizeLooseText(key).replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 }
 
 function pickValue(normalizedRow, aliases) {
-  if (normalizeUtils && typeof normalizeUtils.pickValue === "function") {
-    return normalizeUtils.pickValue(normalizedRow, aliases);
+  const pickValueUtil = getNormalizeUtil("pickValue");
+  if (pickValueUtil) {
+    return pickValueUtil(normalizedRow, aliases);
   }
   if (!normalizedRow) return "";
   for (let i = 0; i < aliases.length; i += 1) {
@@ -4318,8 +4367,9 @@ function pickValue(normalizedRow, aliases) {
 }
 
 function shallowCloneObj(obj) {
-  if (normalizeUtils && typeof normalizeUtils.shallowCloneObj === "function") {
-    return normalizeUtils.shallowCloneObj(obj);
+  const shallowCloneObjUtil = getNormalizeUtil("shallowCloneObj");
+  if (shallowCloneObjUtil) {
+    return shallowCloneObjUtil(obj);
   }
   const out = {};
   Object.keys(obj || {}).forEach(function (k) {
@@ -4345,8 +4395,9 @@ function mergeRawFields(target, incomingRaw) {
 }
 
 function syncCanonicalToAllFields(record) {
-  if (typeof importNormalizationUtils !== "undefined" && importNormalizationUtils && typeof importNormalizationUtils.syncCanonicalToAllFields === "function") {
-    return importNormalizationUtils.syncCanonicalToAllFields(
+  const syncCanonicalToAllFieldsUtil = getImportNormalizationUtil("syncCanonicalToAllFields");
+  if (syncCanonicalToAllFieldsUtil) {
+    return syncCanonicalToAllFieldsUtil(
       record,
       IMPORT_ALIASES,
       RAW_PREFERRED_HEADERS,
@@ -4375,8 +4426,9 @@ function syncCanonicalToAllFields(record) {
 }
 
 function upsertRawField(rawObj, canonicalKey, value) {
-  if (typeof importNormalizationUtils !== "undefined" && importNormalizationUtils && typeof importNormalizationUtils.upsertRawField === "function") {
-    return importNormalizationUtils.upsertRawField(
+  const upsertRawFieldUtil = getImportNormalizationUtil("upsertRawField");
+  if (upsertRawFieldUtil) {
+    return upsertRawFieldUtil(
       rawObj,
       canonicalKey,
       value,
@@ -4786,8 +4838,9 @@ function hideImportReport() {
 }
 
 function quickHashString(input) {
-  if (statusUtils && typeof statusUtils.quickHashString === "function") {
-    return statusUtils.quickHashString(input);
+  const quickHashStringUtil = getStatusUtil("quickHashString");
+  if (quickHashStringUtil) {
+    return quickHashStringUtil(input);
   }
   let hash = 2166136261;
   const str = String(input || "");
@@ -5684,16 +5737,18 @@ function buildPlanilha1Aoa(records) {
 }
 
 function fmtMoney(n) {
-  if (formatUtils && typeof formatUtils.fmtMoney === "function") {
-    return formatUtils.fmtMoney(n);
+  const fmtMoneyUtil = getFormatUtil("fmtMoney");
+  if (fmtMoneyUtil) {
+    return fmtMoneyUtil(n);
   }
   const x = toNumber(n);
   return x.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function fmtDateTime(iso) {
-  if (formatUtils && typeof formatUtils.fmtDateTime === "function") {
-    return formatUtils.fmtDateTime(iso);
+  const fmtDateTimeUtil = getFormatUtil("fmtDateTime");
+  if (fmtDateTimeUtil) {
+    return fmtDateTimeUtil(iso);
   }
   try {
     const d = new Date(iso);
@@ -5704,15 +5759,17 @@ function fmtDateTime(iso) {
 }
 
 function isoNow() {
-  if (formatUtils && typeof formatUtils.isoNow === "function") {
-    return formatUtils.isoNow();
+  const isoNowUtil = getFormatUtil("isoNow");
+  if (isoNowUtil) {
+    return isoNowUtil();
   }
   return new Date().toISOString();
 }
 
 function dateStamp() {
-  if (formatUtils && typeof formatUtils.dateStamp === "function") {
-    return formatUtils.dateStamp();
+  const dateStampUtil = getFormatUtil("dateStamp");
+  if (dateStampUtil) {
+    return dateStampUtil();
   }
   const d = new Date();
   const yyyy = d.getFullYear();
@@ -5724,23 +5781,26 @@ function dateStamp() {
 }
 
 function currentYear() {
-  if (formatUtils && typeof formatUtils.currentYear === "function") {
-    return formatUtils.currentYear();
+  const currentYearUtil = getFormatUtil("currentYear");
+  if (currentYearUtil) {
+    return currentYearUtil();
   }
   return new Date().getFullYear();
 }
 
 function toInt(v) {
-  if (formatUtils && typeof formatUtils.toInt === "function") {
-    return formatUtils.toInt(v);
+  const toIntUtil = getFormatUtil("toInt");
+  if (toIntUtil) {
+    return toIntUtil(v);
   }
   const n = parseInt(v, 10);
   return Number.isFinite(n) ? n : 0;
 }
 
 function toNumber(v) {
-  if (formatUtils && typeof formatUtils.toNumber === "function") {
-    return formatUtils.toNumber(v);
+  const toNumberUtil = getFormatUtil("toNumber");
+  if (toNumberUtil) {
+    return toNumberUtil(v);
   }
   if (typeof v === "number") return Number.isFinite(v) ? v : 0;
   const s = String(v == null ? "" : v).trim().replace(/\s/g, "").replace(/\.(?=\d{3}(\D|$))/g, "").replace(/,/g, ".").replace(/[^\d.-]/g, "");
@@ -5749,8 +5809,9 @@ function toNumber(v) {
 }
 
 function toNumberOrNull(v) {
-  if (formatUtils && typeof formatUtils.toNumberOrNull === "function") {
-    return formatUtils.toNumberOrNull(v);
+  const toNumberOrNullUtil = getFormatUtil("toNumberOrNull");
+  if (toNumberOrNullUtil) {
+    return toNumberOrNullUtil(v);
   }
   if (v == null) return null;
   const txt = String(v).trim();
@@ -5761,16 +5822,18 @@ function toNumberOrNull(v) {
 }
 
 function asText(v) {
-  if (formatUtils && typeof formatUtils.asText === "function") {
-    return formatUtils.asText(v);
+  const asTextUtil = getFormatUtil("asText");
+  if (asTextUtil) {
+    return asTextUtil(v);
   }
   if (v == null) return "";
   return String(v).trim();
 }
 
 function text(v) {
-  if (formatUtils && typeof formatUtils.text === "function") {
-    return formatUtils.text(v);
+  const textUtil = getFormatUtil("text");
+  if (textUtil) {
+    return textUtil(v);
   }
   return asText(v);
 }
@@ -5837,8 +5900,9 @@ function escapeHtml(str) {
 }
 
 function debounce(fn, ms) {
-  if (normalizeUtils && typeof normalizeUtils.debounce === "function") {
-    return normalizeUtils.debounce(fn, ms);
+  const debounceUtil = getNormalizeUtil("debounce");
+  if (debounceUtil) {
+    return debounceUtil(fn, ms);
   }
   let t = null;
   return function () {
@@ -5851,8 +5915,9 @@ function debounce(fn, ms) {
 }
 
 function deepClone(obj) {
-  if (normalizeUtils && typeof normalizeUtils.deepClone === "function") {
-    return normalizeUtils.deepClone(obj);
+  const deepCloneUtil = getNormalizeUtil("deepClone");
+  if (deepCloneUtil) {
+    return deepCloneUtil(obj);
   }
   return JSON.parse(JSON.stringify(obj));
 }
