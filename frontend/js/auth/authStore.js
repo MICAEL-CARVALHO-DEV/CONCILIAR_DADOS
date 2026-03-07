@@ -41,6 +41,29 @@
     };
   }
 
+  function readValue(storage, key) {
+    if (storageUtils && typeof storageUtils.readStorageValue === "function") {
+      return storageUtils.readStorageValue(storage, key);
+    }
+    return fallbackGetItem(storage, key);
+  }
+
+  function writeValue(storage, key, value) {
+    if (storageUtils && typeof storageUtils.writeStorageValue === "function") {
+      if (storageUtils.writeStorageValue(storage, key, value)) return;
+      return;
+    }
+    fallbackSetItem(storage, key, value);
+  }
+
+  function removeValue(storage, key) {
+    if (storageUtils && typeof storageUtils.removeStorageValue === "function") {
+      if (storageUtils.removeStorageValue(storage, key)) return;
+      return;
+    }
+    fallbackRemoveItem(storage, key);
+  }
+
   function readStoredSessionToken(keys) {
     var cfg = withDefaults(keys);
     if (storageUtils && typeof storageUtils.readSessionToken === "function") {
@@ -87,8 +110,8 @@
   function readAuthenticatedUser(keys) {
     var cfg = withDefaults(keys);
     return {
-      name: storageUtils ? storageUtils.safeGetItem(global.localStorage, cfg.userName).trim() : "",
-      role: storageUtils ? storageUtils.safeGetItem(global.localStorage, cfg.userRole).trim() : ""
+      name: readValue(global.localStorage, cfg.userName),
+      role: readValue(global.localStorage, cfg.userRole)
     };
   }
 
@@ -96,18 +119,15 @@
     var cfg = withDefaults(keys);
     var nextUser = user && user.name != null ? String(user.name).trim() : "";
     var nextRole = user && user.role != null ? String(user.role).trim() : "";
-    if (storageUtils) {
-      if (nextUser) storageUtils.safeSetItem(global.localStorage, cfg.userName, nextUser);
-      if (nextRole) storageUtils.safeSetItem(global.localStorage, cfg.userRole, nextRole);
-    }
+    if (!nextUser && !nextRole) return;
+    if (nextUser) writeValue(global.localStorage, cfg.userName, nextUser);
+    if (nextRole) writeValue(global.localStorage, cfg.userRole, nextRole);
   }
 
   function clearAuthenticatedUser(keys) {
     var cfg = withDefaults(keys);
-    if (storageUtils) {
-      storageUtils.safeRemoveItem(global.localStorage, cfg.userName);
-      storageUtils.safeRemoveItem(global.localStorage, cfg.userRole);
-    }
+    removeValue(global.localStorage, cfg.userName);
+    removeValue(global.localStorage, cfg.userRole);
   }
 
   function readAuthenticatedProfile(keys) {
@@ -130,9 +150,8 @@
 
   function readLegacyAuthenticatedProfile(keys) {
     var cfg = withDefaults(keys);
-    if (!storageUtils) return { name: "", role: "" };
     return {
-      name: storageUtils.safeGetItem(global.localStorage, cfg.legacyUserId).trim(),
+      name: readValue(global.localStorage, cfg.legacyUserId),
       role: ""
     };
   }

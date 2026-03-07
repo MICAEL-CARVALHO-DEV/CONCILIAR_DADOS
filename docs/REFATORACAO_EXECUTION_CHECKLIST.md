@@ -24,6 +24,7 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Extrair `syncCanonicalToAllFields`/`upsertRawField` para `frontend/js/utils/importNormalization.js` com fallback local no `app.js`.
 - [DONE] Extrair `syncReferenceKeys`/`buildReferenceKey` para `frontend/js/utils/importNormalization.js` com fallback local.
 - [DONE] Extrair `readStorageValue`/`writeStorageValue`/`removeStorageValue` e helpers de modo de armazenamento (`getStorageMode`, `getPrimaryStorage`, `getSecondaryStorage`) para `frontend/js/utils/storage.js`; `app.js` passa a delegar com fallback.
+- [DONE] Ajustar `frontend/js/auth/authStore.js` para reutilizar helpers genéricos de `storageUtils` em acessos de autenticação, reduzindo fallback duplicado.
 
-Active: ID-FE-22
+Active: ID-FE-23
 Risks: validar comportamento em dispositivos com storage bloqueado.
