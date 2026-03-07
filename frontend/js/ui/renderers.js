@@ -787,6 +787,29 @@
     container.classList.toggle("error", !hidden && isError);
   }
 
+  function syncModalRecordHeader(titleEl, subtitleEl, record) {
+    if (titleEl) titleEl.textContent = record ? ("Emenda: " + String(record.id || "")) : "";
+    if (subtitleEl) {
+      if (!record) {
+        subtitleEl.textContent = "";
+      } else {
+        subtitleEl.textContent = [
+          String(record.identificacao || ""),
+          String(record.municipio || ""),
+          String(record.deputado || "")
+        ].join(" | ");
+      }
+    }
+  }
+
+  function renderConflictState(boxEl, textEl, issues) {
+    if (!boxEl || !textEl) return;
+    var list = Array.isArray(issues) ? issues.filter(Boolean) : [];
+    var hasIssues = list.length > 0;
+    boxEl.classList.toggle("hidden", !hasIssues);
+    textEl.textContent = hasIssues ? list.join(" | ") : "";
+  }
+
   function renderModalAccessState(container, record, options) {
     if (!container) return;
     var opts = options || {};
@@ -916,6 +939,8 @@
     syncProfileModalFields,
     setPendingUsersFeedbackState,
     setModalSaveFeedbackState,
+    syncModalRecordHeader,
+    renderConflictState,
     renderModalAccessState,
     renderEmendaLockInfo,
     renderLivePresence

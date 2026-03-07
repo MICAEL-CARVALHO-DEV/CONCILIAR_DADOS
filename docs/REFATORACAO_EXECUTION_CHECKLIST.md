@@ -65,6 +65,7 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Criar fila operacional da IA ORQ em `docs/ORQ_REFATORACAO_FRONTEND_QUEUE.md` para usar planejamento e revisao multi-IA sem conflito de arquivo.
 - [DONE] Definir `STACK-01` em `docs/ORQ_REFATORACAO_FRONTEND_QUEUE.md` com ordem oficial: ORQ frontend -> execucao FE -> ORQ backend.
 - [DONE] Extrair helpers visuais de feedback e visibilidade de modais auxiliares para `frontend/js/ui/renderers.js`, deixando `app.js` com wrappers simples para perfil/aprovacao e feedback do modal.
+- [DONE] Extrair helpers de cabecalho/conflito do modal e reutilizar o helper de visibilidade nos modais principal e de exportacao customizada.
 
-Active: ID-FE-61
+Active: ID-FE-62
 Risks: validar comportamento em dispositivos com storage bloqueado.

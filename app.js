@@ -1553,8 +1553,13 @@ function openModal(id, keepReasons) {
   if (!rec) return;
   setEmendaLockReadOnly(!canMutateRecords());
 
-  modalTitle.textContent = "Emenda: " + rec.id;
-  modalSub.textContent = rec.identificacao + " | " + rec.municipio + " | " + rec.deputado;
+  const syncModalRecordHeaderUtil = getUiRenderUtil("syncModalRecordHeader");
+  if (syncModalRecordHeaderUtil) {
+    syncModalRecordHeaderUtil(modalTitle, modalSub, rec);
+  } else {
+    modalTitle.textContent = "Emenda: " + rec.id;
+    modalSub.textContent = rec.identificacao + " | " + rec.municipio + " | " + rec.deputado;
+  }
 
   if (!keepReasons) {
     if (markStatus) markStatus.value = "";
@@ -1581,7 +1586,10 @@ function openModal(id, keepReasons) {
     });
   }
 
-  if (attentionIssues.length) {
+  const renderConflictStateUtil = getUiRenderUtil("renderConflictState");
+  if (renderConflictStateUtil) {
+    renderConflictStateUtil(conflictBox, conflictText, attentionIssues);
+  } else if (attentionIssues.length) {
     conflictBox.classList.remove("hidden");
     conflictText.textContent = attentionIssues.join(" | ");
   } else {
@@ -1591,8 +1599,7 @@ function openModal(id, keepReasons) {
 
   renderHistoryFallback(rec);
 
-  modal.classList.add("show");
-  modal.setAttribute("aria-hidden", "false");
+  setAuxModalVisibility(modal, true);
   applyModalAccessProfile();
   renderEmendaLockInfo(rec);
   syncModalEmendaLock(rec).catch(function (_err) {
@@ -1956,8 +1963,7 @@ function forceCloseModal() {
   setEmendaLockState(null);
   clearModalAutoCloseTimer();
   clearModalSaveFeedback();
-  modal.classList.remove("show");
-  modal.setAttribute("aria-hidden", "true");
+  setAuxModalVisibility(modal, false);
   if (modalAccessState) {
     modalAccessState.classList.add("hidden");
     modalAccessState.textContent = "";
@@ -5698,14 +5704,12 @@ function openExportCustomModal() {
   if (exportCustomMunicipio) exportCustomMunicipio.value = "";
 
   refreshCustomExportSummary();
-  exportCustomModal.classList.add("show");
-  exportCustomModal.setAttribute("aria-hidden", "false");
+  setAuxModalVisibility(exportCustomModal, true);
 }
 
 function closeExportCustomModal() {
   if (!exportCustomModal) return;
-  exportCustomModal.classList.remove("show");
-  exportCustomModal.setAttribute("aria-hidden", "true");
+  setAuxModalVisibility(exportCustomModal, false);
 }
 
 function refreshCustomExportSummary() {
