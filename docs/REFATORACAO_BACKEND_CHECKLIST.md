@@ -6,9 +6,11 @@ Success: `main.py` vira arquivo de composicao e os helpers de auth/seguranca fic
 - [DONE] Validar o corte inicial com `python -m py_compile` e `scripts/smoke_e2e.ps1` contra a API local.
 - [DONE] Extrair dependencias de autenticacao/permissao para `backend/app/core/dependencies.py` e religar os `Depends(...)` do `main.py`.
 - [DONE] Revalidar smoke local apos extrair `core/dependencies.py`.
-- [TODO] Extrair dominio de usuarios/auth para `services/auth_service.py` ou `routers/auth.py`.
-- [TODO] Extrair dominio de emendas/locks para modulo proprio sem mudar os endpoints.
-- [TODO] Validar smoke do backend apos cada corte maior.
+- [DONE] Extrair dominio de usuarios/auth para `backend/app/services/auth_service.py` e deixar `main.py` como wrapper fino.
+- [DONE] Extrair dominio de emendas/locks para `backend/app/services/emenda_service.py` sem mudar os endpoints.
+- [DONE] Revalidar backend com `py_compile`, `smoke_e2e.ps1` e `concorrencia_c34.ps1` no modelo hibrido de lock.
+- [TODO] Extrair dominio de importacao/exportacao e reduzir mais o bloco operacional do `main.py`.
+- [TODO] Separar auditoria e websocket/presenca em modulos dedicados.
 
-Active: ID-BE-05
+Active: ID-BE-08
 Risks: manter compatibilidade total com JWT, fallback legado e auditoria de auth.

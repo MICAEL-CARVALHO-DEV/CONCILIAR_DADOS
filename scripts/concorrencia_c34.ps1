@@ -110,8 +110,33 @@ foreach ($p in $participants) {
     }
 
     $body = @{ tipo_evento = "NOTE"; origem_evento = "API"; motivo = "c34 concorrencia $userName" } | ConvertTo-Json
-    $resp = Invoke-RestMethod -Method POST -Uri "$base/emendas/$emendaId/eventos" -Headers $headers -ContentType "application/json" -Body $body
-    [pscustomobject]@{ user = $userName; ok = [bool]$resp.ok }
+    try {
+      $resp = Invoke-RestMethod -Method POST -Uri "$base/emendas/$emendaId/eventos" -Headers $headers -ContentType "application/json" -Body $body
+      return [pscustomobject]@{
+        user = $userName
+        ok = [bool]$resp.ok
+        status = 200
+        code = ""
+      }
+    } catch {
+      $statusCode = -1
+      $detailCode = ""
+      try { $statusCode = [int]$_.Exception.Response.StatusCode } catch {}
+      try {
+        $reader = New-Object System.IO.StreamReader($_.Exception.Response.GetResponseStream())
+        $bodyText = $reader.ReadToEnd()
+        if ($bodyText) {
+          $payload = $bodyText | ConvertFrom-Json
+          if ($payload.detail.code) { $detailCode = [string]$payload.detail.code }
+        }
+      } catch {}
+      return [pscustomobject]@{
+        user = $userName
+        ok = $false
+        status = $statusCode
+        code = $detailCode
+      }
+    }
   } -ArgumentList $BaseUrl, $eid, $p.name, $p.token
 }
 
@@ -119,9 +144,18 @@ Wait-Job -Job $jobs | Out-Null
 $jobResults = @($jobs | Receive-Job)
 $jobs | Remove-Job -Force
 
-$failJobs = @($jobResults | Where-Object { -not $_.ok })
-if ($failJobs.Count -gt 0) {
-  throw "falha em eventos concorrentes para usuarios: $($failJobs.user -join ', ')"
+$successJobs = @($jobResults | Where-Object { $_.ok })
+$conflictJobs = @($jobResults | Where-Object { (-not $_.ok) -and $_.status -eq 409 })
+$unexpectedJobs = @($jobResults | Where-Object { (-not $_.ok) -and $_.status -ne 409 })
+
+if ($successJobs.Count -lt 1) {
+  throw "nenhum usuario conseguiu gravar em modo concorrente"
+}
+if ($conflictJobs.Count -lt ($Users - 1)) {
+  throw "esperado pelo menos $($Users - 1) conflitos de lock, obtido $($conflictJobs.Count)"
+}
+if ($unexpectedJobs.Count -gt 0) {
+  throw "falha inesperada em concorrencia para usuarios: $($unexpectedJobs.user -join ', ')"
 }
 
 $audit = Invoke-Json -Method "GET" -Url "$BaseUrl/audit" -Headers $ownerHeaders -Body $null
@@ -130,11 +164,11 @@ $hits = @($audit | Where-Object {
 })
 
 $distinctUsers = @($hits | ForEach-Object { $_.usuario_nome } | Sort-Object -Unique)
-if ($hits.Count -lt $Users) {
-  throw "audit registrou $($hits.Count) eventos, esperado >= $Users"
+if ($hits.Count -lt 1) {
+  throw "audit nao registrou nenhum evento NOTE com lock hibrido"
 }
-if ($distinctUsers.Count -lt $Users) {
-  throw "audit registrou $($distinctUsers.Count) usuarios distintos, esperado $Users"
+if ($distinctUsers.Count -lt 1) {
+  throw "audit nao registrou usuario valido no evento NOTE"
 }
 
 Write-Host "Teste C34 concorrencia: SUCESSO" -ForegroundColor Green
@@ -142,3 +176,5 @@ Write-Host "Emenda teste: $idInterno (id=$eid)"
 Write-Host "Usuarios concorrentes: $Users"
 Write-Host "Perfil dos participantes: $participantRoleNormalized"
 Write-Host "Eventos NOTE registrados: $($hits.Count)"
+Write-Host "Gravacoes aceitas: $($successJobs.Count)"
+Write-Host "Conflitos de lock: $($conflictJobs.Count)"
