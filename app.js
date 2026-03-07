@@ -2658,6 +2658,29 @@ function readStoredSessionToken() {
   if (authStore && typeof authStore.readStoredSessionToken === "function") {
     return authStore.readStoredSessionToken(AUTH_KEYS);
   }
+  var cfg = (AUTH_KEYS && typeof AUTH_KEYS === "object") ? AUTH_KEYS : {};
+  var tokenKey = cfg.sessionToken || "SEC_SESSION_TOKEN";
+  var backupTokenKey = cfg.sessionTokenBackup || "SEC_SESSION_TOKEN_BKP";
+  try {
+    if (typeof sessionStorage !== "undefined") {
+      var sessionToken = String(sessionStorage.getItem(tokenKey) || "").trim();
+      if (sessionToken) {
+        if (typeof localStorage !== "undefined") {
+          localStorage.setItem(backupTokenKey, sessionToken);
+        }
+        return sessionToken;
+      }
+    }
+    if (typeof localStorage !== "undefined") {
+      var backupToken = String(localStorage.getItem(backupTokenKey) || "").trim();
+      if (backupToken && typeof sessionStorage !== "undefined") {
+        sessionStorage.setItem(tokenKey, backupToken);
+      }
+      return backupToken;
+    }
+  } catch (_err) {
+    return "";
+  }
   return "";
 }
 
@@ -2666,7 +2689,24 @@ function writeStoredSessionToken(token) {
     authStore.writeStoredSessionToken(token, AUTH_KEYS);
     return;
   }
-  // fallback removido no fluxo principal: authStore deve ser carregado antes do app.js.
+  var cfg = (AUTH_KEYS && typeof AUTH_KEYS === "object") ? AUTH_KEYS : {};
+  var tokenKey = cfg.sessionToken || "SEC_SESSION_TOKEN";
+  var backupTokenKey = cfg.sessionTokenBackup || "SEC_SESSION_TOKEN_BKP";
+  var raw = String(token == null ? "" : token).trim();
+  if (!raw) {
+    clearStoredSessionToken();
+    return;
+  }
+  try {
+    if (typeof sessionStorage !== "undefined") {
+      sessionStorage.setItem(tokenKey, raw);
+    }
+    if (typeof localStorage !== "undefined") {
+      localStorage.setItem(backupTokenKey, raw);
+    }
+  } catch (_err) {
+    // sem persistencia persistente, mantém sessão em memória apenas neste fluxo.
+  }
 }
 
 function clearStoredSessionToken() {
@@ -2674,7 +2714,19 @@ function clearStoredSessionToken() {
     authStore.clearStoredSessionToken(AUTH_KEYS);
     return;
   }
-  // fallback removido no fluxo principal: authStore deve ser carregado antes do app.js.
+  var cfg = (AUTH_KEYS && typeof AUTH_KEYS === "object") ? AUTH_KEYS : {};
+  var tokenKey = cfg.sessionToken || "SEC_SESSION_TOKEN";
+  var backupTokenKey = cfg.sessionTokenBackup || "SEC_SESSION_TOKEN_BKP";
+  try {
+    if (typeof sessionStorage !== "undefined") {
+      sessionStorage.removeItem(tokenKey);
+    }
+    if (typeof localStorage !== "undefined") {
+      localStorage.removeItem(backupTokenKey);
+    }
+  } catch (_err) {
+    // sem persistência, apenas ignora.
+  }
 }
 
 // Ponto de entrada da autenticacao ao abrir index.html.

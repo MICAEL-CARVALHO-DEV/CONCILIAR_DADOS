@@ -27,10 +27,11 @@ Sair de um projeto "funciona, mas esta pesado" para um projeto:
 - [DONE] [ID-FE-11] Reduzir `innerHTML` crÃ­tico no modal e migrar linha da grade principal (`tr` da tabela) para renderizaÃ§Ã£o DOM (`frontend/js/ui/renderers.js`) com fallback local.
 - [DONE] [ID-FE-12] Centralizar autenticacao de frontend no `app.js` via `frontend/js/auth/authStore.js` (perfil/token/session).
 - [DONE] [ID-FE-13] Consolidar fluxo de token de sessão no `authStore` e remover fallback duplicado no `app.js`.
+- [DONE] [ID-FE-14] Adicionar fallback defensivo de token no `app.js` para carregar sem regressao quando `authStore` nao for inicializado.
 - [TODO] Continuar migracao do `app.js` para os modulos novos (foco em componentes da tela principal e filtros adicionais).
 
-Active: ID-FE-13 — remover acoplamentos de autenticação e sessão restantes no fluxo principal do frontend
-Risks: falha de compatibilidade em fluxo local legado.
+Active: ID-FE-14 — continuar migracao do app.js para modulos de tela sem impactar fluxo de autenticacao.
+Risks: manter compatibilidade incremental com ambiente legado.
 
 ## Fase 0 - Preparacao
 ### Dia 1 - Criar base segura
