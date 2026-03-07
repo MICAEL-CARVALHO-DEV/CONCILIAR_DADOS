@@ -435,6 +435,11 @@ function getExportTemplateUtil(methodName) {
   return typeof method === "function" ? method : null;
 }
 
+function getExportTemplateValue(key) {
+  if (!exportTemplateUtils) return null;
+  return exportTemplateUtils[key];
+}
+
 function getExportDataUtil(methodName) {
   if (!exportDataUtils) return null;
   const method = exportDataUtils[methodName];
@@ -5444,8 +5449,8 @@ function resolveTemplateTargetSheets(workbook, records) {
   return out.length ? out : workbook.SheetNames.slice();
 }
 
-const TEMPLATE_CANONICAL_KEYS = (exportTemplateUtils && Array.isArray(exportTemplateUtils.templateCanonicalKeys))
-  ? exportTemplateUtils.templateCanonicalKeys.slice(0)
+const TEMPLATE_CANONICAL_KEYS = Array.isArray(getExportTemplateValue("templateCanonicalKeys"))
+  ? getExportTemplateValue("templateCanonicalKeys").slice(0)
   : [
     "identificacao",
     "cod_subfonte",
