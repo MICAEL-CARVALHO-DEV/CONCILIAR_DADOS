@@ -24,9 +24,10 @@ Sair de um projeto "funciona, mas esta pesado" para um projeto:
 - [DONE] [ID-FE-08] Extrair utilitarios de filtro/select em `frontend/js/ui/filters.js`
 - [DONE] [ID-FE-09] Extrair utilitarios de export/report em `frontend/js/utils/export.js`
 - [DONE] [ID-FE-10] Extrair utilitarios de progresso/marcacao para `frontend/js/ui/metrics.js`
-- [TODO] Continuar migracao do `app.js` para os modulos novos
+- [DONE] [ID-FE-11] Reduzir `innerHTML` crítico no modal usando `frontend/js/ui/renderers.js` (histórico, campos brutos e resumo de marcações) com fallback local.
+- [TODO] Continuar migracao do `app.js` para os modulos novos (foco em componentes da tela principal e filtros adicionais).
 
-Active: ID-FE-11 — reduzir `innerHTML` e renderizações repetidas no frontend
+Active: ID-FE-11 — reduzir `innerHTML` e renderizações repetidas no frontend (blocos do modal migrados)
 Risks: arquivo `app.js` grande, backend ainda concentrado, regressao em auth/import/export e lock
 
 ## Fase 0 - Preparacao

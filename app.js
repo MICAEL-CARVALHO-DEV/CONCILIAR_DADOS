@@ -74,6 +74,7 @@ const authStore = SEC_FRONTEND.authStore || null;
 const authGuard = SEC_FRONTEND.authGuard || null;
 const apiClient = SEC_FRONTEND.apiClient || null;
 const concurrencyService = SEC_FRONTEND.concurrencyService || null;
+const uiRender = SEC_FRONTEND.uiRender || null;
 const API_WS_PATH = "/ws";
 const WS_RECONNECT_BASE_MS = 1500;
 const WS_RECONNECT_MAX_MS = 15000;
@@ -1300,8 +1301,17 @@ function openModal(id, keepReasons) {
   const attentionIssues = getAttentionIssues(users);
 
   const lastMarks = getLastMarksByUser(rec);
-  renderMarksSummary(lastMarks);
-  renderRawFields(rec);
+  if (uiRender && typeof uiRender.renderMarksSummary === "function") {
+    uiRender.renderMarksSummary(marksSummary, lastMarks, { fmtDateTime: fmtDateTime, statusColor: statusColor });
+  } else {
+    renderMarksSummary(lastMarks);
+  }
+
+  if (uiRender && typeof uiRender.renderRawFields === "function") {
+    uiRender.renderRawFields(rawFields, rec && rec.all_fields && typeof rec.all_fields === "object" ? rec.all_fields : null);
+  } else {
+    renderRawFields(rec);
+  }
 
   if (userProgressBox) {
     userProgressBox.innerHTML = ""
@@ -1320,29 +1330,11 @@ function openModal(id, keepReasons) {
     conflictText.textContent = "";
   }
 
-  historyEl.innerHTML = "";
-  getEventsSorted(rec).forEach(function (ev) {
-    const div = document.createElement("div");
-    div.className = "event";
-
-    const who = (ev.actor_role || "-") + " | " + (ev.actor_user || "-");
-    let right = "";
-    if (ev.type === "OFFICIAL_STATUS") {
-      right = "<b>LEGADO</b> " + "<b>" + escapeHtml(ev.from || "") + "</b> -> <b>" + escapeHtml(ev.to || "") + "</b>";
-    } else if (ev.type === "MARK_STATUS") {
-      right = "<b>" + escapeHtml(ev.to || "") + "</b>";
-    } else if (ev.type === "EDIT_FIELD") {
-      right = "<b>" + escapeHtml(ev.field || "") + "</b>: " + escapeHtml(String(ev.from || "")) + " -> " + escapeHtml(String(ev.to || ""));
-    }
-
-    div.innerHTML = ""
-      + "<div class=\"top\">"
-      + "<div class=\"meta\"><b>" + escapeHtml(who) + "</b> | " + fmtDateTime(ev.at) + " | <span class=\"muted\">" + escapeHtml(ev.type) + "</span></div>"
-      + "<div class=\"meta\">" + right + "</div>"
-      + "</div>"
-      + "<div class=\"desc\">" + escapeHtml(ev.note || "") + "</div>";
-    historyEl.appendChild(div);
-  });
+  if (uiRender && typeof uiRender.renderHistoryToContainer === "function") {
+    uiRender.renderHistoryToContainer(historyEl, getEventsSorted(rec), { fmtDateTime: fmtDateTime });
+  } else {
+    renderHistoryFallback(rec);
+  }
 
   modal.classList.add("show");
   modal.setAttribute("aria-hidden", "false");
@@ -1383,6 +1375,7 @@ function getEventsSorted(rec) {
 }
 
 function renderMarksSummary(lastMarks) {
+  if (!marksSummary) return;
   const entries = Object.entries(lastMarks).sort(function (a, b) {
     if (a[0] === b[0]) return 0;
     return a[0] > b[0] ? 1 : -1;
@@ -1412,6 +1405,34 @@ function renderMarksSummary(lastMarks) {
 
   html += "</tbody></table>";
   marksSummary.innerHTML = html;
+}
+
+function renderHistoryFallback(rec) {
+  if (!historyEl) return;
+  historyEl.innerHTML = "";
+
+  getEventsSorted(rec).forEach(function (ev) {
+    const div = document.createElement("div");
+    div.className = "event";
+
+    const who = (ev.actor_role || "-") + " | " + (ev.actor_user || "-");
+    let right = "";
+    if (ev.type === "OFFICIAL_STATUS") {
+      right = "<b>LEGADO</b> " + "<b>" + escapeHtml(ev.from || "") + "</b> -> <b>" + escapeHtml(ev.to || "") + "</b>";
+    } else if (ev.type === "MARK_STATUS") {
+      right = "<b>" + escapeHtml(ev.to || "") + "</b>";
+    } else if (ev.type === "EDIT_FIELD") {
+      right = "<b>" + escapeHtml(ev.field || "") + "</b>: " + escapeHtml(String(ev.from || "")) + " -> " + escapeHtml(String(ev.to || ""));
+    }
+
+    div.innerHTML = ""
+      + "<div class=\"top\">"
+      + "<div class=\"meta\"><b>" + escapeHtml(who) + "</b> | " + fmtDateTime(ev.at) + " | <span class=\"muted\">" + escapeHtml(ev.type) + "</span></div>"
+      + "<div class=\"meta\">" + right + "</div>"
+      + "</div>"
+      + "<div class=\"desc\">" + escapeHtml(ev.note || "") + "</div>";
+    historyEl.appendChild(div);
+  });
 }
 
 function getLastMarksByUser(rec) {
