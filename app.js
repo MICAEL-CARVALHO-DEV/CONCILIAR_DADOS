@@ -4376,7 +4376,9 @@ function renderImportDashboard() {
         return getRecentChangesForPanel(limit);
       },
       wireImportReportTabs,
-      latestExportReport
+      latestExportReport,
+      buildExportSummaryBadgeHtml,
+      exportScopeLabel
     );
     return;
   }
