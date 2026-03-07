@@ -600,6 +600,95 @@
     container.appendChild(table);
   }
 
+  function renderKvEditor(container, record, options) {
+    if (!container) return;
+    var rec = record || {};
+    var opts = options || {};
+    var fieldOrder = Array.isArray(opts.fieldOrder) ? opts.fieldOrder : [];
+    var getModalFieldType = typeof opts.getModalFieldType === "function" ? opts.getModalFieldType : function () { return "string"; };
+    var formatDraftInputValue = typeof opts.formatDraftInputValue === "function" ? opts.formatDraftInputValue : function (value) {
+      return String(value == null ? "" : value);
+    };
+    var canMutateRecords = !!opts.canMutateRecords;
+    var onModalFieldInput = typeof opts.onModalFieldInput === "function" ? opts.onModalFieldInput : function () {};
+    var modalDraft = opts.modalDraftState && opts.modalDraftState.draft ? opts.modalDraftState.draft : null;
+
+    while (container.firstChild) {
+      container.removeChild(container.firstChild);
+    }
+
+    fieldOrder.forEach(function (field) {
+      var k = document.createElement("div");
+      k.className = "k";
+      k.textContent = String(field && field.label ? field.label : "");
+
+      var v = document.createElement("div");
+      v.className = "v";
+
+      if (field && field.editable) {
+        var type = getModalFieldType(field.key);
+        var isLongText = field.key === "descricao_acao";
+        var input = document.createElement(isLongText ? "textarea" : "input");
+        input.className = isLongText ? "kv-textarea" : "kv-input";
+        if (!isLongText) input.type = "text";
+        input.setAttribute("data-kv-field", field.key);
+        input.setAttribute("data-kv-type", type);
+        input.value = formatDraftInputValue(modalDraft ? modalDraft[field.key] : rec[field.key], type);
+        if (!canMutateRecords) input.disabled = true;
+        input.addEventListener("input", onModalFieldInput);
+        v.appendChild(input);
+      } else {
+        v.textContent = String(rec && rec[field.key] == null ? "-" : rec[field.key]);
+      }
+
+      container.appendChild(k);
+      container.appendChild(v);
+    });
+  }
+
+  function renderUserProgressBox(container, progress, delays, options) {
+    if (!container) return;
+    var opts = options || {};
+    var renderProgressBar = typeof opts.renderProgressBar === "function" ? opts.renderProgressBar : null;
+    var renderMemberChips = typeof opts.renderMemberChips === "function" ? opts.renderMemberChips : null;
+    var users = Array.isArray(opts.users) ? opts.users : [];
+    var waitingUsers = Array.isArray(delays) ? delays : [];
+
+    while (container.firstChild) {
+      container.removeChild(container.firstChild);
+    }
+
+    if (renderProgressBar) {
+      var progressWrap = document.createElement("div");
+      appendRenderedMarkup(progressWrap, renderProgressBar(progress));
+      container.appendChild(progressWrap);
+    }
+
+    if (renderMemberChips) {
+      var chipWrap = document.createElement("div");
+      chipWrap.className = "member-chip-wrap";
+      chipWrap.style.marginTop = "8px";
+      appendRenderedMarkup(chipWrap, renderMemberChips(users));
+      container.appendChild(chipWrap);
+    }
+
+    var footer = document.createElement("p");
+    footer.className = "muted small";
+    footer.style.marginTop = "8px";
+    var label = document.createElement("b");
+    if (waitingUsers.length) {
+      label.textContent = "Quem esta atrasando:";
+      footer.appendChild(label);
+      footer.appendChild(document.createTextNode(" " + waitingUsers.map(function (user) {
+        return String(user && user.name ? user.name : "");
+      }).join(", ")));
+    } else {
+      label.textContent = "Todos concluiram.";
+      footer.appendChild(label);
+    }
+    container.appendChild(footer);
+  }
+
   function resetAccessState(container) {
     if (!container) return;
     container.classList.add("hidden");
@@ -728,6 +817,8 @@
     renderRoleNotice,
     renderSupervisorQuickPanel,
     renderPendingUsersTable,
+    renderKvEditor,
+    renderUserProgressBox,
     renderModalAccessState,
     renderEmendaLockInfo,
     renderLivePresence

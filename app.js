@@ -1270,6 +1270,21 @@ function onModalFieldInput(e) {
 
 // Renderiza editor de campos da emenda no modal.
 function renderKvEditor(rec) {
+  const renderKvEditorUtil = getUiRenderUtil("renderKvEditor");
+  if (renderKvEditorUtil) {
+    renderKvEditorUtil(kv, rec, {
+      fieldOrder: MODAL_FIELD_ORDER,
+      getModalFieldType: getModalFieldType,
+      formatDraftInputValue: formatDraftInputValue,
+      canMutateRecords: canMutateRecords(),
+      onModalFieldInput: onModalFieldInput,
+      modalDraftState: modalDraftState
+    });
+    applyModalAccessProfile();
+    updateModalDraftUi();
+    return;
+  }
+
   clearNodeChildren(kv);
 
   MODAL_FIELD_ORDER.forEach(function (field) {
@@ -1555,6 +1570,12 @@ function openModal(id, keepReasons) {
 }
 
 function renderUserProgressBox(progressContainer, progress, delays, options) {
+  const renderUserProgressBoxUtil = getUiRenderUtil("renderUserProgressBox");
+  if (renderUserProgressBoxUtil) {
+    renderUserProgressBoxUtil(progressContainer, progress, delays, options);
+    return;
+  }
+
   if (!progressContainer) return;
   const opts = options || {};
   const progressRenderer = getOptionFunction(opts, "renderProgressBar");
