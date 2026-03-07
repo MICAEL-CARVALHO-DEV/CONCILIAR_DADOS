@@ -480,9 +480,30 @@ function setSelectOptions(select, options, preferredValue) {
 // Render da grade principal de emendas (dados + progresso + acoes).
 function render() {
   const rows = getFiltered();
-  tbody.innerHTML = "";
+  while (tbody && tbody.firstChild) {
+    tbody.removeChild(tbody.firstChild);
+  }
 
-  rows.forEach(function (r) {
+  const useRenderer = uiRender && typeof uiRender.renderMainRow === "function";
+  const renderMainRows = function (r) {
+    if (useRenderer) {
+      uiRender.renderMainRow(tbody, r, {
+        fmtMoney: fmtMoney,
+        fmtDateTime: fmtDateTime,
+        getActiveUsersWithLastMark: getActiveUsersWithLastMark,
+        calcProgress: calcProgress,
+        renderProgressBar: renderProgressBar,
+        renderMemberChips: renderMemberChips,
+        getLastEventDays: function (row) {
+          return daysSince(lastEventAt(row));
+        },
+        onView: function (id) {
+          openModal(id);
+        }
+      });
+      return;
+    }
+
     const users = getActiveUsersWithLastMark(r);
     const progress = calcProgress(users);
     const staleDays = daysSince(lastEventAt(r));
@@ -500,13 +521,16 @@ function render() {
       + "<td class=\"muted\">" + fmtDateTime(r.updated_at) + "</td>"
       + "<td><button class=\"btn\" data-action=\"view\" data-id=\"" + escapeHtml(r.id) + "\">Ver</button></td>";
     tbody.appendChild(tr);
-  });
+  };
 
-  Array.prototype.forEach.call(tbody.querySelectorAll("button[data-action='view']"), function (btn) {
-    btn.addEventListener("click", function () {
-      openModal(btn.dataset.id);
+  rows.forEach(renderMainRows);
+  if (!(uiRender && typeof uiRender.renderMainRow === "function")) {
+    Array.prototype.forEach.call(tbody.querySelectorAll("button[data-action='view']"), function (btn) {
+      btn.addEventListener("click", function () {
+        openModal(btn.dataset.id);
+      });
     });
-  });
+  }
 
   renderImportDashboard();
   renderSupervisorQuickPanel(rows);

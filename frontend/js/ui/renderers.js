@@ -109,6 +109,91 @@
     });
   }
 
+  function renderMainRow(container, rec, options) {
+    if (!container) return;
+    var opts = options || {};
+    var fmtMoney = typeof opts.fmtMoney === "function" ? opts.fmtMoney : function (value) { return String(value == null ? "" : value); };
+    var fmtDateTime = typeof opts.fmtDateTime === "function" ? opts.fmtDateTime : function (value) { return String(value || ""); };
+    var getActiveUsersWithLastMark = typeof opts.getActiveUsersWithLastMark === "function" ? opts.getActiveUsersWithLastMark : null;
+    var calcProgress = typeof opts.calcProgress === "function" ? opts.calcProgress : null;
+    var renderProgressBar = typeof opts.renderProgressBar === "function" ? opts.renderProgressBar : null;
+    var renderMemberChips = typeof opts.renderMemberChips === "function" ? opts.renderMemberChips : null;
+    var onView = typeof opts.onView === "function" ? opts.onView : null;
+    var getLastEventDays = typeof opts.getLastEventDays === "function" ? opts.getLastEventDays : function () { return Number.POSITIVE_INFINITY; };
+
+    var record = rec || {};
+    var users = [];
+    if (getActiveUsersWithLastMark) {
+      users = getActiveUsersWithLastMark(record) || [];
+    }
+    var progress = calcProgress ? calcProgress(users) : null;
+    var staleDays = getLastEventDays(record);
+    var staleDaysText = staleDays === Number.POSITIVE_INFINITY ? "-" : String(staleDays) + " dias";
+
+    var tr = document.createElement("tr");
+
+    var tdId = document.createElement("td");
+    var code = document.createElement("code");
+    code.textContent = String(record.id || "");
+    tdId.appendChild(code);
+    tr.appendChild(tdId);
+
+    var tdIdent = document.createElement("td");
+    tdIdent.textContent = String(record.identificacao || "");
+    tr.appendChild(tdIdent);
+
+    var tdMunicipio = document.createElement("td");
+    tdMunicipio.textContent = String(record.municipio || "");
+    tr.appendChild(tdMunicipio);
+
+    var tdDeputado = document.createElement("td");
+    tdDeputado.textContent = String(record.deputado || "");
+    tr.appendChild(tdDeputado);
+
+    var tdProgress = document.createElement("td");
+    if (renderProgressBar) {
+      tdProgress.innerHTML = String(renderProgressBar(progress));
+    } else {
+      tdProgress.textContent = "";
+    }
+    tr.appendChild(tdProgress);
+
+    var tdChips = document.createElement("td");
+    if (renderMemberChips) {
+      tdChips.innerHTML = String(renderMemberChips(users));
+    } else {
+      tdChips.textContent = "";
+    }
+    tr.appendChild(tdChips);
+
+    var tdStale = document.createElement("td");
+    tdStale.className = "muted small";
+    tdStale.textContent = staleDaysText;
+    tr.appendChild(tdStale);
+
+    var tdValor = document.createElement("td");
+    tdValor.textContent = "R$ " + fmtMoney(record.valor_atual);
+    tr.appendChild(tdValor);
+
+    var tdDate = document.createElement("td");
+    tdDate.className = "muted";
+    tdDate.textContent = fmtDateTime(record.updated_at);
+    tr.appendChild(tdDate);
+
+    var tdAction = document.createElement("td");
+    var btn = document.createElement("button");
+    btn.className = "btn";
+    btn.type = "button";
+    btn.textContent = "Ver";
+    btn.addEventListener("click", function () {
+      if (onView) onView(record.id);
+    });
+    tdAction.appendChild(btn);
+    tr.appendChild(tdAction);
+
+    container.appendChild(tr);
+  }
+
   function renderRawFields(container, rawFieldsObj) {
     if (!container) return;
     if (!rawFieldsObj) rawFieldsObj = {};
@@ -240,6 +325,7 @@
   SECFrontend.uiRender = {
     renderHistoryToContainer,
     renderRawFields,
-    renderMarksSummary
+    renderMarksSummary,
+    renderMainRow
   };
 })(typeof window !== "undefined" ? window : globalThis);
