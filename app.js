@@ -2484,16 +2484,8 @@ async function initializeAuthFlow() {
         localStorage.setItem(API_BASE_URL_KEY, "http://127.0.0.1:8000");
         // apiRequest pode limpar token em 401; restaura para a tentativa direta.
         writeStoredSessionToken(token);
-        const probe = await fetch("http://127.0.0.1:8000/auth/me", {
-          method: "GET",
-          headers: {
-            Authorization: "Bearer " + token,
-            "X-Session-Token": token
-          }
-        });
-        if (probe.ok) {
-          me = await probe.json();
-        }
+        const probe = await apiRequest("GET", "/auth/me", undefined, "INIT", { handleAuthFailure: false });
+        me = probe;
       } catch (_fallbackErr) {
         // segue fluxo padrao de expiracao abaixo
       }
