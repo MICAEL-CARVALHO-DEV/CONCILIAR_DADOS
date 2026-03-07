@@ -21,6 +21,7 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Extrair utilitário de render da Planilha1 para `frontend/js/ui/importReport.js` com fallback local.
 - [DONE] Extrair badge de resumo de exportação (`buildExportSummaryBadgeHtml`) para `frontend/js/ui/importReport.js`.
 - [DONE] Delegar `renderImportDashboard` em `frontend/js/ui/importReport.js` com fallback para implementação local.
+- [DONE] Extrair `syncCanonicalToAllFields`/`upsertRawField` para `frontend/js/utils/importNormalization.js` com fallback local no `app.js`.
 
-Active: ID-FE-19
+Active: ID-FE-20
 Risks: validar comportamento em dispositivos com storage bloqueado.

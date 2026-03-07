@@ -63,6 +63,7 @@ const domUtils = SEC_FRONTEND.domUtils || null;
 const escapeUtils = SEC_FRONTEND.escapeUtils || null;
 const formatUtils = SEC_FRONTEND.formatUtils || null;
 const normalizeUtils = SEC_FRONTEND.normalizeUtils || null;
+const importNormalizationUtils = SEC_FRONTEND.importNormalizationUtils || null;
 const idUtils = SEC_FRONTEND.idUtils || null;
 const statusUtils = SEC_FRONTEND.statusUtils || null;
 const progressUtils = SEC_FRONTEND.progressUtils || null;
@@ -4271,6 +4272,15 @@ function mergeRawFields(target, incomingRaw) {
 }
 
 function syncCanonicalToAllFields(record) {
+  if (typeof importNormalizationUtils !== "undefined" && importNormalizationUtils && typeof importNormalizationUtils.syncCanonicalToAllFields === "function") {
+    return importNormalizationUtils.syncCanonicalToAllFields(
+      record,
+      IMPORT_ALIASES,
+      RAW_PREFERRED_HEADERS,
+      normalizeHeader
+    );
+  }
+
   if (!record.all_fields || typeof record.all_fields !== "object") record.all_fields = {};
 
   upsertRawField(record.all_fields, "id", record.id);
@@ -4292,6 +4302,17 @@ function syncCanonicalToAllFields(record) {
 }
 
 function upsertRawField(rawObj, canonicalKey, value) {
+  if (typeof importNormalizationUtils !== "undefined" && importNormalizationUtils && typeof importNormalizationUtils.upsertRawField === "function") {
+    return importNormalizationUtils.upsertRawField(
+      rawObj,
+      canonicalKey,
+      value,
+      IMPORT_ALIASES,
+      RAW_PREFERRED_HEADERS,
+      normalizeHeader
+    );
+  }
+
   const aliases = IMPORT_ALIASES[canonicalKey] || [];
   const preferred = RAW_PREFERRED_HEADERS[canonicalKey] || canonicalKey;
   const normalizedAliases = aliases.map(function (a) { return normalizeHeader(a); });
