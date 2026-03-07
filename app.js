@@ -67,6 +67,7 @@ const formatUtils = SEC_FRONTEND.formatUtils || null;
 const normalizeUtils = SEC_FRONTEND.normalizeUtils || null;
 const idUtils = SEC_FRONTEND.idUtils || null;
 const statusUtils = SEC_FRONTEND.statusUtils || null;
+const progressUtils = SEC_FRONTEND.progressUtils || null;
 const filterUtils = SEC_FRONTEND.filterUtils || null;
 const exportUtils = SEC_FRONTEND.exportUtils || null;
 const authStore = SEC_FRONTEND.authStore || null;
@@ -1425,6 +1426,100 @@ function getLastMarksByUser(rec) {
 }
 
 function getActiveUsersWithLastMark(rec) {
+  if (progressUtils && typeof progressUtils.getActiveUsersWithLastMark === "function") {
+    return progressUtils.getActiveUsersWithLastMark(rec, {
+      normalizeStatus: function (value) {
+        return normalizeStatus(value);
+      },
+      localeCompare: function (a, b, locale) {
+        return String(a || "").localeCompare(String(b || ""), locale);
+      }
+    });
+  }
+  return legacyGetActiveUsersWithLastMark(rec);
+}
+
+function calcProgress(users) {
+  if (progressUtils && typeof progressUtils.calcProgress === "function") {
+    return progressUtils.calcProgress(users);
+  }
+  return legacyCalcProgress(users);
+}
+
+function getAttentionIssues(users) {
+  if (progressUtils && typeof progressUtils.getAttentionIssues === "function") {
+    return progressUtils.getAttentionIssues(users);
+  }
+  return legacyGetAttentionIssues(users);
+}
+
+function getGlobalProgressState(users) {
+  if (progressUtils && typeof progressUtils.getGlobalProgressState === "function") {
+    return progressUtils.getGlobalProgressState(users);
+  }
+  return legacyGetGlobalProgressState(users);
+}
+
+function getInitials(name) {
+  if (progressUtils && typeof progressUtils.getInitials === "function") {
+    return progressUtils.getInitials(name);
+  }
+  return legacyGetInitials(name);
+}
+
+function statusClass(status) {
+  if (statusUtils && typeof statusUtils.statusClass === "function") {
+    return statusUtils.statusClass(status, normalizeLooseText);
+  }
+
+  const s = normalizeLooseText(status);
+  if (s.indexOf("concl") >= 0) return "st-ok";
+  if (s.indexOf("cancel") >= 0) return "st-bad";
+  if (s.indexOf("pend") >= 0 || s.indexOf("aguard") >= 0) return "st-warn";
+  if (s.indexOf("exec") >= 0 || s.indexOf("anal") >= 0 || s.indexOf("apro") >= 0 || s.indexOf("rece") >= 0) return "st-mid";
+  return "st-none";
+}
+
+function renderMemberChips(users) {
+  if (progressUtils && typeof progressUtils.renderMemberChips === "function") {
+    return progressUtils.renderMemberChips(users, {
+      escapeHtml: escapeHtml,
+      statusClass: statusClass,
+      daysSince: daysSince
+    });
+  }
+  return legacyRenderMemberChips(users);
+}
+
+function renderProgressBar(progress) {
+  if (progressUtils && typeof progressUtils.renderProgressBar === "function") {
+    return progressUtils.renderProgressBar(progress);
+  }
+  return legacyRenderProgressBar(progress);
+}
+
+function lastEventAt(rec) {
+  if (progressUtils && typeof progressUtils.lastEventAt === "function") {
+    return progressUtils.lastEventAt(rec);
+  }
+  return legacyLastEventAt(rec);
+}
+
+function daysSince(iso) {
+  if (progressUtils && typeof progressUtils.daysSince === "function") {
+    return progressUtils.daysSince(iso);
+  }
+  return legacyDaysSince(iso);
+}
+
+function whoIsDelaying(users) {
+  if (progressUtils && typeof progressUtils.whoIsDelaying === "function") {
+    return progressUtils.whoIsDelaying(users);
+  }
+  return legacyWhoIsDelaying(users);
+}
+
+function legacyGetActiveUsersWithLastMark(rec) {
   const map = new Map();
   const events = Array.isArray(rec && rec.eventos) ? rec.eventos : [];
 
@@ -1460,7 +1555,7 @@ function getActiveUsersWithLastMark(rec) {
   });
 }
 
-function calcProgress(users) {
+function legacyCalcProgress(users) {
   const total = Array.isArray(users) ? users.length : 0;
   const concl = (users || []).filter(function (u) { return u.lastStatus === "Concluido"; }).length;
   return {
@@ -1471,7 +1566,7 @@ function calcProgress(users) {
   };
 }
 
-function getAttentionIssues(users) {
+function legacyGetAttentionIssues(users) {
   const issues = [];
   const list = Array.isArray(users) ? users : [];
   if (!list.length) return issues;
@@ -1490,34 +1585,21 @@ function getAttentionIssues(users) {
   return issues;
 }
 
-function getGlobalProgressState(users) {
+function legacyGetGlobalProgressState(users) {
   const list = Array.isArray(users) ? users : [];
   if (!list.length) return { code: "no_marks", label: "Sem marcacoes" };
-  const progress = calcProgress(list);
-  const issues = getAttentionIssues(list);
+  const progress = legacyCalcProgress(list);
+  const issues = legacyGetAttentionIssues(list);
   if (issues.length) return { code: "attention", label: "Atencao" };
   if (progress.done) return { code: "done", label: "Concluido global" };
   return { code: "in_progress", label: "Em andamento" };
 }
 
-function getInitials(name) {
+function legacyGetInitials(name) {
   return String(name || "").trim().split(/\s+/).slice(0, 2).map(function (p) { return p.charAt(0); }).join("").toUpperCase();
 }
 
-function statusClass(status) {
-  if (statusUtils && typeof statusUtils.statusClass === "function") {
-    return statusUtils.statusClass(status, normalizeLooseText);
-  }
-
-  const s = normalizeLooseText(status);
-  if (s.indexOf("concl") >= 0) return "st-ok";
-  if (s.indexOf("cancel") >= 0) return "st-bad";
-  if (s.indexOf("pend") >= 0 || s.indexOf("aguard") >= 0) return "st-warn";
-  if (s.indexOf("exec") >= 0 || s.indexOf("anal") >= 0 || s.indexOf("apro") >= 0 || s.indexOf("rece") >= 0) return "st-mid";
-  return "st-none";
-}
-
-function renderMemberChips(users) {
+function legacyRenderMemberChips(users) {
   const list = Array.isArray(users) ? users : [];
   if (!list.length) return "<span class=\"muted small\">Sem marcacoes</span>";
 
@@ -1526,11 +1608,11 @@ function renderMemberChips(users) {
     const stale = daysSince(u.lastAt);
     const staleTag = stale === Infinity ? "" : "<span class=\"chip-age\">" + String(stale) + "d</span>";
     const title = escapeHtml(u.name + " / " + (u.role || "-") + " | " + (u.lastStatus || "Sem status") + " | " + (u.lastAt || "-"));
-    return "<span class=\"member-chip " + cls + "\" title=\"" + title + "\"><span class=\"mav\">" + escapeHtml(getInitials(u.name)) + "</span><span class=\"mtxt\">" + escapeHtml(u.lastStatus || "Sem status") + "</span>" + staleTag + "</span>";
+    return "<span class=\"member-chip " + cls + "\" title=\"" + title + "\"><span class=\"mav\">" + escapeHtml(legacyGetInitials(u.name)) + "</span><span class=\"mtxt\">" + escapeHtml(u.lastStatus || "Sem status") + "</span>" + staleTag + "</span>";
   }).join("");
 }
 
-function renderProgressBar(progress) {
+function legacyRenderProgressBar(progress) {
   const safe = progress || { concl: 0, total: 0, percent: 0, done: false };
   const cls = safe.done ? "ok" : (safe.percent >= 50 ? "warn" : "bad");
   return ""
@@ -1540,7 +1622,7 @@ function renderProgressBar(progress) {
     + "</div>";
 }
 
-function lastEventAt(rec) {
+function legacyLastEventAt(rec) {
   const events = Array.isArray(rec && rec.eventos) ? rec.eventos : [];
   let maxTs = 0;
   let out = null;
@@ -1554,14 +1636,14 @@ function lastEventAt(rec) {
   return out;
 }
 
-function daysSince(iso) {
+function legacyDaysSince(iso) {
   if (!iso) return Infinity;
   const ts = new Date(iso).getTime();
   if (!Number.isFinite(ts) || ts <= 0) return Infinity;
   return Math.floor((Date.now() - ts) / (1000 * 60 * 60 * 24));
 }
 
-function whoIsDelaying(users) {
+function legacyWhoIsDelaying(users) {
   return (users || []).filter(function (u) {
     return u.lastStatus !== "Concluido";
   });
