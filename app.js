@@ -421,6 +421,36 @@ function getImportNormalizationUtil(methodName) {
   return typeof method === "function" ? method : null;
 }
 
+function getStorageUtil(methodName) {
+  if (!storageUtils) return null;
+  const method = storageUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getAuthStoreUtil(methodName) {
+  if (!authStore) return null;
+  const method = authStore[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getAuthGuardUtil(methodName) {
+  if (!authGuard) return null;
+  const method = authGuard[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getApiClientUtil(methodName) {
+  if (!apiClient) return null;
+  const method = apiClient[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getConcurrencyUtil(methodName) {
+  if (!concurrencyService) return null;
+  const method = concurrencyService[methodName];
+  return typeof method === "function" ? method : null;
+}
+
 // Inicializa os filtros da UI principal e prepara os selects dependentes.
 function initSelects() {
   const initSelectsUtil = getFilterUtil("initSelects");
@@ -2642,8 +2672,9 @@ function onAuthSuccess(resp) {
 
 function readStorageValue(store, key) {
   if (store == null) return "";
-  if (storageUtils && typeof storageUtils.readStorageValue === "function") {
-    return storageUtils.readStorageValue(store, key);
+  const readStorageValueUtil = getStorageUtil("readStorageValue");
+  if (readStorageValueUtil) {
+    return readStorageValueUtil(store, key);
   }
   try {
     return String(store.getItem(key) || "").trim();
@@ -2655,8 +2686,9 @@ function readStorageValue(store, key) {
 function writeStorageValue(store, key, value) {
   if (store == null) return;
   const raw = String(value == null ? "" : value);
-  if (storageUtils && typeof storageUtils.writeStorageValue === "function") {
-    storageUtils.writeStorageValue(store, key, raw);
+  const writeStorageValueUtil = getStorageUtil("writeStorageValue");
+  if (writeStorageValueUtil) {
+    writeStorageValueUtil(store, key, raw);
     return;
   }
   try {
@@ -2666,8 +2698,9 @@ function writeStorageValue(store, key, value) {
 
 function removeStorageValue(store, key) {
   if (store == null) return;
-  if (storageUtils && typeof storageUtils.removeStorageValue === "function") {
-    storageUtils.removeStorageValue(store, key);
+  const removeStorageValueUtil = getStorageUtil("removeStorageValue");
+  if (removeStorageValueUtil) {
+    removeStorageValueUtil(store, key);
     return;
   }
   try {
@@ -2679,8 +2712,9 @@ function removeStorageValue(store, key) {
 function setAuthenticatedUser(usuario) {
   CURRENT_USER = String(usuario.nome || CURRENT_USER).trim() || CURRENT_USER;
   CURRENT_ROLE = normalizeUserRole(usuario.perfil || CURRENT_ROLE);
-  if (authStore && typeof authStore.writeAuthenticatedProfile === "function") {
-    authStore.writeAuthenticatedProfile({
+  const writeAuthenticatedProfileUtil = getAuthStoreUtil("writeAuthenticatedProfile");
+  if (writeAuthenticatedProfileUtil) {
+    writeAuthenticatedProfileUtil({
       name: CURRENT_USER,
       role: CURRENT_ROLE
     }, AUTH_KEYS);
@@ -2689,8 +2723,9 @@ function setAuthenticatedUser(usuario) {
 
 // Redireciona para login/cadastro preservando pagina de retorno.
 function redirectToAuth(page, query) {
-  if (authStore && typeof authStore.redirectToAuth === "function") {
-    authStore.redirectToAuth(page || AUTH_LOGIN_PAGE, query, "index.html");
+  const redirectToAuthUtil = getAuthStoreUtil("redirectToAuth");
+  if (redirectToAuthUtil) {
+    redirectToAuthUtil(page || AUTH_LOGIN_PAGE, query, "index.html");
     return;
   }
   const target = page || AUTH_LOGIN_PAGE;
@@ -2712,8 +2747,9 @@ async function logoutCurrentUser() {
       // ignora erro de logout remoto
     }
   }
-  if (authStore && typeof authStore.clearSessionAndProfile === "function") {
-    authStore.clearSessionAndProfile(AUTH_KEYS);
+  const clearSessionAndProfileUtil = getAuthStoreUtil("clearSessionAndProfile");
+  if (clearSessionAndProfileUtil) {
+    clearSessionAndProfileUtil(AUTH_KEYS);
   } else {
     clearStoredSessionToken();
   }
@@ -2721,8 +2757,9 @@ async function logoutCurrentUser() {
 }
 
 function isLocalFrontendContext() {
-  if (authGuard && typeof authGuard.isLocalFrontendContext === "function") {
-    return authGuard.isLocalFrontendContext();
+  const isLocalFrontendContextUtil = getAuthGuardUtil("isLocalFrontendContext");
+  if (isLocalFrontendContextUtil) {
+    return isLocalFrontendContextUtil();
   }
   const host = (typeof window !== "undefined" && window.location && window.location.hostname)
     ? String(window.location.hostname)
@@ -2731,14 +2768,16 @@ function isLocalFrontendContext() {
 }
 
 function readStoredSessionToken() {
-  if (authStore && typeof authStore.readStoredSessionToken === "function") {
-    return authStore.readStoredSessionToken(AUTH_KEYS);
+  const readStoredSessionTokenUtil = getAuthStoreUtil("readStoredSessionToken");
+  if (readStoredSessionTokenUtil) {
+    return readStoredSessionTokenUtil(AUTH_KEYS);
   }
   var cfg = (AUTH_KEYS && typeof AUTH_KEYS === "object") ? AUTH_KEYS : {};
   var tokenKey = cfg.sessionToken || "SEC_SESSION_TOKEN";
   var backupTokenKey = cfg.sessionTokenBackup || "SEC_SESSION_TOKEN_BKP";
-  if (storageUtils && typeof storageUtils.readSessionToken === "function") {
-    return storageUtils.readSessionToken(tokenKey, backupTokenKey);
+  const readSessionTokenUtil = getStorageUtil("readSessionToken");
+  if (readSessionTokenUtil) {
+    return readSessionTokenUtil(tokenKey, backupTokenKey);
   }
   try {
     if (typeof sessionStorage !== "undefined") {
@@ -2764,15 +2803,17 @@ function readStoredSessionToken() {
 }
 
 function writeStoredSessionToken(token) {
-  if (authStore && typeof authStore.writeStoredSessionToken === "function") {
-    authStore.writeStoredSessionToken(token, AUTH_KEYS);
+  const writeStoredSessionTokenUtil = getAuthStoreUtil("writeStoredSessionToken");
+  if (writeStoredSessionTokenUtil) {
+    writeStoredSessionTokenUtil(token, AUTH_KEYS);
     return;
   }
   var cfg = (AUTH_KEYS && typeof AUTH_KEYS === "object") ? AUTH_KEYS : {};
   var tokenKey = cfg.sessionToken || "SEC_SESSION_TOKEN";
   var backupTokenKey = cfg.sessionTokenBackup || "SEC_SESSION_TOKEN_BKP";
-  if (storageUtils && typeof storageUtils.writeSessionToken === "function") {
-    storageUtils.writeSessionToken(token, tokenKey, backupTokenKey);
+  const writeSessionTokenUtil = getStorageUtil("writeSessionToken");
+  if (writeSessionTokenUtil) {
+    writeSessionTokenUtil(token, tokenKey, backupTokenKey);
     return;
   }
   var raw = String(token == null ? "" : token).trim();
@@ -2793,15 +2834,17 @@ function writeStoredSessionToken(token) {
 }
 
 function clearStoredSessionToken() {
-  if (authStore && typeof authStore.clearStoredSessionToken === "function") {
-    authStore.clearStoredSessionToken(AUTH_KEYS);
+  const clearStoredSessionTokenUtil = getAuthStoreUtil("clearStoredSessionToken");
+  if (clearStoredSessionTokenUtil) {
+    clearStoredSessionTokenUtil(AUTH_KEYS);
     return;
   }
   var cfg = (AUTH_KEYS && typeof AUTH_KEYS === "object") ? AUTH_KEYS : {};
   var tokenKey = cfg.sessionToken || "SEC_SESSION_TOKEN";
   var backupTokenKey = cfg.sessionTokenBackup || "SEC_SESSION_TOKEN_BKP";
-  if (storageUtils && typeof storageUtils.clearSessionToken === "function") {
-    storageUtils.clearSessionToken(tokenKey, backupTokenKey);
+  const clearSessionTokenUtil = getStorageUtil("clearSessionToken");
+  if (clearSessionTokenUtil) {
+    clearSessionTokenUtil(tokenKey, backupTokenKey);
     return;
   }
   try {
@@ -2874,11 +2917,13 @@ async function initializeAuthFlow() {
 
 // Carrega configuracao de usuario local (fallback quando API esta desativada).
 function loadUserConfig(forcePrompt) {
-  const savedAuthUser = authStore && typeof authStore.readAuthenticatedProfile === "function"
-    ? authStore.readAuthenticatedProfile(AUTH_KEYS)
+  const readAuthenticatedProfileUtil = getAuthStoreUtil("readAuthenticatedProfile");
+  const savedAuthUser = readAuthenticatedProfileUtil
+    ? readAuthenticatedProfileUtil(AUTH_KEYS)
     : null;
-  const legacyAuthUser = authStore && typeof authStore.readLegacyAuthenticatedProfile === "function"
-    ? authStore.readLegacyAuthenticatedProfile(AUTH_KEYS)
+  const readLegacyAuthenticatedProfileUtil = getAuthStoreUtil("readLegacyAuthenticatedProfile");
+  const legacyAuthUser = readLegacyAuthenticatedProfileUtil
+    ? readLegacyAuthenticatedProfileUtil(AUTH_KEYS)
     : null;
   const savedUser = (savedAuthUser && savedAuthUser.name) || (legacyAuthUser && legacyAuthUser.name);
   const savedRole = savedAuthUser && savedAuthUser.role;
@@ -2894,8 +2939,9 @@ function loadUserConfig(forcePrompt) {
 
     CURRENT_USER = String(nameInput).trim() || CURRENT_USER;
     CURRENT_ROLE = normalizeUserRole(roleInput);
-    if (authStore && typeof authStore.writeAuthenticatedProfile === "function") {
-      authStore.writeAuthenticatedProfile({
+    const writeAuthenticatedProfileUtil = getAuthStoreUtil("writeAuthenticatedProfile");
+    if (writeAuthenticatedProfileUtil) {
+      writeAuthenticatedProfileUtil({
         name: CURRENT_USER,
         role: CURRENT_ROLE
       }, AUTH_KEYS);
@@ -2912,8 +2958,9 @@ function canMutateRecords() {
 }
 
 function clearEmendaLockTimer() {
-  if (concurrencyService && typeof concurrencyService.clearEmendaLockTimer === "function") {
-    concurrencyService.clearEmendaLockTimer();
+  const clearEmendaLockTimerUtil = getConcurrencyUtil("clearEmendaLockTimer");
+  if (clearEmendaLockTimerUtil) {
+    clearEmendaLockTimerUtil();
     return;
   }
   if (!emendaLockTimer) return;
@@ -2922,8 +2969,9 @@ function clearEmendaLockTimer() {
 }
 
 function setEmendaLockState(payload) {
-  if (concurrencyService && typeof concurrencyService.setEmendaLockState === "function") {
-    concurrencyService.setEmendaLockState(payload);
+  const setEmendaLockStateUtil = getConcurrencyUtil("setEmendaLockState");
+  if (setEmendaLockStateUtil) {
+    setEmendaLockStateUtil(payload);
     return;
   }
   emendaLockState = payload && typeof payload === "object" ? payload : null;
@@ -2939,23 +2987,26 @@ function setEmendaLockState(payload) {
 }
 
 function isEmendaLockReadOnly() {
-  if (concurrencyService && typeof concurrencyService.isEmendaLockReadOnly === "function") {
-    return !!concurrencyService.isEmendaLockReadOnly();
+  const isEmendaLockReadOnlyUtil = getConcurrencyUtil("isEmendaLockReadOnly");
+  if (isEmendaLockReadOnlyUtil) {
+    return !!isEmendaLockReadOnlyUtil();
   }
   return !!emendaLockReadOnly;
 }
 
 function getEmendaLockState() {
-  if (concurrencyService && typeof concurrencyService.getEmendaLockState === "function") {
-    const next = concurrencyService.getEmendaLockState();
+  const getEmendaLockStateUtil = getConcurrencyUtil("getEmendaLockState");
+  if (getEmendaLockStateUtil) {
+    const next = getEmendaLockStateUtil();
     return next && typeof next === "object" ? next : null;
   }
   return emendaLockState;
 }
 
 function setEmendaLockReadOnly(value) {
-  if (concurrencyService && typeof concurrencyService.setEmendaLockReadOnly === "function") {
-    concurrencyService.setEmendaLockReadOnly(!!value);
+  const setEmendaLockReadOnlyUtil = getConcurrencyUtil("setEmendaLockReadOnly");
+  if (setEmendaLockReadOnlyUtil) {
+    setEmendaLockReadOnlyUtil(!!value);
     return;
   }
   emendaLockReadOnly = !!value;
@@ -3060,16 +3111,18 @@ function renderEmendaLockInfo(rec) {
 }
 
 async function fetchEmendaLockStatus(rec) {
-  if (concurrencyService && typeof concurrencyService.fetchEmendaLockStatus === "function") {
-    return await concurrencyService.fetchEmendaLockStatus(rec);
+  const fetchEmendaLockStatusUtil = getConcurrencyUtil("fetchEmendaLockStatus");
+  if (fetchEmendaLockStatusUtil) {
+    return await fetchEmendaLockStatusUtil(rec);
   }
   const backendId = await ensureBackendEmenda(rec, { handleAuthFailure: false });
   return await apiRequest("GET", "/emendas/" + String(backendId) + "/lock", undefined, "UI", { handleAuthFailure: false });
 }
 
 async function acquireEmendaLock(rec, forceAcquire) {
-  if (concurrencyService && typeof concurrencyService.acquireEmendaLock === "function") {
-    return await concurrencyService.acquireEmendaLock(rec, forceAcquire);
+  const acquireEmendaLockUtil = getConcurrencyUtil("acquireEmendaLock");
+  if (acquireEmendaLockUtil) {
+    return await acquireEmendaLockUtil(rec, forceAcquire);
   }
   const backendId = await ensureBackendEmenda(rec, { handleAuthFailure: false });
   return await apiRequest("POST", "/emendas/" + String(backendId) + "/lock/acquire", {
@@ -3078,16 +3131,18 @@ async function acquireEmendaLock(rec, forceAcquire) {
 }
 
 async function renewEmendaLock(rec) {
-  if (concurrencyService && typeof concurrencyService.renewEmendaLock === "function") {
-    return await concurrencyService.renewEmendaLock(rec);
+  const renewEmendaLockUtil = getConcurrencyUtil("renewEmendaLock");
+  if (renewEmendaLockUtil) {
+    return await renewEmendaLockUtil(rec);
   }
   const backendId = await ensureBackendEmenda(rec, { handleAuthFailure: false });
   return await apiRequest("POST", "/emendas/" + String(backendId) + "/lock/renew", {}, "UI", { handleAuthFailure: false });
 }
 
 async function releaseEmendaLock(rec) {
-  if (concurrencyService && typeof concurrencyService.releaseEmendaLock === "function") {
-    return await concurrencyService.releaseEmendaLock(rec);
+  const releaseEmendaLockUtil = getConcurrencyUtil("releaseEmendaLock");
+  if (releaseEmendaLockUtil) {
+    return await releaseEmendaLockUtil(rec);
   }
   if (!rec || !isApiEnabled()) return;
   const backendId = getBackendIdForRecord(rec) || await ensureBackendEmenda(rec, { handleAuthFailure: false });
@@ -3096,8 +3151,9 @@ async function releaseEmendaLock(rec) {
 }
 
 async function tickEmendaLock() {
-  if (concurrencyService && typeof concurrencyService.tickEmendaLock === "function") {
-    await concurrencyService.tickEmendaLock();
+  const tickEmendaLockUtil = getConcurrencyUtil("tickEmendaLock");
+  if (tickEmendaLockUtil) {
+    await tickEmendaLockUtil();
     return;
   }
   if (!modal || !modal.classList.contains("show")) return;
@@ -3129,8 +3185,9 @@ async function tickEmendaLock() {
 }
 
 function startEmendaLockPolling() {
-  if (concurrencyService && typeof concurrencyService.startEmendaLockPolling === "function") {
-    concurrencyService.startEmendaLockPolling();
+  const startEmendaLockPollingUtil = getConcurrencyUtil("startEmendaLockPolling");
+  if (startEmendaLockPollingUtil) {
+    startEmendaLockPollingUtil();
     return;
   }
   clearEmendaLockTimer();
@@ -3141,8 +3198,9 @@ function startEmendaLockPolling() {
 }
 
 async function syncModalEmendaLock(rec) {
-  if (concurrencyService && typeof concurrencyService.syncModalEmendaLock === "function") {
-    await concurrencyService.syncModalEmendaLock(rec);
+  const syncModalEmendaLockUtil = getConcurrencyUtil("syncModalEmendaLock");
+  if (syncModalEmendaLockUtil) {
+    await syncModalEmendaLockUtil(rec);
     return;
   }
   clearEmendaLockTimer();
@@ -3590,8 +3648,9 @@ async function ensureBackendEmenda(rec, options) {
 
 
 function getApiWebSocketUrl() {
-  if (concurrencyService && typeof concurrencyService.getApiWebSocketUrl === "function") {
-    return concurrencyService.getApiWebSocketUrl();
+  const getApiWebSocketUrlUtil = getConcurrencyUtil("getApiWebSocketUrl");
+  if (getApiWebSocketUrlUtil) {
+    return getApiWebSocketUrlUtil();
   }
   const base = getApiBaseUrl();
   if (!base) return "";
@@ -3601,8 +3660,9 @@ function getApiWebSocketUrl() {
 }
 
 function clearApiSocketReconnectTimer() {
-  if (concurrencyService && typeof concurrencyService.clearApiSocketReconnectTimer === "function") {
-    concurrencyService.clearApiSocketReconnectTimer();
+  const clearApiSocketReconnectTimerUtil = getConcurrencyUtil("clearApiSocketReconnectTimer");
+  if (clearApiSocketReconnectTimerUtil) {
+    clearApiSocketReconnectTimerUtil();
     return;
   }
   if (!apiSocketReconnectTimer) return;
@@ -3611,8 +3671,9 @@ function clearApiSocketReconnectTimer() {
 }
 
 function closeApiSocket() {
-  if (concurrencyService && typeof concurrencyService.closeApiSocket === "function") {
-    concurrencyService.closeApiSocket();
+  const closeApiSocketUtil = getConcurrencyUtil("closeApiSocket");
+  if (closeApiSocketUtil) {
+    closeApiSocketUtil();
     return;
   }
   clearApiSocketReconnectTimer();
@@ -3626,8 +3687,9 @@ function closeApiSocket() {
 }
 
 function scheduleApiSocketReconnect() {
-  if (concurrencyService && typeof concurrencyService.scheduleApiSocketReconnect === "function") {
-    concurrencyService.scheduleApiSocketReconnect();
+  const scheduleApiSocketReconnectUtil = getConcurrencyUtil("scheduleApiSocketReconnect");
+  if (scheduleApiSocketReconnectUtil) {
+    scheduleApiSocketReconnectUtil();
     return;
   }
   clearApiSocketReconnectTimer();
@@ -3642,8 +3704,9 @@ function scheduleApiSocketReconnect() {
 }
 
 function queueApiRefreshFromSocket() {
-  if (concurrencyService && typeof concurrencyService.queueApiRefreshFromSocket === "function") {
-    concurrencyService.queueApiRefreshFromSocket();
+  const queueApiRefreshFromSocketUtil = getConcurrencyUtil("queueApiRefreshFromSocket");
+  if (queueApiRefreshFromSocketUtil) {
+    queueApiRefreshFromSocketUtil();
     return;
   }
   if (apiRefreshRunning) return;
@@ -3663,8 +3726,9 @@ function queueApiRefreshFromSocket() {
 }
 
 function sendSocketJson(payload) {
-  if (concurrencyService && typeof concurrencyService.sendSocketJson === "function") {
-    concurrencyService.sendSocketJson(payload);
+  const sendSocketJsonUtil = getConcurrencyUtil("sendSocketJson");
+  if (sendSocketJsonUtil) {
+    sendSocketJsonUtil(payload);
     return;
   }
   if (!apiSocket || apiSocket.readyState !== 1) return;
@@ -3683,8 +3747,9 @@ function getBackendIdForRecord(rec) {
 }
 
 function announcePresenceForRecord(rec, action) {
-  if (concurrencyService && typeof concurrencyService.announcePresenceForRecord === "function") {
-    concurrencyService.announcePresenceForRecord(rec, action);
+  const announcePresenceForRecordUtil = getConcurrencyUtil("announcePresenceForRecord");
+  if (announcePresenceForRecordUtil) {
+    announcePresenceForRecordUtil(rec, action);
     return;
   }
   if (!isApiEnabled()) return;
@@ -3705,8 +3770,9 @@ function announcePresenceForRecord(rec, action) {
 }
 
 function getPresenceUsersForRecord(rec) {
-  if (concurrencyService && typeof concurrencyService.getPresenceUsersForRecord === "function") {
-    return concurrencyService.getPresenceUsersForRecord(rec) || [];
+  const getPresenceUsersForRecordUtil = getConcurrencyUtil("getPresenceUsersForRecord");
+  if (getPresenceUsersForRecordUtil) {
+    return getPresenceUsersForRecordUtil(rec) || [];
   }
   const backendId = getBackendIdForRecord(rec);
   if (!backendId) return [];
@@ -3729,8 +3795,9 @@ function renderLivePresence(rec) {
 }
 
 function handlePresencePayload(data) {
-  if (concurrencyService && typeof concurrencyService.handlePresencePayload === "function") {
-    concurrencyService.handlePresencePayload(data);
+  const handlePresencePayloadUtil = getConcurrencyUtil("handlePresencePayload");
+  if (handlePresencePayloadUtil) {
+    handlePresencePayloadUtil(data);
     const rec = getSelected();
     if (rec) renderLivePresence(rec);
     return;
@@ -3757,8 +3824,9 @@ function handlePresencePayload(data) {
 
 // Abre WebSocket da API para atualizar tela em tempo real.
 function connectApiSocket() {
-  if (concurrencyService && typeof concurrencyService.connectApiSocket === "function") {
-    concurrencyService.connectApiSocket();
+  const connectApiSocketUtil = getConcurrencyUtil("connectApiSocket");
+  if (connectApiSocketUtil) {
+    connectApiSocketUtil();
     return;
   }
   closeApiSocket();
@@ -3818,16 +3886,18 @@ function connectApiSocket() {
 }
 // Decide se a UI deve operar em modo API (nuvem) ou local.
 function isApiEnabled() {
-  if (apiClient && typeof apiClient.isApiEnabled === "function") {
-    return apiClient.isApiEnabled();
+  const isApiEnabledUtil = getApiClientUtil("isApiEnabled");
+  if (isApiEnabledUtil) {
+    return isApiEnabledUtil();
   }
   return true;
 }
 
 // Resolve URL base da API (compatibilidade local, quando o cliente modular não estiver disponível).
 function getApiBaseUrl() {
-  if (apiClient && typeof apiClient.getApiBaseUrl === "function") {
-    return apiClient.getApiBaseUrl();
+  const getApiBaseUrlUtil = getApiClientUtil("getApiBaseUrl");
+  if (getApiBaseUrlUtil) {
+    return getApiBaseUrlUtil();
   }
   const host = (typeof window !== "undefined" && window.location && window.location.hostname) ? String(window.location.hostname) : "";
   const isHostedUi = !!host && host !== "localhost" && host !== "127.0.0.1";
@@ -3844,24 +3914,27 @@ function getApiBaseUrl() {
 
 // Wrapper autenticado para chamadas privadas da API.
 async function apiRequest(method, path, body, eventOrigin, options) {
-  if (apiClient && typeof apiClient.apiRequest === "function") {
-    return await apiClient.apiRequest(method, path, body, eventOrigin, options);
+  const apiRequestUtil = getApiClientUtil("apiRequest");
+  if (apiRequestUtil) {
+    return await apiRequestUtil(method, path, body, eventOrigin, options);
   }
   throw new Error("Cliente de API indisponivel. Recarregue a pagina.");
 }
 
 // Wrapper publico para login/cadastro sem token.
 async function apiRequestPublic(method, path, body) {
-  if (apiClient && typeof apiClient.apiRequestPublic === "function") {
-    return await apiClient.apiRequestPublic(method, path, body);
+  const apiRequestPublicUtil = getApiClientUtil("apiRequestPublic");
+  if (apiRequestPublicUtil) {
+    return await apiRequestPublicUtil(method, path, body);
   }
   throw new Error("Cliente de API indisponivel. Recarregue a pagina.");
 }
 
 // Monta headers padrao de auditoria/autenticacao para chamadas privadas.
 function buildApiHeaders(eventOrigin) {
-  if (apiClient && typeof apiClient.buildApiHeaders === "function") {
-    return apiClient.buildApiHeaders(eventOrigin);
+  const buildApiHeadersUtil = getApiClientUtil("buildApiHeaders");
+  if (buildApiHeadersUtil) {
+    return buildApiHeadersUtil(eventOrigin);
   }
   const headers = {
     "X-User-Name": CURRENT_USER,
@@ -3878,8 +3951,9 @@ function buildApiHeaders(eventOrigin) {
     headers["X-Session-Token"] = token;
   }
 
-  const key = storageUtils && typeof storageUtils.readStorageValue === "function"
-    ? storageUtils.readStorageValue(sessionStorage, API_SHARED_KEY_SESSION_KEY)
+  const readStorageValueUtil = getStorageUtil("readStorageValue");
+  const key = readStorageValueUtil
+    ? readStorageValueUtil(sessionStorage, API_SHARED_KEY_SESSION_KEY)
     : readStorageValue(sessionStorage, API_SHARED_KEY_SESSION_KEY);
   if (key) headers["X-API-Key"] = key;
 
@@ -3887,8 +3961,9 @@ function buildApiHeaders(eventOrigin) {
 }
 
 function getStorageMode() {
-  if (storageUtils && typeof storageUtils.getStorageMode === "function") {
-    const mode = String(storageUtils.getStorageMode(STORAGE_MODE_KEY) || "").toLowerCase();
+  const getStorageModeUtil = getStorageUtil("getStorageMode");
+  if (getStorageModeUtil) {
+    const mode = String(getStorageModeUtil(STORAGE_MODE_KEY) || "").toLowerCase();
     if (mode === STORAGE_MODE_LOCAL || mode === STORAGE_MODE_SESSION) return mode;
   }
 
@@ -3898,15 +3973,17 @@ function getStorageMode() {
 }
 
 function getPrimaryStorage() {
-  if (storageUtils && typeof storageUtils.getPrimaryStorage === "function") {
-    return storageUtils.getPrimaryStorage(STORAGE_MODE_KEY);
+  const getPrimaryStorageUtil = getStorageUtil("getPrimaryStorage");
+  if (getPrimaryStorageUtil) {
+    return getPrimaryStorageUtil(STORAGE_MODE_KEY);
   }
   return getStorageMode() === STORAGE_MODE_LOCAL ? localStorage : sessionStorage;
 }
 
 function getSecondaryStorage() {
-  if (storageUtils && typeof storageUtils.getSecondaryStorage === "function") {
-    return storageUtils.getSecondaryStorage(STORAGE_MODE_KEY);
+  const getSecondaryStorageUtil = getStorageUtil("getSecondaryStorage");
+  if (getSecondaryStorageUtil) {
+    return getSecondaryStorageUtil(STORAGE_MODE_KEY);
   }
   return getStorageMode() === STORAGE_MODE_LOCAL ? sessionStorage : localStorage;
 }
@@ -5923,8 +6000,9 @@ function deepClone(obj) {
 }
 
 function configureFrontendModules() {
-  if (!apiClient || typeof apiClient.configure !== "function") return;
-  apiClient.configure({
+  const configureApiClientUtil = getApiClientUtil("configure");
+  if (!configureApiClientUtil) return;
+  configureApiClientUtil({
     runtimeConfig: RUNTIME_CONFIG,
     keys: {
       apiBaseUrl: API_BASE_URL_KEY,
@@ -5943,8 +6021,9 @@ function configureFrontendModules() {
       return readStoredSessionToken();
     },
     getSharedApiKey: function () {
-      if (storageUtils && typeof storageUtils.readStorageValue === "function") {
-        return storageUtils.readStorageValue(sessionStorage, API_SHARED_KEY_SESSION_KEY);
+      const readStorageValueUtil = getStorageUtil("readStorageValue");
+      if (readStorageValueUtil) {
+        return readStorageValueUtil(sessionStorage, API_SHARED_KEY_SESSION_KEY);
       }
       return readStorageValue(sessionStorage, API_SHARED_KEY_SESSION_KEY);
     },
@@ -5966,8 +6045,9 @@ function configureFrontendModules() {
     }
   });
 
-  if (!concurrencyService || typeof concurrencyService.configure !== "function") return;
-  concurrencyService.configure({
+  const configureConcurrencyUtil = getConcurrencyUtil("configure");
+  if (!configureConcurrencyUtil) return;
+  configureConcurrencyUtil({
     isApiEnabled: function () {
       return isApiEnabled();
     },
