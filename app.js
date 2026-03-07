@@ -2699,6 +2699,40 @@ function onAuthSuccess(resp) {
   render();
 }
 
+function readStorageValue(store, key) {
+  if (store == null) return "";
+  if (storageUtils && typeof storageUtils.safeGetItem === "function") {
+    return storageUtils.safeGetItem(store, key).trim();
+  }
+  try {
+    return String(store.getItem(key) || "").trim();
+  } catch (_err) {
+    return "";
+  }
+}
+
+function writeStorageValue(store, key, value) {
+  if (store == null) return;
+  const raw = String(value == null ? "" : value);
+  if (storageUtils && typeof storageUtils.safeSetItem === "function") {
+    storageUtils.safeSetItem(store, key, raw);
+    return;
+  }
+  try {
+    store.setItem(key, raw);
+  } catch (_err) {}
+}
+
+function removeStorageValue(store, key) {
+  if (store == null) return;
+  if (storageUtils && typeof storageUtils.safeRemoveItem === "function") {
+    storageUtils.safeRemoveItem(store, key);
+    return;
+  }
+  try {
+    store.removeItem(key);
+  } catch (_err) {}
+}
 
 // Persiste usuario autenticado no contexto local da UI.
 function setAuthenticatedUser(usuario) {
@@ -2713,8 +2747,8 @@ function setAuthenticatedUser(usuario) {
       userRole: USER_ROLE_KEY
     });
   } else {
-    localStorage.setItem(USER_NAME_KEY, CURRENT_USER);
-    localStorage.setItem(USER_ROLE_KEY, CURRENT_ROLE);
+    writeStorageValue(localStorage, USER_NAME_KEY, CURRENT_USER);
+    writeStorageValue(localStorage, USER_ROLE_KEY, CURRENT_ROLE);
   }
 }
 
@@ -2750,8 +2784,8 @@ async function logoutCurrentUser() {
       userRole: USER_ROLE_KEY
     });
   } else {
-    localStorage.removeItem(USER_NAME_KEY);
-    localStorage.removeItem(USER_ROLE_KEY);
+    removeStorageValue(localStorage, USER_NAME_KEY);
+    removeStorageValue(localStorage, USER_ROLE_KEY);
   }
   closeApiSocket();
 }
@@ -2773,25 +2807,15 @@ function readStoredSessionToken() {
       sessionTokenBackup: SESSION_TOKEN_BACKUP_KEY
     });
   }
-  let sessionToken = "";
-  try {
-    sessionToken = String(sessionStorage.getItem(SESSION_TOKEN_KEY) || "").trim();
-  } catch (_err) {
-    sessionToken = "";
-  }
+  let sessionToken = readStorageValue(sessionStorage, SESSION_TOKEN_KEY);
   if (sessionToken) {
-    try { localStorage.setItem(SESSION_TOKEN_BACKUP_KEY, sessionToken); } catch (_err) {}
+    writeStorageValue(localStorage, SESSION_TOKEN_BACKUP_KEY, sessionToken);
     return sessionToken;
   }
 
-  let backupToken = "";
-  try {
-    backupToken = String(localStorage.getItem(SESSION_TOKEN_BACKUP_KEY) || "").trim();
-  } catch (_err) {
-    backupToken = "";
-  }
+  let backupToken = readStorageValue(localStorage, SESSION_TOKEN_BACKUP_KEY);
   if (backupToken) {
-    try { sessionStorage.setItem(SESSION_TOKEN_KEY, backupToken); } catch (_err) {}
+    writeStorageValue(sessionStorage, SESSION_TOKEN_KEY, backupToken);
     return backupToken;
   }
   return "";
@@ -2810,8 +2834,8 @@ function writeStoredSessionToken(token) {
     clearStoredSessionToken();
     return;
   }
-  try { sessionStorage.setItem(SESSION_TOKEN_KEY, raw); } catch (_err) {}
-  try { localStorage.setItem(SESSION_TOKEN_BACKUP_KEY, raw); } catch (_err) {}
+  writeStorageValue(sessionStorage, SESSION_TOKEN_KEY, raw);
+  writeStorageValue(localStorage, SESSION_TOKEN_BACKUP_KEY, raw);
 }
 
 function clearStoredSessionToken() {
@@ -2822,8 +2846,8 @@ function clearStoredSessionToken() {
     });
     return;
   }
-  try { sessionStorage.removeItem(SESSION_TOKEN_KEY); } catch (_err) {}
-  try { localStorage.removeItem(SESSION_TOKEN_BACKUP_KEY); } catch (_err) {}
+  removeStorageValue(sessionStorage, SESSION_TOKEN_KEY);
+  removeStorageValue(localStorage, SESSION_TOKEN_BACKUP_KEY);
 }
 
 // Ponto de entrada da autenticacao ao abrir index.html.
@@ -2851,7 +2875,7 @@ async function initializeAuthFlow() {
     // se houver base antiga/instavel, fixa em 127.0.0.1:8000 e revalida token 1 vez.
     if (isLocalFrontendContext()) {
       try {
-        localStorage.setItem(API_BASE_URL_KEY, "http://127.0.0.1:8000");
+        writeStorageValue(localStorage, API_BASE_URL_KEY, "http://127.0.0.1:8000");
         // apiRequest pode limpar token em 401; restaura para a tentativa direta.
         writeStoredSessionToken(token);
         const probe = await apiRequest("GET", "/auth/me", undefined, "INIT", { handleAuthFailure: false });
@@ -2884,15 +2908,15 @@ async function initializeAuthFlow() {
 
 // Carrega configuracao de usuario local (fallback quando API esta desativada).
 function loadUserConfig(forcePrompt) {
-  const legacyUser = localStorage.getItem("SEC_USER_ID");
+  const legacyUser = readStorageValue(localStorage, "SEC_USER_ID");
   const savedAuthUser = authStore && typeof authStore.readAuthenticatedUser === "function"
     ? authStore.readAuthenticatedUser({
       userName: USER_NAME_KEY,
       userRole: USER_ROLE_KEY
     })
     : null;
-  const savedUser = (savedAuthUser && savedAuthUser.name) || localStorage.getItem(USER_NAME_KEY) || legacyUser;
-  const savedRole = (savedAuthUser && savedAuthUser.role) || localStorage.getItem(USER_ROLE_KEY);
+  const savedUser = (savedAuthUser && savedAuthUser.name) || readStorageValue(localStorage, USER_NAME_KEY) || legacyUser;
+  const savedRole = (savedAuthUser && savedAuthUser.role) || readStorageValue(localStorage, USER_ROLE_KEY);
 
   if (savedUser) CURRENT_USER = String(savedUser).trim() || CURRENT_USER;
   if (savedRole) CURRENT_ROLE = normalizeUserRole(savedRole);
@@ -2914,8 +2938,8 @@ function loadUserConfig(forcePrompt) {
         userRole: USER_ROLE_KEY
       });
     } else {
-      localStorage.setItem(USER_NAME_KEY, CURRENT_USER);
-      localStorage.setItem(USER_ROLE_KEY, CURRENT_ROLE);
+      writeStorageValue(localStorage, USER_NAME_KEY, CURRENT_USER);
+      writeStorageValue(localStorage, USER_ROLE_KEY, CURRENT_ROLE);
     }
   }
 }
@@ -4016,13 +4040,13 @@ function isApiEnabled() {
   const host = (typeof window !== "undefined" && window.location && window.location.hostname) ? String(window.location.hostname) : "";
   const isHostedUi = !!host && host !== "localhost" && host !== "127.0.0.1";
   if (isHostedUi) {
-    const saved = localStorage.getItem(API_ENABLED_KEY);
+    const saved = readStorageValue(localStorage, API_ENABLED_KEY);
     if (saved != null && String(saved).trim().toLowerCase() === "false") {
-      localStorage.removeItem(API_ENABLED_KEY);
+      removeStorageValue(localStorage, API_ENABLED_KEY);
     }
     return true;
   }
-  const raw = localStorage.getItem(API_ENABLED_KEY);
+  const raw = readStorageValue(localStorage, API_ENABLED_KEY);
   if (raw == null || raw === "") return true;
   return String(raw).trim().toLowerCase() !== "false";
 }
@@ -4032,7 +4056,7 @@ function getApiBaseUrl() {
   if (apiClient && typeof apiClient.getApiBaseUrl === "function") {
     return apiClient.getApiBaseUrl();
   }
-  const raw = localStorage.getItem(API_BASE_URL_KEY);
+  const raw = readStorageValue(localStorage, API_BASE_URL_KEY);
   const runtimeBase = text(RUNTIME_CONFIG.API_BASE_URL);
   const byHostMap = (RUNTIME_CONFIG && RUNTIME_CONFIG.API_BASE_URL_BY_HOST && typeof RUNTIME_CONFIG.API_BASE_URL_BY_HOST === "object") ? RUNTIME_CONFIG.API_BASE_URL_BY_HOST : {};
   const host = (typeof window !== "undefined" && window.location && window.location.hostname) ? String(window.location.hostname) : "";
@@ -4063,11 +4087,11 @@ function getApiBaseUrl() {
   const hasLoopbackOverride = !!normalizedStoredLoopback;
   const hasRemoteOverride = !!storedBase && !hasLoopbackOverride;
   if (isHostedUi && hasLoopbackOverride) {
-    localStorage.removeItem(API_BASE_URL_KEY);
+    removeStorageValue(localStorage, API_BASE_URL_KEY);
   }
   if (!isHostedUi) {
     if (hasRemoteOverride) {
-      localStorage.removeItem(API_BASE_URL_KEY);
+      removeStorageValue(localStorage, API_BASE_URL_KEY);
     }
     const localBase = normalizedStoredLoopback
       || normalizeLoopbackBase(hostBase)
@@ -4075,7 +4099,7 @@ function getApiBaseUrl() {
       || normalizeLoopbackBase(DEFAULT_API_BASE_URL)
       || "http://127.0.0.1:8000";
     if (localBase && storedBase !== localBase) {
-      try { localStorage.setItem(API_BASE_URL_KEY, localBase); } catch (_err) {}
+      writeStorageValue(localStorage, API_BASE_URL_KEY, localBase);
     }
     return localBase.replace(/\/+$/, "");
   }
