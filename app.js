@@ -1362,17 +1362,8 @@ function openModal(id, keepReasons) {
   const attentionIssues = getAttentionIssues(users);
 
   const lastMarks = getLastMarksByUser(rec);
-  if (uiRender && typeof uiRender.renderMarksSummary === "function") {
-    uiRender.renderMarksSummary(marksSummary, lastMarks, { fmtDateTime: fmtDateTime, statusColor: statusColor });
-  } else {
-    renderMarksSummary(lastMarks);
-  }
-
-  if (uiRender && typeof uiRender.renderRawFields === "function") {
-    uiRender.renderRawFields(rawFields, rec && rec.all_fields && typeof rec.all_fields === "object" ? rec.all_fields : null);
-  } else {
-    renderRawFields(rec);
-  }
+  renderMarksSummary(lastMarks);
+  renderRawFields(rec);
 
   if (userProgressBox) {
     renderUserProgressBox(userProgressBox, progress, delays, {
@@ -1390,11 +1381,7 @@ function openModal(id, keepReasons) {
     conflictText.textContent = "";
   }
 
-  if (uiRender && typeof uiRender.renderHistoryToContainer === "function") {
-    uiRender.renderHistoryToContainer(historyEl, getEventsSorted(rec), { fmtDateTime: fmtDateTime });
-  } else {
-    renderHistoryFallback(rec);
-  }
+  renderHistoryFallback(rec);
 
   modal.classList.add("show");
   modal.setAttribute("aria-hidden", "false");
@@ -1449,49 +1436,17 @@ function renderUserProgressBox(progressContainer, progress, delays, options) {
 
 function renderRawFields(rec) {
   if (!rawFields) return;
-  const obj = rec && rec.all_fields && typeof rec.all_fields === "object" ? rec.all_fields : {};
-  const keys = Object.keys(obj);
-  clearNodeChildren(rawFields);
-
-  if (!keys.length) {
-    const empty = document.createElement("p");
-    empty.className = "muted small";
-    empty.textContent = "Sem campos brutos importados.";
-    rawFields.appendChild(empty);
+  if (uiRender && typeof uiRender.renderRawFields === "function") {
+    const source = rec && rec.all_fields && typeof rec.all_fields === "object" ? rec.all_fields : null;
+    uiRender.renderRawFields(rawFields, source, {});
     return;
   }
 
-  const table = document.createElement("table");
-  table.className = "table";
-  table.style.minWidth = "760px";
-  const thead = document.createElement("thead");
-  const trHead = document.createElement("tr");
-  const thField = document.createElement("th");
-  thField.textContent = "Campo";
-  const thValue = document.createElement("th");
-  thValue.textContent = "Valor";
-  trHead.appendChild(thField);
-  trHead.appendChild(thValue);
-  thead.appendChild(trHead);
-  table.appendChild(thead);
-
-  const tbodyTable = document.createElement("tbody");
-  keys.forEach(function (k) {
-    const tr = document.createElement("tr");
-    const tdKey = document.createElement("td");
-    const code = document.createElement("code");
-    code.textContent = String(k);
-    tdKey.appendChild(code);
-
-    const tdValue = document.createElement("td");
-    tdValue.textContent = String(obj[k] == null ? "" : obj[k]);
-
-    tr.appendChild(tdKey);
-    tr.appendChild(tdValue);
-    tbodyTable.appendChild(tr);
-  });
-  table.appendChild(tbodyTable);
-  rawFields.appendChild(table);
+  clearNodeChildren(rawFields);
+  const fallback = document.createElement("p");
+  fallback.className = "muted small";
+  fallback.textContent = "Renderizador indisponível (raw fields).";
+  rawFields.appendChild(fallback);
 }
 
 function getEventsSorted(rec) {
@@ -1504,140 +1459,33 @@ function getEventsSorted(rec) {
 
 function renderMarksSummary(lastMarks) {
   if (!marksSummary) return;
-  const entries = Object.entries(lastMarks).sort(function (a, b) {
-    if (a[0] === b[0]) return 0;
-    return a[0] > b[0] ? 1 : -1;
-  });
-  clearNodeChildren(marksSummary);
-
-  const table = document.createElement("table");
-  table.className = "table";
-  table.style.minWidth = "700px";
-  const thead = document.createElement("thead");
-  const trHead = document.createElement("tr");
-  ["Usuario", "Setor", "Ultima marcacao", "Data/Hora", "Observacao"].forEach(function (label) {
-    const th = document.createElement("th");
-    th.textContent = label;
-    trHead.appendChild(th);
-  });
-  thead.appendChild(trHead);
-  table.appendChild(thead);
-
-  const tbody = document.createElement("tbody");
-  entries.forEach(function (entry) {
-    const user = entry[0];
-    const info = entry[1];
-    const tr = document.createElement("tr");
-
-    const tdUser = document.createElement("td");
-    const code = document.createElement("code");
-    code.textContent = String(user);
-    tdUser.appendChild(code);
-
-    const tdRole = document.createElement("td");
-    tdRole.textContent = String(info.role || "-");
-
-    const tdStatus = document.createElement("td");
-    const statusBadge = document.createElement("span");
-    statusBadge.className = "badge";
-    const dot = document.createElement("span");
-    dot.className = "dot";
-    dot.style.background = statusColor(info.status || "-");
-    statusBadge.appendChild(dot);
-    statusBadge.appendChild(document.createTextNode(String(info.status || "-")));
-    tdStatus.appendChild(statusBadge);
-
-    const tdAt = document.createElement("td");
-    tdAt.className = "muted";
-    tdAt.textContent = fmtDateTime(info.at);
-
-    const tdNote = document.createElement("td");
-    tdNote.textContent = String(info.note || "");
-
-    tr.appendChild(tdUser);
-    tr.appendChild(tdRole);
-    tr.appendChild(tdStatus);
-    tr.appendChild(tdAt);
-    tr.appendChild(tdNote);
-    tbody.appendChild(tr);
-  });
-
-  if (!entries.length) {
-    const tr = document.createElement("tr");
-    const td = document.createElement("td");
-    td.className = "muted";
-    td.colSpan = 5;
-    td.textContent = "Nenhuma marcacao registrada ainda.";
-    tr.appendChild(td);
-    tbody.appendChild(tr);
+  if (uiRender && typeof uiRender.renderMarksSummary === "function") {
+    uiRender.renderMarksSummary(marksSummary, lastMarks, {
+      fmtDateTime: fmtDateTime,
+      statusColor: statusColor
+    });
+    return;
   }
-  table.appendChild(tbody);
-  marksSummary.appendChild(table);
+
+  clearNodeChildren(marksSummary);
+  const fallback = document.createElement("p");
+  fallback.className = "muted small";
+  fallback.textContent = "Renderizador indisponível (resumo de marcacoes).";
+  marksSummary.appendChild(fallback);
 }
 
 function renderHistoryFallback(rec) {
   if (!historyEl) return;
+  if (uiRender && typeof uiRender.renderHistoryToContainer === "function") {
+    uiRender.renderHistoryToContainer(historyEl, getEventsSorted(rec), { fmtDateTime: fmtDateTime });
+    return;
+  }
+
   clearNodeChildren(historyEl);
-
-  getEventsSorted(rec).forEach(function (ev) {
-    const div = document.createElement("div");
-    div.className = "event";
-
-    const who = (ev.actor_role || "-") + " | " + (ev.actor_user || "-");
-    const rightParts = [];
-    if (ev.type === "OFFICIAL_STATUS") {
-      rightParts.push({ type: "bold", value: "LEGADO" });
-      rightParts.push({ type: "text", value: " " });
-      rightParts.push({ type: "bold", value: String(ev.from || "") });
-      rightParts.push({ type: "text", value: " -> " });
-      rightParts.push({ type: "bold", value: String(ev.to || "") });
-    } else if (ev.type === "MARK_STATUS") {
-      rightParts.push({ type: "bold", value: String(ev.to || "") });
-    } else if (ev.type === "EDIT_FIELD") {
-      rightParts.push({ type: "bold", value: String(ev.field || "") });
-      rightParts.push({ type: "text", value: ": " + String(ev.from == null ? "" : ev.from) + " -> " + String(ev.to == null ? "" : ev.to) });
-    }
-
-    const topRow = document.createElement("div");
-    topRow.className = "top";
-
-    const metaLeft = document.createElement("div");
-    metaLeft.className = "meta";
-    const whoEl = document.createElement("b");
-    whoEl.textContent = who;
-    metaLeft.appendChild(whoEl);
-    metaLeft.appendChild(document.createTextNode(" | " + fmtDateTime(ev.at) + " | "));
-    const typeSpan = document.createElement("span");
-    typeSpan.className = "muted";
-    typeSpan.textContent = String(ev.type || "");
-    metaLeft.appendChild(typeSpan);
-    topRow.appendChild(metaLeft);
-
-    const metaRight = document.createElement("div");
-    metaRight.className = "meta";
-    if (!rightParts.length) {
-      metaRight.textContent = "";
-    } else {
-      rightParts.forEach(function (part) {
-        if (part.type === "bold") {
-          const b = document.createElement("b");
-          b.textContent = part.value;
-          metaRight.appendChild(b);
-          return;
-        }
-        metaRight.appendChild(document.createTextNode(String(part.value)));
-      });
-    }
-    topRow.appendChild(metaRight);
-
-    const desc = document.createElement("div");
-    desc.className = "desc";
-    desc.textContent = String(ev.note || "");
-
-    div.appendChild(topRow);
-    div.appendChild(desc);
-    historyEl.appendChild(div);
-  });
+  const fallback = document.createElement("p");
+  fallback.className = "muted small";
+  fallback.textContent = "Renderizador indisponível (historico).";
+  historyEl.appendChild(fallback);
 }
 
 function getLastMarksByUser(rec) {
@@ -3224,9 +3072,10 @@ function renderRoleNotice() {
     uiRender.renderRoleNotice(roleNotice, { isSupervisor: isSupervisorUser() });
     return;
   }
+
+  roleNotice.classList.toggle("hidden", !isSupervisorUser());
+  clearNodeChildren(roleNotice);
   if (isSupervisorUser()) {
-    roleNotice.classList.remove("hidden");
-    clearNodeChildren(roleNotice);
     const h4 = document.createElement("h4");
     h4.textContent = "Modo supervisao: somente monitoramento";
     const p = document.createElement("p");
@@ -3236,8 +3085,11 @@ function renderRoleNotice() {
     roleNotice.appendChild(p);
     return;
   }
-  roleNotice.classList.add("hidden");
-  clearNodeChildren(roleNotice);
+
+  const hiddenText = document.createElement("p");
+  hiddenText.className = "muted small";
+  hiddenText.textContent = "Renderizador indisponível.";
+  roleNotice.appendChild(hiddenText);
 }
 
 function renderSupervisorQuickPanel(prefilteredRows) {
@@ -3257,121 +3109,12 @@ function renderSupervisorQuickPanel(prefilteredRows) {
     return;
   }
 
-  if (!isSupervisorUser()) {
-    supervisorQuickPanel.classList.add("hidden");
-    clearNodeChildren(supervisorQuickPanel);
-    return;
-  }
-
-  const globalStates = rows.map(function (r) {
-    return {
-      record: r,
-      state: getGlobalProgressState(getActiveUsersWithLastMark(r)),
-      staleDays: daysSince(lastEventAt(r))
-    };
-  });
-
-  const attentionCount = globalStates.filter(function (x) { return x.state.code === "attention"; }).length;
-  const noMarkCount = globalStates.filter(function (x) { return x.state.code === "no_marks"; }).length;
-  const staleCount = globalStates.filter(function (x) { return Number.isFinite(x.staleDays) && x.staleDays >= 7; }).length;
-  const inProgressCount = globalStates.filter(function (x) { return x.state.code === "in_progress"; }).length;
-
-  const topDelayed = globalStates
-    .filter(function (x) { return Number.isFinite(x.staleDays); })
-    .sort(function (a, b) { return b.staleDays - a.staleDays; })
-    .slice(0, 6);
-
-  supervisorQuickPanel.classList.remove("hidden");
+  supervisorQuickPanel.classList.add("hidden");
   clearNodeChildren(supervisorQuickPanel);
-
-  const title = document.createElement("h3");
-  title.textContent = "Painel rapido da supervisao";
-  supervisorQuickPanel.appendChild(title);
-
-  const kpiGrid = document.createElement("div");
-  kpiGrid.className = "supervisor-kpi-grid";
-
-  function addKpi(label, value) {
-    const card = document.createElement("div");
-    card.className = "supervisor-kpi";
-    const pLabel = document.createElement("p");
-    pLabel.className = "supervisor-kpi-label";
-    pLabel.textContent = label;
-    const pValue = document.createElement("p");
-    pValue.className = "supervisor-kpi-value";
-    pValue.textContent = String(value);
-    card.appendChild(pLabel);
-    card.appendChild(pValue);
-    kpiGrid.appendChild(card);
-  }
-
-  addKpi("Emendas no filtro", String(rows.length));
-  addKpi("Em atencao", String(attentionCount));
-  addKpi("Sem marcacao", String(noMarkCount));
-  addKpi("Paradas >= 7 dias", String(staleCount));
-  supervisorQuickPanel.appendChild(kpiGrid);
-
-  const progressP = document.createElement("p");
-  progressP.className = "muted small";
-  progressP.style.marginTop = "10px";
-  const progressText = document.createTextNode("Em andamento: ");
-  const progressValue = document.createElement("b");
-  progressValue.textContent = String(inProgressCount);
-  const progressSuffix = document.createTextNode(" | filtro atual aplicado.");
-  progressP.appendChild(progressText);
-  progressP.appendChild(progressValue);
-  progressP.appendChild(progressSuffix);
-  supervisorQuickPanel.appendChild(progressP);
-
-  const listWrap = document.createElement("div");
-  listWrap.className = "supervisor-list";
-  const listTitle = document.createElement("h4");
-  listTitle.textContent = "Prioridade de acompanhamento (maior atraso)";
-  listWrap.appendChild(listTitle);
-
-  if (!topDelayed.length) {
-    const empty = document.createElement("p");
-    empty.className = "muted small";
-    empty.textContent = "Sem pendencias com atraso no filtro atual.";
-    listWrap.appendChild(empty);
-  } else {
-    topDelayed.forEach(function (x) {
-      const row = document.createElement("div");
-      row.className = "supervisor-list-row";
-
-      const rowCol = document.createElement("div");
-      const topLine = document.createElement("div");
-      const b = document.createElement("b");
-      b.textContent = String(x.record && x.record.id ? x.record.id : "-");
-      topLine.appendChild(b);
-      topLine.appendChild(document.createTextNode(" - " + String(x.record && x.record.identificacao ? x.record.identificacao : "-")));
-      const bottomLine = document.createElement("div");
-      bottomLine.className = "muted small";
-      bottomLine.textContent = String(x.record && x.record.municipio ? x.record.municipio : "-") + " | "
-        + String(x.record && x.record.deputado ? x.record.deputado : "-") + " | atraso: "
-        + String(x.staleDays) + " dias";
-      rowCol.appendChild(topLine);
-      rowCol.appendChild(bottomLine);
-      row.appendChild(rowCol);
-
-      const btn = document.createElement("button");
-      btn.className = "btn";
-      btn.setAttribute("data-supervisor-open", String(x.record && x.record.id ? x.record.id : ""));
-      btn.textContent = "Abrir";
-      row.appendChild(btn);
-
-      listWrap.appendChild(row);
-    });
-  }
-  supervisorQuickPanel.appendChild(listWrap);
-
-  Array.prototype.forEach.call(supervisorQuickPanel.querySelectorAll("button[data-supervisor-open]"), function (btn) {
-    btn.addEventListener("click", function () {
-      const recId = btn.getAttribute("data-supervisor-open") || "";
-      if (!recId) return;
-      openModal(recId);
-    });
-  });
+  const fallback = document.createElement("p");
+  fallback.className = "muted small";
+  fallback.textContent = "Renderizador indisponivel (painel da supervisao).";
+  supervisorQuickPanel.appendChild(fallback);
 }
 
 // Aplica regras de permissao por perfil e atualiza botoes/indicadores.
@@ -3451,83 +3194,15 @@ function renderPendingUsersTable(items) {
     return;
   }
 
-  if (!Array.isArray(items) || items.length === 0) {
-    clearNodeChildren(pendingUsersTableWrap);
-    const empty = document.createElement("p");
-    empty.className = "muted small";
-    empty.textContent = "Nao ha cadastros em analise no momento.";
-    pendingUsersTableWrap.appendChild(empty);
-    return;
-  }
-
   clearNodeChildren(pendingUsersTableWrap);
-  const table = document.createElement("table");
-  table.className = "table";
-
-  const thead = document.createElement("thead");
-  const trH = document.createElement("tr");
-  ["Usuario", "Perfil solicitado", "Criado em", "Status", "Acao"].forEach(function (label) {
-    const th = document.createElement("th");
-    th.textContent = label;
-    trH.appendChild(th);
-  });
-  thead.appendChild(trH);
-  table.appendChild(thead);
-
-  const tbody = document.createElement("tbody");
-  items.forEach(function (u) {
-    const id = Number(u.id || 0);
-    const nome = text(u && u.nome != null ? u.nome : "");
-    const perfil = normalizeUserRole(u.perfil || "CONTABIL");
-    const createdAt = u.created_at ? fmtDateTime(u.created_at) : "-";
-
-    const row = document.createElement("tr");
-    row.setAttribute("data-pending-user-id", String(id));
-
-    const tdNome = document.createElement("td");
-    const nomeB = document.createElement("b");
-    nomeB.textContent = nome;
-    tdNome.appendChild(nomeB);
-
-    const tdPerfil = document.createElement("td");
-    const select = document.createElement("select");
-    select.setAttribute("data-pending-role", String(id));
-    USER_ROLE_OPTIONS.forEach(function (role) {
-      const option = document.createElement("option");
-      option.value = role;
-      option.textContent = role;
-      option.selected = role === perfil;
-      select.appendChild(option);
-    });
-    tdPerfil.appendChild(select);
-
-    const tdCreated = document.createElement("td");
-    tdCreated.className = "muted small";
-    tdCreated.textContent = createdAt;
-
-    const tdStatus = document.createElement("td");
-    const badge = document.createElement("span");
-    badge.className = "badge pending";
-    badge.textContent = "Em analise";
-    tdStatus.appendChild(badge);
-
-    const tdAction = document.createElement("td");
-    const btn = document.createElement("button");
-    btn.className = "btn primary";
-    btn.setAttribute("data-pending-action", "approve");
-    btn.setAttribute("data-user-id", String(id));
-    btn.textContent = "Aprovar";
-    tdAction.appendChild(btn);
-
-    row.appendChild(tdNome);
-    row.appendChild(tdPerfil);
-    row.appendChild(tdCreated);
-    row.appendChild(tdStatus);
-    row.appendChild(tdAction);
-    tbody.appendChild(row);
-  });
-  table.appendChild(tbody);
-  pendingUsersTableWrap.appendChild(table);
+  const fallback = document.createElement("p");
+  fallback.className = "muted small";
+  if (!Array.isArray(items) || items.length === 0) {
+    fallback.textContent = "Nao ha cadastros em analise no momento.";
+  } else {
+    fallback.textContent = "Renderizador indisponivel (pendencias de usuario).";
+  }
+  pendingUsersTableWrap.appendChild(fallback);
 }
 
 // Busca e lista cadastros pendentes para aprovacao.
