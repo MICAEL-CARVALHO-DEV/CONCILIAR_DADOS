@@ -3003,6 +3003,10 @@ async function syncModalEmendaLock(rec) {
 
 function renderRoleNotice() {
   if (!roleNotice) return;
+  if (uiRender && typeof uiRender.renderRoleNotice === "function") {
+    uiRender.renderRoleNotice(roleNotice, { isSupervisor: isSupervisorUser() });
+    return;
+  }
   if (isSupervisorUser()) {
     roleNotice.classList.remove("hidden");
     roleNotice.innerHTML = ""
@@ -3016,13 +3020,27 @@ function renderRoleNotice() {
 
 function renderSupervisorQuickPanel(prefilteredRows) {
   if (!supervisorQuickPanel) return;
+  const rows = Array.isArray(prefilteredRows) ? prefilteredRows : getFiltered();
+  if (uiRender && typeof uiRender.renderSupervisorQuickPanel === "function") {
+    uiRender.renderSupervisorQuickPanel(supervisorQuickPanel, {
+      isSupervisor: isSupervisorUser(),
+      rows: rows,
+      getGlobalProgressState: getGlobalProgressState,
+      getActiveUsersWithLastMark: getActiveUsersWithLastMark,
+      getStaleDays: function (rec) { return daysSince(lastEventAt(rec)); },
+      onOpen: function (recId) {
+        if (recId) openModal(recId);
+      }
+    });
+    return;
+  }
+
   if (!isSupervisorUser()) {
     supervisorQuickPanel.classList.add("hidden");
     supervisorQuickPanel.innerHTML = "";
     return;
   }
 
-  const rows = Array.isArray(prefilteredRows) ? prefilteredRows : getFiltered();
   const globalStates = rows.map(function (r) {
     return {
       record: r,
@@ -3149,6 +3167,14 @@ function closePendingUsersModal() {
 
 function renderPendingUsersTable(items) {
   if (!pendingUsersTableWrap) return;
+  if (uiRender && typeof uiRender.renderPendingUsersTable === "function") {
+    uiRender.renderPendingUsersTable(pendingUsersTableWrap, items, {
+      roles: USER_ROLE_OPTIONS,
+      normalizeUserRole: normalizeUserRole,
+      fmtDateTime: fmtDateTime
+    });
+    return;
+  }
 
   if (!Array.isArray(items) || items.length === 0) {
     pendingUsersTableWrap.innerHTML = "<p class=\"muted small\">Nao ha cadastros em analise no momento.</p>";

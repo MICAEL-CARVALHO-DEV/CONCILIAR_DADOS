@@ -322,10 +322,249 @@
     container.appendChild(table);
   }
 
+  function renderRoleNotice(container, options) {
+    if (!container) return;
+    var opts = options || {};
+    var isSupervisor = !!opts.isSupervisor;
+
+    if (isSupervisor) {
+      container.classList.remove("hidden");
+      while (container.firstChild) {
+        container.removeChild(container.firstChild);
+      }
+      var h4 = document.createElement("h4");
+      h4.textContent = "Modo supervisao: somente monitoramento";
+      var p = document.createElement("p");
+      p.className = "muted small";
+      p.textContent = "Este perfil acompanha andamento e auditoria em tempo real, sem alterar dados.";
+      container.appendChild(h4);
+      container.appendChild(p);
+      return;
+    }
+
+    container.classList.add("hidden");
+    while (container.firstChild) {
+      container.removeChild(container.firstChild);
+    }
+  }
+
+  function renderSupervisorQuickPanel(container, options) {
+    if (!container) return;
+    var opts = options || {};
+    var isSupervisor = !!opts.isSupervisor;
+    var prefilteredRows = Array.isArray(opts.rows) ? opts.rows : [];
+    var getState = typeof opts.getGlobalProgressState === "function" ? opts.getGlobalProgressState : null;
+    var getUsers = typeof opts.getActiveUsersWithLastMark === "function" ? opts.getActiveUsersWithLastMark : null;
+    var getStaleDays = typeof opts.getStaleDays === "function" ? opts.getStaleDays : function () { return Number.NaN; };
+    var onOpen = typeof opts.onOpen === "function" ? opts.onOpen : null;
+
+    if (!isSupervisor) {
+      container.classList.add("hidden");
+      while (container.firstChild) {
+        container.removeChild(container.firstChild);
+      }
+      return;
+    }
+
+    var rows = prefilteredRows.map(function (r) {
+      return {
+        record: r,
+        state: getState ? getState(r) : {},
+        staleDays: getStaleDays(r)
+      };
+    });
+
+    var attentionCount = rows.filter(function (x) { return x.state && x.state.code === "attention"; }).length;
+    var noMarkCount = rows.filter(function (x) { return x.state && x.state.code === "no_marks"; }).length;
+    var staleCount = rows.filter(function (x) { return Number.isFinite(x.staleDays) && x.staleDays >= 7; }).length;
+    var inProgressCount = rows.filter(function (x) { return x.state && x.state.code === "in_progress"; }).length;
+
+    var topDelayed = rows.filter(function (x) { return Number.isFinite(x.staleDays); }).sort(function (a, b) {
+      return b.staleDays - a.staleDays;
+    }).slice(0, 6);
+
+    while (container.firstChild) {
+      container.removeChild(container.firstChild);
+    }
+    container.classList.remove("hidden");
+
+    var title = document.createElement("h3");
+    title.textContent = "Painel rapido da supervisao";
+    container.appendChild(title);
+
+    var kpiGrid = document.createElement("div");
+    kpiGrid.className = "supervisor-kpi-grid";
+
+    function addKpi(label, value) {
+      var card = document.createElement("div");
+      card.className = "supervisor-kpi";
+      var lp = document.createElement("p");
+      lp.className = "supervisor-kpi-label";
+      lp.textContent = label;
+      var vp = document.createElement("p");
+      vp.className = "supervisor-kpi-value";
+      vp.textContent = String(value);
+      card.appendChild(lp);
+      card.appendChild(vp);
+      kpiGrid.appendChild(card);
+    }
+
+    addKpi("Emendas no filtro", rows.length);
+    addKpi("Em atencao", attentionCount);
+    addKpi("Sem marcacao", noMarkCount);
+    addKpi("Paradas >= 7 dias", staleCount);
+    container.appendChild(kpiGrid);
+
+    var progressP = document.createElement("p");
+    progressP.className = "muted small";
+    progressP.style.marginTop = "10px";
+    var progressPrefix = document.createTextNode("Em andamento: ");
+    var progressValue = document.createElement("b");
+    progressValue.textContent = String(inProgressCount);
+    var progressSuffix = document.createTextNode(" | filtro atual aplicado.");
+    progressP.appendChild(progressPrefix);
+    progressP.appendChild(progressValue);
+    progressP.appendChild(progressSuffix);
+    container.appendChild(progressP);
+
+    var listWrap = document.createElement("div");
+    listWrap.className = "supervisor-list";
+    var h4 = document.createElement("h4");
+    h4.textContent = "Prioridade de acompanhamento (maior atraso)";
+    listWrap.appendChild(h4);
+
+    if (!topDelayed.length) {
+      var empty = document.createElement("p");
+      empty.className = "muted small";
+      empty.textContent = "Sem pendencias com atraso no filtro atual.";
+      listWrap.appendChild(empty);
+    } else {
+      topDelayed.forEach(function (x) {
+        var row = document.createElement("div");
+        row.className = "supervisor-list-row";
+
+        var col = document.createElement("div");
+        var topLine = document.createElement("div");
+        var b = document.createElement("b");
+        b.textContent = String(x.record && x.record.id ? x.record.id : "-");
+        topLine.appendChild(b);
+        topLine.appendChild(document.createTextNode(" - " + String(x.record && x.record.identificacao ? x.record.identificacao : "-")));
+        var bottomLine = document.createElement("div");
+        bottomLine.className = "muted small";
+        var recMunicipio = String(x.record && x.record.municipio ? x.record.municipio : "-");
+        var recDeputado = String(x.record && x.record.deputado ? x.record.deputado : "-");
+        bottomLine.textContent = recMunicipio + " | " + recDeputado + " | atraso: " + String(x.staleDays) + " dias";
+
+        col.appendChild(topLine);
+        col.appendChild(bottomLine);
+        row.appendChild(col);
+
+        var btn = document.createElement("button");
+        btn.className = "btn";
+        btn.setAttribute("data-supervisor-open", String(x.record && x.record.id ? x.record.id : ""));
+        btn.textContent = "Abrir";
+        btn.addEventListener("click", function () {
+          if (!onOpen) return;
+          onOpen(String(x.record && x.record.id ? x.record.id : ""));
+        });
+        row.appendChild(btn);
+
+        listWrap.appendChild(row);
+      });
+    }
+    container.appendChild(listWrap);
+  }
+
+  function renderPendingUsersTable(container, items, options) {
+    if (!container) return;
+    var opts = options || {};
+    var roles = Array.isArray(opts.roles) ? opts.roles : [];
+    var normalizeUserRole = typeof opts.normalizeUserRole === "function" ? opts.normalizeUserRole : function (role) { return role; };
+    var dateFmt = typeof opts.fmtDateTime === "function" ? opts.fmtDateTime : function (value) { return String(value || "-"); };
+
+    while (container.firstChild) {
+      container.removeChild(container.firstChild);
+    }
+
+    if (!Array.isArray(items) || !items.length) {
+      var empty = document.createElement("p");
+      empty.className = "muted small";
+      empty.textContent = "Nao ha cadastros em analise no momento.";
+      container.appendChild(empty);
+      return;
+    }
+
+    var table = document.createElement("table");
+    table.className = "table";
+    var thead = document.createElement("thead");
+    var trH = document.createElement("tr");
+    ["Usuario", "Perfil solicitado", "Criado em", "Status", "Acao"].forEach(function (label) {
+      var th = document.createElement("th");
+      th.textContent = label;
+      trH.appendChild(th);
+    });
+    thead.appendChild(trH);
+    table.appendChild(thead);
+
+    var tbody = document.createElement("tbody");
+    items.forEach(function (u) {
+      var row = document.createElement("tr");
+      row.setAttribute("data-pending-user-id", String(Number(u.id || 0)));
+
+      var tdUser = document.createElement("td");
+      var bUser = document.createElement("b");
+      bUser.textContent = String(u && u.nome != null ? u.nome : "");
+      tdUser.appendChild(bUser);
+      row.appendChild(tdUser);
+
+      var tdPerfil = document.createElement("td");
+      var select = document.createElement("select");
+      select.setAttribute("data-pending-role", String(Number(u.id || 0)));
+      roles.forEach(function (role) {
+        var option = document.createElement("option");
+        option.value = role;
+        option.textContent = role;
+        option.selected = role === normalizeUserRole(String(u && u.perfil || "CONTABIL"));
+        select.appendChild(option);
+      });
+      tdPerfil.appendChild(select);
+      row.appendChild(tdPerfil);
+
+      var tdDate = document.createElement("td");
+      tdDate.className = "muted small";
+      tdDate.textContent = dateFmt(u && u.created_at);
+      row.appendChild(tdDate);
+
+      var tdStatus = document.createElement("td");
+      var badge = document.createElement("span");
+      badge.className = "badge pending";
+      badge.textContent = "Em analise";
+      tdStatus.appendChild(badge);
+      row.appendChild(tdStatus);
+
+      var tdAction = document.createElement("td");
+      var btn = document.createElement("button");
+      btn.className = "btn primary";
+      btn.setAttribute("data-pending-action", "approve");
+      btn.setAttribute("data-user-id", String(Number(u.id || 0)));
+      btn.textContent = "Aprovar";
+      tdAction.appendChild(btn);
+      row.appendChild(tdAction);
+
+      tbody.appendChild(row);
+    });
+
+    table.appendChild(tbody);
+    container.appendChild(table);
+  }
+
   SECFrontend.uiRender = {
     renderHistoryToContainer,
     renderRawFields,
     renderMarksSummary,
-    renderMainRow
+    renderMainRow,
+    renderRoleNotice,
+    renderSupervisorQuickPanel,
+    renderPendingUsersTable
   };
 })(typeof window !== "undefined" ? window : globalThis);
