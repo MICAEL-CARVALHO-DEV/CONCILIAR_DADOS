@@ -66,6 +66,7 @@ const escapeUtils = SEC_FRONTEND.escapeUtils || null;
 const formatUtils = SEC_FRONTEND.formatUtils || null;
 const normalizeUtils = SEC_FRONTEND.normalizeUtils || null;
 const idUtils = SEC_FRONTEND.idUtils || null;
+const statusUtils = SEC_FRONTEND.statusUtils || null;
 const authStore = SEC_FRONTEND.authStore || null;
 const authGuard = SEC_FRONTEND.authGuard || null;
 const apiClient = SEC_FRONTEND.apiClient || null;
@@ -1460,6 +1461,10 @@ function getInitials(name) {
 }
 
 function statusClass(status) {
+  if (statusUtils && typeof statusUtils.statusClass === "function") {
+    return statusUtils.statusClass(status, normalizeLooseText);
+  }
+
   const s = normalizeLooseText(status);
   if (s.indexOf("concl") >= 0) return "st-ok";
   if (s.indexOf("cancel") >= 0) return "st-bad";
@@ -2127,11 +2132,18 @@ function isRowEmpty(arr) {
 }
 
 function renderStatus(status) {
+  if (statusUtils && typeof statusUtils.renderStatus === "function") {
+    return statusUtils.renderStatus(status, statusColor, escapeHtml);
+  }
+
   const color = statusColor(status);
   return "<span class=\"badge\"><span class=\"dot\" style=\"background:" + color + "\"></span>" + escapeHtml(status) + "</span>";
 }
 
 function statusColor(status) {
+  if (statusUtils && typeof statusUtils.statusColor === "function") {
+    return statusUtils.statusColor(status);
+  }
   if (status === "Concluido") return "#2ecc71";
   if (status === "Cancelado") return "#ff4f6d";
   if (status === "Pendente") return "#f1c40f";
@@ -2143,6 +2155,9 @@ function statusColor(status) {
 }
 
 function normalizeStatus(input) {
+  if (statusUtils && typeof statusUtils.normalizeStatus === "function") {
+    return statusUtils.normalizeStatus(input, STATUS, normalizeLooseText);
+  }
   const cleaned = normalizeLooseText(input);
   if (!cleaned) return "Recebido";
   const found = STATUS.find(function (st) {
@@ -4496,6 +4511,9 @@ function hideImportReport() {
 }
 
 function quickHashString(input) {
+  if (statusUtils && typeof statusUtils.quickHashString === "function") {
+    return statusUtils.quickHashString(input);
+  }
   let hash = 2166136261;
   const str = String(input || "");
   for (let i = 0; i < str.length; i += 1) {
