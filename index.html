@@ -280,11 +280,40 @@
   <script src="config.production.js"></script>
   <script>
     (function () {
+      function loadScriptsSequentially(urls, onDone) {
+        var queue = Array.isArray(urls) ? urls.slice() : [];
+
+        function next() {
+          if (!queue.length) {
+            onDone();
+            return;
+          }
+
+          var script = document.createElement("script");
+          script.src = queue.shift();
+          script.onload = next;
+          script.onerror = next;
+          document.body.appendChild(script);
+        }
+
+        next();
+      }
+
       function loadApp() {
-        var appScript = document.createElement("script");
         var appVer = "dev-" + String(Date.now());
-        appScript.src = "app.js?v=" + encodeURIComponent(appVer);
-        document.body.appendChild(appScript);
+        loadScriptsSequentially([
+          "frontend/js/utils/storage.js?v=" + encodeURIComponent(appVer),
+          "frontend/js/utils/dom.js?v=" + encodeURIComponent(appVer),
+          "frontend/js/utils/escape.js?v=" + encodeURIComponent(appVer),
+          "frontend/js/auth/authStore.js?v=" + encodeURIComponent(appVer),
+          "frontend/js/auth/authGuard.js?v=" + encodeURIComponent(appVer),
+          "frontend/js/api/client.js?v=" + encodeURIComponent(appVer),
+          "frontend/js/realtime/concurrency.js?v=" + encodeURIComponent(appVer)
+        ], function () {
+          var appScript = document.createElement("script");
+          appScript.src = "app.js?v=" + encodeURIComponent(appVer);
+          document.body.appendChild(appScript);
+        });
       }
 
       function loadLocalXlsxAndApp() {

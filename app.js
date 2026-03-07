@@ -59,6 +59,14 @@ const STORAGE_MODE_LOCAL = "local";
 const STORAGE_MODE_SESSION = "session";
 const DEFAULT_API_BASE_URL = "http://localhost:8000";
 const RUNTIME_CONFIG = (typeof window !== "undefined" && window.SEC_APP_CONFIG && typeof window.SEC_APP_CONFIG === "object") ? window.SEC_APP_CONFIG : {};
+const SEC_FRONTEND = (typeof window !== "undefined" && window.SECFrontend && typeof window.SECFrontend === "object") ? window.SECFrontend : {};
+const storageUtils = SEC_FRONTEND.storageUtils || null;
+const domUtils = SEC_FRONTEND.domUtils || null;
+const escapeUtils = SEC_FRONTEND.escapeUtils || null;
+const authStore = SEC_FRONTEND.authStore || null;
+const authGuard = SEC_FRONTEND.authGuard || null;
+const apiClient = SEC_FRONTEND.apiClient || null;
+const concurrencyService = SEC_FRONTEND.concurrencyService || null;
 const API_WS_PATH = "/ws";
 const WS_RECONNECT_BASE_MS = 1500;
 const WS_RECONNECT_MAX_MS = 15000;
@@ -177,6 +185,7 @@ let modalCloseInProgress = false;
 let modalSaveFeedbackTimer = null;
 let modalAutoCloseTimer = null;
 
+configureFrontendModules();
 loadUserConfig(false);
 
 const DEMO = [
@@ -862,7 +871,7 @@ function hasPendingModalAction() {
 
 function canSaveDraftNow() {
   if (!canMutateRecords()) return false;
-  if (emendaLockReadOnly) return false;
+  if (isEmendaLockReadOnly()) return false;
   if (hasPendingModalAction()) return true;
   if (!isModalDraftDirty()) return false;
   const selectedStatus = markStatus ? (markStatus.value || "").trim() : "";
@@ -874,7 +883,7 @@ function getDraftSaveBlockReason() {
   if (!canMutateRecords()) {
     return "Perfil SUPERVISAO: monitoramento apenas, sem alteracao de dados.";
   }
-  if (emendaLockReadOnly) {
+  if (isEmendaLockReadOnly()) {
     return "Edicao bloqueada: esta emenda esta em uso por outro usuario (modo leitura).";
   }
   if (hasPendingModalAction()) return "";
@@ -956,7 +965,7 @@ function updateModalDraftUi() {
 }
 
 function applyModalAccessProfile() {
-  const readOnlyMode = !canMutateRecords() || emendaLockReadOnly;
+  const readOnlyMode = !canMutateRecords() || isEmendaLockReadOnly();
   if (markStatus) markStatus.disabled = readOnlyMode;
   if (markReason) markReason.disabled = readOnlyMode;
   if (btnMarkStatus) btnMarkStatus.disabled = readOnlyMode;
@@ -1032,7 +1041,7 @@ async function saveModalDraftChanges(keepOpen) {
     showModalSaveFeedback("Perfil SUPERVISAO: monitoramento apenas. Salvamento bloqueado.", true);
     return false;
   }
-  if (emendaLockReadOnly) {
+  if (isEmendaLockReadOnly()) {
     showModalSaveFeedback("Edicao bloqueada: emenda em uso por outro usuario.", true);
     return false;
   }
@@ -1223,7 +1232,7 @@ function openModal(id, keepReasons) {
   selectedId = id;
   const rec = getSelected();
   if (!rec) return;
-  emendaLockReadOnly = isApiEnabled() ? canMutateRecords() : false;
+  setEmendaLockReadOnly(!canMutateRecords());
 
   modalTitle.textContent = "Emenda: " + rec.id;
   modalSub.textContent = rec.identificacao + " | " + rec.municipio + " | " + rec.deputado;
@@ -2325,12 +2334,26 @@ function onAuthSuccess(resp) {
 function setAuthenticatedUser(usuario) {
   CURRENT_USER = String(usuario.nome || CURRENT_USER).trim() || CURRENT_USER;
   CURRENT_ROLE = normalizeUserRole(usuario.perfil || CURRENT_ROLE);
-  localStorage.setItem(USER_NAME_KEY, CURRENT_USER);
-  localStorage.setItem(USER_ROLE_KEY, CURRENT_ROLE);
+  if (authStore && typeof authStore.writeAuthenticatedUser === "function") {
+    authStore.writeAuthenticatedUser({
+      name: CURRENT_USER,
+      role: CURRENT_ROLE
+    }, {
+      userName: USER_NAME_KEY,
+      userRole: USER_ROLE_KEY
+    });
+  } else {
+    localStorage.setItem(USER_NAME_KEY, CURRENT_USER);
+    localStorage.setItem(USER_ROLE_KEY, CURRENT_ROLE);
+  }
 }
 
 // Redireciona para login/cadastro preservando pagina de retorno.
 function redirectToAuth(page, query) {
+  if (authStore && typeof authStore.redirectToAuth === "function") {
+    authStore.redirectToAuth(page || AUTH_LOGIN_PAGE, query, "index.html");
+    return;
+  }
   const target = page || AUTH_LOGIN_PAGE;
   const suffix = query ? (String(query).startsWith("?") ? String(query) : "?" + String(query)) : "";
   const next = encodeURIComponent("index.html");
@@ -2351,12 +2374,22 @@ async function logoutCurrentUser() {
     }
   }
   clearStoredSessionToken();
-  localStorage.removeItem(USER_NAME_KEY);
-  localStorage.removeItem(USER_ROLE_KEY);
+  if (authStore && typeof authStore.clearAuthenticatedUser === "function") {
+    authStore.clearAuthenticatedUser({
+      userName: USER_NAME_KEY,
+      userRole: USER_ROLE_KEY
+    });
+  } else {
+    localStorage.removeItem(USER_NAME_KEY);
+    localStorage.removeItem(USER_ROLE_KEY);
+  }
   closeApiSocket();
 }
 
 function isLocalFrontendContext() {
+  if (authGuard && typeof authGuard.isLocalFrontendContext === "function") {
+    return authGuard.isLocalFrontendContext();
+  }
   const host = (typeof window !== "undefined" && window.location && window.location.hostname)
     ? String(window.location.hostname)
     : "";
@@ -2364,6 +2397,12 @@ function isLocalFrontendContext() {
 }
 
 function readStoredSessionToken() {
+  if (authStore && typeof authStore.readStoredSessionToken === "function") {
+    return authStore.readStoredSessionToken({
+      sessionToken: SESSION_TOKEN_KEY,
+      sessionTokenBackup: SESSION_TOKEN_BACKUP_KEY
+    });
+  }
   let sessionToken = "";
   try {
     sessionToken = String(sessionStorage.getItem(SESSION_TOKEN_KEY) || "").trim();
@@ -2389,6 +2428,13 @@ function readStoredSessionToken() {
 }
 
 function writeStoredSessionToken(token) {
+  if (authStore && typeof authStore.writeStoredSessionToken === "function") {
+    authStore.writeStoredSessionToken(token, {
+      sessionToken: SESSION_TOKEN_KEY,
+      sessionTokenBackup: SESSION_TOKEN_BACKUP_KEY
+    });
+    return;
+  }
   const raw = String(token || "").trim();
   if (!raw) {
     clearStoredSessionToken();
@@ -2399,6 +2445,13 @@ function writeStoredSessionToken(token) {
 }
 
 function clearStoredSessionToken() {
+  if (authStore && typeof authStore.clearStoredSessionToken === "function") {
+    authStore.clearStoredSessionToken({
+      sessionToken: SESSION_TOKEN_KEY,
+      sessionTokenBackup: SESSION_TOKEN_BACKUP_KEY
+    });
+    return;
+  }
   try { sessionStorage.removeItem(SESSION_TOKEN_KEY); } catch (_err) {}
   try { localStorage.removeItem(SESSION_TOKEN_BACKUP_KEY); } catch (_err) {}
 }
@@ -2470,8 +2523,14 @@ async function initializeAuthFlow() {
 // Carrega configuracao de usuario local (fallback quando API esta desativada).
 function loadUserConfig(forcePrompt) {
   const legacyUser = localStorage.getItem("SEC_USER_ID");
-  const savedUser = localStorage.getItem(USER_NAME_KEY) || legacyUser;
-  const savedRole = localStorage.getItem(USER_ROLE_KEY);
+  const savedAuthUser = authStore && typeof authStore.readAuthenticatedUser === "function"
+    ? authStore.readAuthenticatedUser({
+      userName: USER_NAME_KEY,
+      userRole: USER_ROLE_KEY
+    })
+    : null;
+  const savedUser = (savedAuthUser && savedAuthUser.name) || localStorage.getItem(USER_NAME_KEY) || legacyUser;
+  const savedRole = (savedAuthUser && savedAuthUser.role) || localStorage.getItem(USER_ROLE_KEY);
 
   if (savedUser) CURRENT_USER = String(savedUser).trim() || CURRENT_USER;
   if (savedRole) CURRENT_ROLE = normalizeUserRole(savedRole);
@@ -2484,9 +2543,18 @@ function loadUserConfig(forcePrompt) {
 
     CURRENT_USER = String(nameInput).trim() || CURRENT_USER;
     CURRENT_ROLE = normalizeUserRole(roleInput);
-
-    localStorage.setItem(USER_NAME_KEY, CURRENT_USER);
-    localStorage.setItem(USER_ROLE_KEY, CURRENT_ROLE);
+    if (authStore && typeof authStore.writeAuthenticatedUser === "function") {
+      authStore.writeAuthenticatedUser({
+        name: CURRENT_USER,
+        role: CURRENT_ROLE
+      }, {
+        userName: USER_NAME_KEY,
+        userRole: USER_ROLE_KEY
+      });
+    } else {
+      localStorage.setItem(USER_NAME_KEY, CURRENT_USER);
+      localStorage.setItem(USER_ROLE_KEY, CURRENT_ROLE);
+    }
   }
 }
 
@@ -2499,12 +2567,20 @@ function canMutateRecords() {
 }
 
 function clearEmendaLockTimer() {
+  if (concurrencyService && typeof concurrencyService.clearEmendaLockTimer === "function") {
+    concurrencyService.clearEmendaLockTimer();
+    return;
+  }
   if (!emendaLockTimer) return;
   clearInterval(emendaLockTimer);
   emendaLockTimer = null;
 }
 
 function setEmendaLockState(payload) {
+  if (concurrencyService && typeof concurrencyService.setEmendaLockState === "function") {
+    concurrencyService.setEmendaLockState(payload);
+    return;
+  }
   emendaLockState = payload && typeof payload === "object" ? payload : null;
   if (!canMutateRecords()) {
     emendaLockReadOnly = true;
@@ -2515,6 +2591,29 @@ function setEmendaLockState(payload) {
     return;
   }
   emendaLockReadOnly = !Boolean(emendaLockState.can_edit);
+}
+
+function isEmendaLockReadOnly() {
+  if (concurrencyService && typeof concurrencyService.isEmendaLockReadOnly === "function") {
+    return !!concurrencyService.isEmendaLockReadOnly();
+  }
+  return !!emendaLockReadOnly;
+}
+
+function getEmendaLockState() {
+  if (concurrencyService && typeof concurrencyService.getEmendaLockState === "function") {
+    const next = concurrencyService.getEmendaLockState();
+    return next && typeof next === "object" ? next : null;
+  }
+  return emendaLockState;
+}
+
+function setEmendaLockReadOnly(value) {
+  if (concurrencyService && typeof concurrencyService.setEmendaLockReadOnly === "function") {
+    concurrencyService.setEmendaLockReadOnly(!!value);
+    return;
+  }
+  emendaLockReadOnly = !!value;
 }
 
 function emendaLockOwnerText(payload) {
@@ -2552,19 +2651,20 @@ function renderModalAccessState(rec) {
     return;
   }
 
-  if (!emendaLockReadOnly) {
+  if (!isEmendaLockReadOnly()) {
     modalAccessState.classList.add("hidden");
     modalAccessState.textContent = "";
     return;
   }
 
-  if (!emendaLockState) {
+  const lockState = getEmendaLockState();
+  if (!lockState) {
     showReadOnly("MODO LEITURA: verificando disponibilidade de edicao...");
     return;
   }
 
-  const owner = emendaLockOwnerText(emendaLockState);
-  const expiresAt = emendaLockState.expires_at ? fmtDateTime(emendaLockState.expires_at) : "";
+  const owner = emendaLockOwnerText(lockState);
+  const expiresAt = lockState && lockState.expires_at ? fmtDateTime(lockState.expires_at) : "";
   const ownerMsg = owner ? (" por " + owner) : " por outro usuario";
   const when = expiresAt ? (" Ate: " + expiresAt + ".") : "";
   showReadOnly("MODO LEITURA: esta emenda esta em edicao" + ownerMsg + "." + when);
@@ -2576,18 +2676,20 @@ function renderEmendaLockInfo(rec) {
     if (!isApiEnabled()) {
       message = "Modo local: lock de edicao indisponivel.";
     } else if (isSupervisorUser()) {
-      const owner = emendaLockOwnerText(emendaLockState);
+      const lockState = getEmendaLockState();
+      const owner = emendaLockOwnerText(lockState);
       message = owner
         ? ("Modo supervisao (leitura). Em edicao por: " + owner + ".")
         : "Modo supervisao (leitura).";
     } else {
-      const expiresAt = emendaLockState && emendaLockState.expires_at ? fmtDateTime(emendaLockState.expires_at) : "";
-      if (emendaLockReadOnly) {
-        const owner = emendaLockOwnerText(emendaLockState);
+      const lockState = getEmendaLockState();
+      const expiresAt = lockState && lockState.expires_at ? fmtDateTime(lockState.expires_at) : "";
+      if (isEmendaLockReadOnly()) {
+        const owner = emendaLockOwnerText(lockState);
         const ownerMsg = owner ? ("por " + owner) : "por outro usuario";
         const when = expiresAt ? (" Ate: " + expiresAt + ".") : "";
         message = "Modo leitura ativo: emenda em edicao " + ownerMsg + "." + when;
-      } else if (emendaLockState && emendaLockState.locked && emendaLockState.is_owner) {
+      } else if (lockState && lockState.locked && lockState.is_owner) {
         const when = expiresAt ? (" Ate: " + expiresAt + ".") : "";
         message = "Voce esta com edicao exclusiva desta emenda." + when;
       } else {
@@ -2601,11 +2703,17 @@ function renderEmendaLockInfo(rec) {
 }
 
 async function fetchEmendaLockStatus(rec) {
+  if (concurrencyService && typeof concurrencyService.fetchEmendaLockStatus === "function") {
+    return await concurrencyService.fetchEmendaLockStatus(rec);
+  }
   const backendId = await ensureBackendEmenda(rec, { handleAuthFailure: false });
   return await apiRequest("GET", "/emendas/" + String(backendId) + "/lock", undefined, "UI", { handleAuthFailure: false });
 }
 
 async function acquireEmendaLock(rec, forceAcquire) {
+  if (concurrencyService && typeof concurrencyService.acquireEmendaLock === "function") {
+    return await concurrencyService.acquireEmendaLock(rec, forceAcquire);
+  }
   const backendId = await ensureBackendEmenda(rec, { handleAuthFailure: false });
   return await apiRequest("POST", "/emendas/" + String(backendId) + "/lock/acquire", {
     force: !!forceAcquire
@@ -2613,11 +2721,17 @@ async function acquireEmendaLock(rec, forceAcquire) {
 }
 
 async function renewEmendaLock(rec) {
+  if (concurrencyService && typeof concurrencyService.renewEmendaLock === "function") {
+    return await concurrencyService.renewEmendaLock(rec);
+  }
   const backendId = await ensureBackendEmenda(rec, { handleAuthFailure: false });
   return await apiRequest("POST", "/emendas/" + String(backendId) + "/lock/renew", {}, "UI", { handleAuthFailure: false });
 }
 
 async function releaseEmendaLock(rec) {
+  if (concurrencyService && typeof concurrencyService.releaseEmendaLock === "function") {
+    return await concurrencyService.releaseEmendaLock(rec);
+  }
   if (!rec || !isApiEnabled()) return;
   const backendId = getBackendIdForRecord(rec) || await ensureBackendEmenda(rec, { handleAuthFailure: false });
   if (!backendId) return;
@@ -2625,6 +2739,10 @@ async function releaseEmendaLock(rec) {
 }
 
 async function tickEmendaLock() {
+  if (concurrencyService && typeof concurrencyService.tickEmendaLock === "function") {
+    await concurrencyService.tickEmendaLock();
+    return;
+  }
   if (!modal || !modal.classList.contains("show")) return;
   const rec = getSelected();
   if (!rec) return;
@@ -2633,7 +2751,7 @@ async function tickEmendaLock() {
     if (!canMutateRecords()) {
       const lockInfo = await fetchEmendaLockStatus(rec);
       setEmendaLockState(lockInfo);
-    } else if (emendaLockReadOnly) {
+    } else if (isEmendaLockReadOnly()) {
       const lockInfo = await fetchEmendaLockStatus(rec);
       setEmendaLockState(lockInfo);
       if (lockInfo && !lockInfo.locked && lockInfo.can_edit) {
@@ -2654,6 +2772,10 @@ async function tickEmendaLock() {
 }
 
 function startEmendaLockPolling() {
+  if (concurrencyService && typeof concurrencyService.startEmendaLockPolling === "function") {
+    concurrencyService.startEmendaLockPolling();
+    return;
+  }
   clearEmendaLockTimer();
   if (!isApiEnabled()) return;
   emendaLockTimer = setInterval(function () {
@@ -2662,9 +2784,13 @@ function startEmendaLockPolling() {
 }
 
 async function syncModalEmendaLock(rec) {
+  if (concurrencyService && typeof concurrencyService.syncModalEmendaLock === "function") {
+    await concurrencyService.syncModalEmendaLock(rec);
+    return;
+  }
   clearEmendaLockTimer();
   emendaLockState = null;
-  if (canMutateRecords()) emendaLockReadOnly = true;
+  if (canMutateRecords()) setEmendaLockReadOnly(true);
 
   if (!rec) return;
   if (!isApiEnabled()) {
@@ -3157,6 +3283,9 @@ async function ensureBackendEmenda(rec, options) {
 
 
 function getApiWebSocketUrl() {
+  if (concurrencyService && typeof concurrencyService.getApiWebSocketUrl === "function") {
+    return concurrencyService.getApiWebSocketUrl();
+  }
   const base = getApiBaseUrl();
   if (!base) return "";
   if (base.indexOf("https://") === 0) return "wss://" + base.slice(8) + API_WS_PATH;
@@ -3165,12 +3294,20 @@ function getApiWebSocketUrl() {
 }
 
 function clearApiSocketReconnectTimer() {
+  if (concurrencyService && typeof concurrencyService.clearApiSocketReconnectTimer === "function") {
+    concurrencyService.clearApiSocketReconnectTimer();
+    return;
+  }
   if (!apiSocketReconnectTimer) return;
   clearTimeout(apiSocketReconnectTimer);
   apiSocketReconnectTimer = null;
 }
 
 function closeApiSocket() {
+  if (concurrencyService && typeof concurrencyService.closeApiSocket === "function") {
+    concurrencyService.closeApiSocket();
+    return;
+  }
   clearApiSocketReconnectTimer();
   presenceByBackendId = {};
   currentPresenceBackendId = null;
@@ -3182,6 +3319,10 @@ function closeApiSocket() {
 }
 
 function scheduleApiSocketReconnect() {
+  if (concurrencyService && typeof concurrencyService.scheduleApiSocketReconnect === "function") {
+    concurrencyService.scheduleApiSocketReconnect();
+    return;
+  }
   clearApiSocketReconnectTimer();
   const token = readStoredSessionToken();
   if (!isApiEnabled() || !token) return;
@@ -3194,6 +3335,10 @@ function scheduleApiSocketReconnect() {
 }
 
 function queueApiRefreshFromSocket() {
+  if (concurrencyService && typeof concurrencyService.queueApiRefreshFromSocket === "function") {
+    concurrencyService.queueApiRefreshFromSocket();
+    return;
+  }
   if (apiRefreshRunning) return;
   if (apiRefreshTimer) clearTimeout(apiRefreshTimer);
   apiRefreshTimer = setTimeout(async function () {
@@ -3211,6 +3356,10 @@ function queueApiRefreshFromSocket() {
 }
 
 function sendSocketJson(payload) {
+  if (concurrencyService && typeof concurrencyService.sendSocketJson === "function") {
+    concurrencyService.sendSocketJson(payload);
+    return;
+  }
   if (!apiSocket || apiSocket.readyState !== 1) return;
   try {
     apiSocket.send(JSON.stringify(payload || {}));
@@ -3227,6 +3376,10 @@ function getBackendIdForRecord(rec) {
 }
 
 function announcePresenceForRecord(rec, action) {
+  if (concurrencyService && typeof concurrencyService.announcePresenceForRecord === "function") {
+    concurrencyService.announcePresenceForRecord(rec, action);
+    return;
+  }
   if (!isApiEnabled()) return;
   const backendId = getBackendIdForRecord(rec);
   if (!backendId) return;
@@ -3245,6 +3398,9 @@ function announcePresenceForRecord(rec, action) {
 }
 
 function getPresenceUsersForRecord(rec) {
+  if (concurrencyService && typeof concurrencyService.getPresenceUsersForRecord === "function") {
+    return concurrencyService.getPresenceUsersForRecord(rec) || [];
+  }
   const backendId = getBackendIdForRecord(rec);
   if (!backendId) return [];
   return Array.isArray(presenceByBackendId[backendId]) ? presenceByBackendId[backendId] : [];
@@ -3266,6 +3422,12 @@ function renderLivePresence(rec) {
 }
 
 function handlePresencePayload(data) {
+  if (concurrencyService && typeof concurrencyService.handlePresencePayload === "function") {
+    concurrencyService.handlePresencePayload(data);
+    const rec = getSelected();
+    if (rec) renderLivePresence(rec);
+    return;
+  }
   const backendId = Number(data && data.id ? data.id : 0);
   if (!backendId) return;
   const users = Array.isArray(data && data.users) ? data.users.map(function (u) {
@@ -3288,6 +3450,10 @@ function handlePresencePayload(data) {
 
 // Abre WebSocket da API para atualizar tela em tempo real.
 function connectApiSocket() {
+  if (concurrencyService && typeof concurrencyService.connectApiSocket === "function") {
+    concurrencyService.connectApiSocket();
+    return;
+  }
   closeApiSocket();
 
   if (!API_WS_ENABLED) return;
@@ -3345,6 +3511,9 @@ function connectApiSocket() {
 }
 // Decide se a UI deve operar em modo API (nuvem) ou local.
 function isApiEnabled() {
+  if (apiClient && typeof apiClient.isApiEnabled === "function") {
+    return apiClient.isApiEnabled();
+  }
   const host = (typeof window !== "undefined" && window.location && window.location.hostname) ? String(window.location.hostname) : "";
   const isHostedUi = !!host && host !== "localhost" && host !== "127.0.0.1";
   if (isHostedUi) {
@@ -3361,6 +3530,9 @@ function isApiEnabled() {
 
 // Resolve URL base da API com protecao contra override localhost em host publicado.
 function getApiBaseUrl() {
+  if (apiClient && typeof apiClient.getApiBaseUrl === "function") {
+    return apiClient.getApiBaseUrl();
+  }
   const raw = localStorage.getItem(API_BASE_URL_KEY);
   const runtimeBase = text(RUNTIME_CONFIG.API_BASE_URL);
   const byHostMap = (RUNTIME_CONFIG && RUNTIME_CONFIG.API_BASE_URL_BY_HOST && typeof RUNTIME_CONFIG.API_BASE_URL_BY_HOST === "object") ? RUNTIME_CONFIG.API_BASE_URL_BY_HOST : {};
@@ -3415,6 +3587,9 @@ function getApiBaseUrl() {
 
 // Wrapper autenticado para chamadas privadas da API.
 async function apiRequest(method, path, body, eventOrigin, options) {
+  if (apiClient && typeof apiClient.apiRequest === "function") {
+    return await apiClient.apiRequest(method, path, body, eventOrigin, options);
+  }
   const requestOpts = options && typeof options === "object" ? options : {};
   const handleAuthFailure = Object.prototype.hasOwnProperty.call(requestOpts, "handleAuthFailure") ? !!requestOpts.handleAuthFailure : false;
   const url = getApiBaseUrl() + path;
@@ -3471,6 +3646,9 @@ async function apiRequest(method, path, body, eventOrigin, options) {
 
 // Wrapper publico para login/cadastro sem token.
 async function apiRequestPublic(method, path, body) {
+  if (apiClient && typeof apiClient.apiRequestPublic === "function") {
+    return await apiClient.apiRequestPublic(method, path, body);
+  }
   const url = getApiBaseUrl() + path;
   const opts = { method: method, headers: {} };
   if (body !== undefined) {
@@ -3497,6 +3675,9 @@ async function apiRequestPublic(method, path, body) {
 
 // Monta headers padrao de auditoria/autenticacao para chamadas privadas.
 function buildApiHeaders(eventOrigin) {
+  if (apiClient && typeof apiClient.buildApiHeaders === "function") {
+    return apiClient.buildApiHeaders(eventOrigin);
+  }
   const headers = {
     "X-User-Name": CURRENT_USER,
     "X-User-Role": CURRENT_ROLE
@@ -3519,7 +3700,9 @@ function buildApiHeaders(eventOrigin) {
 }
 
 function getStorageMode() {
-  const configured = String(localStorage.getItem(STORAGE_MODE_KEY) || "").trim().toLowerCase();
+  const configured = storageUtils
+    ? storageUtils.safeGetItem(localStorage, STORAGE_MODE_KEY).trim().toLowerCase()
+    : String(localStorage.getItem(STORAGE_MODE_KEY) || "").trim().toLowerCase();
   if (configured === STORAGE_MODE_LOCAL) return STORAGE_MODE_LOCAL;
   return STORAGE_MODE_SESSION;
 }
@@ -5167,6 +5350,9 @@ function text(v) {
 }
 
 function escapeHtml(str) {
+  if (escapeUtils && typeof escapeUtils.escapeHtml === "function") {
+    return escapeUtils.escapeHtml(str);
+  }
   return String(str).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll("\"", "&quot;").replaceAll("'", "&#039;");
 }
 
@@ -5183,4 +5369,118 @@ function debounce(fn, ms) {
 
 function deepClone(obj) {
   return JSON.parse(JSON.stringify(obj));
+}
+
+function configureFrontendModules() {
+  if (!apiClient || typeof apiClient.configure !== "function") return;
+  apiClient.configure({
+    runtimeConfig: RUNTIME_CONFIG,
+    keys: {
+      apiBaseUrl: API_BASE_URL_KEY,
+      apiEnabled: API_ENABLED_KEY,
+      apiSharedKeySession: API_SHARED_KEY_SESSION_KEY
+    },
+    defaultApiBaseUrl: DEFAULT_API_BASE_URL,
+    defaultEventOrigin: API_DEFAULT_EVENT_ORIGIN,
+    getCurrentUser: function () {
+      return CURRENT_USER;
+    },
+    getCurrentRole: function () {
+      return CURRENT_ROLE;
+    },
+    readStoredSessionToken: function () {
+      return authStore && typeof authStore.readStoredSessionToken === "function"
+        ? authStore.readStoredSessionToken({
+          sessionToken: SESSION_TOKEN_KEY,
+          sessionTokenBackup: SESSION_TOKEN_BACKUP_KEY
+        })
+        : "";
+    },
+    getSharedApiKey: function () {
+      return storageUtils
+        ? storageUtils.safeGetItem(sessionStorage, API_SHARED_KEY_SESSION_KEY).trim()
+        : String(sessionStorage.getItem(API_SHARED_KEY_SESSION_KEY) || "").trim();
+    },
+    onNetworkError: function (message) {
+      apiOnline = false;
+      apiLastError = String(message || "sem conexao com API");
+      applyAccessProfile();
+    },
+    onHttpError: function (statusCode, detailMessage) {
+      const transportError = !statusCode || statusCode >= 500;
+      apiOnline = !transportError;
+      apiLastError = "HTTP " + statusCode + " " + String(detailMessage || "");
+      applyAccessProfile();
+    },
+    onAuthFailure: function () {
+      clearStoredSessionToken();
+      closeApiSocket();
+      showAuthGate("Sessao expirada. Faca login novamente.");
+    }
+  });
+
+  if (!concurrencyService || typeof concurrencyService.configure !== "function") return;
+  concurrencyService.configure({
+    isApiEnabled: function () {
+      return isApiEnabled();
+    },
+    canMutateRecords: function () {
+      return canMutateRecords();
+    },
+    ensureBackendEmenda: function (rec, options) {
+      return ensureBackendEmenda(rec, options);
+    },
+    apiRequest: function (method, path, body, eventOrigin, requestOptions) {
+      return apiRequest(method, path, body, eventOrigin, requestOptions);
+    },
+    getSelected: function () {
+      return getSelected();
+    },
+    getBackendIdForRecord: function (rec) {
+      return getBackendIdForRecord(rec);
+    },
+    getApiBaseUrl: function () {
+      return getApiBaseUrl();
+    },
+    getSessionToken: function () {
+      return readStoredSessionToken();
+    },
+    isApiSocketEnabled: function () {
+      return API_WS_ENABLED;
+    },
+    getCurrentUser: function () {
+      return CURRENT_USER;
+    },
+    getCurrentRole: function () {
+      return CURRENT_ROLE;
+    },
+    emendaLockPollMs: EMENDA_LOCK_POLL_MS,
+    apiWsPath: API_WS_PATH,
+    wsReconnectBaseMs: WS_RECONNECT_BASE_MS,
+    wsReconnectMaxMs: WS_RECONNECT_MAX_MS,
+    wsRefreshDebounceMs: WS_REFRESH_DEBOUNCE_MS,
+    text: function (value) {
+      return text(value);
+    },
+    fmtDateTime: function (value) {
+      return fmtDateTime(value);
+    },
+    extractApiError: function (err, fallback) {
+      return extractApiError(err, fallback);
+    },
+    onPresenceUpdated: function () {
+      const rec = getSelected();
+      if (rec) renderLivePresence(rec);
+    },
+    onQueueApiRefresh: async function () {
+      await bootstrapApiIntegration();
+    },
+    onLockStateChanged: function (payload) {
+      emendaLockState = payload && payload.state && typeof payload.state === "object" ? payload.state : null;
+      emendaLockReadOnly = !!(payload && payload.readOnly);
+      renderEmendaLockInfo(getSelected());
+      applyModalAccessProfile();
+      updateModalDraftUi();
+    }
+  });
 }

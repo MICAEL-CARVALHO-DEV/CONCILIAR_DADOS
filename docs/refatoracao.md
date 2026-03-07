@@ -14,11 +14,13 @@ Sair de um projeto "funciona, mas esta pesado" para um projeto:
 - [DONE] Registrar commit de checkpoint antes da refatoracao
 - [DONE] Criar `REFATORACAO_CHECKLIST.md`
 - [DONE] Criar este quadro de execucao
-- [TODO] Mapear `app.js` em `frontend/js/MAPA_APP.md`
-- [TODO] Mapear backend em `backend/MAPA_MAIN.md`
+- [DONE] Mapear `app.js` em `frontend/js/MAPA_APP.md`
+- [DONE] Mapear backend em `backend/MAPA_MAIN.md`
+- [DONE] Criar base de `utils`, `auth` e `api client` no frontend
+- [TODO] Continuar migracao do `app.js` para os modulos novos
 
-Active: mapear frontend antes de mover codigo
-Risks: arquivo `app.js` grande, backend ainda concentrado, regressao em auth/import/export
+Active: continuar a migracao do frontend por blocos pequenos
+Risks: arquivo `app.js` grande, backend ainda concentrado, regressao em auth/import/export e lock
 
 ## Fase 0 - Preparacao
 ### Dia 1 - Criar base segura
@@ -513,12 +515,15 @@ Completed:
 - checkpoint inicial registrado
 - checklist de regressao criado
 - quadro de execucao documentado
+- mapa do frontend criado
+- mapa do backend criado
+- base modular inicial do frontend criada
 
 Pending:
 
-- mapear `app.js`
-- mapear backend
-- iniciar extracao modular do frontend
+- continuar extracao modular do frontend
+- criar estrutura de pastas do frontend
+- aprofundar centralizacao de auth e API
 
 Blocked:
 
@@ -526,4 +531,4 @@ Blocked:
 
 Resume from:
 
-- criar `frontend/js/MAPA_APP.md` e documentar os blocos reais do `app.js`
+- migrar o proximo bloco do `app.js` para os modulos novos sem alterar comportamento
