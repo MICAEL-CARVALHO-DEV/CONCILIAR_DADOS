@@ -2989,39 +2989,51 @@ function renderModalAccessState(rec) {
   if (!modalAccessState) return;
   if (!modal || !modal.classList.contains("show") || !rec) {
     modalAccessState.classList.add("hidden");
+    modalAccessState.classList.remove("access-mode-readonly", "access-mode-edit", "access-mode-warning");
     modalAccessState.textContent = "";
     return;
   }
 
-  const showReadOnly = function (message) {
+  const showAccessState = function (mode, message) {
+    modalAccessState.textContent = message;
+    modalAccessState.classList.remove("access-mode-readonly", "access-mode-edit", "access-mode-warning");
+    if (mode === "readonly") {
+      modalAccessState.classList.add("access-mode-readonly");
+    } else if (mode === "edit") {
+      modalAccessState.classList.add("access-mode-edit");
+    } else if (mode === "warning") {
+      modalAccessState.classList.add("access-mode-warning");
+    }
     modalAccessState.textContent = message;
     modalAccessState.classList.remove("hidden");
   };
 
   if (!isApiEnabled()) {
     if (!canMutateRecords()) {
-      showReadOnly("MODO LEITURA: perfil SUPERVISAO monitora, sem alterar dados.");
+      showAccessState("readonly", "MODO LEITURA: perfil SUPERVISAO monitora, sem alterar dados.");
       return;
     }
     modalAccessState.classList.add("hidden");
+    modalAccessState.classList.remove("access-mode-readonly", "access-mode-edit", "access-mode-warning");
     modalAccessState.textContent = "";
     return;
   }
 
   if (!canMutateRecords()) {
-    showReadOnly("MODO LEITURA: perfil SUPERVISAO monitora, sem alterar dados.");
+    showAccessState("readonly", "MODO LEITURA: perfil SUPERVISAO monitora, sem alterar dados.");
     return;
   }
 
   if (!isEmendaLockReadOnly()) {
     modalAccessState.classList.add("hidden");
+    modalAccessState.classList.remove("access-mode-readonly", "access-mode-edit", "access-mode-warning");
     modalAccessState.textContent = "";
     return;
   }
 
   const lockState = getEmendaLockState();
   if (!lockState) {
-    showReadOnly("MODO LEITURA: verificando disponibilidade de edicao...");
+    showAccessState("warning", "MODO LEITURA: verificando disponibilidade de edicao...");
     return;
   }
 
@@ -3029,7 +3041,7 @@ function renderModalAccessState(rec) {
   const expiresAt = lockState && lockState.expires_at ? fmtDateTime(lockState.expires_at) : "";
   const ownerMsg = owner ? (" por " + owner) : " por outro usuario";
   const when = expiresAt ? (" Ate: " + expiresAt + ".") : "";
-  showReadOnly("MODO LEITURA: esta emenda esta em edicao" + ownerMsg + "." + when);
+  showAccessState("readonly", "MODO LEITURA: esta emenda esta em edicao" + ownerMsg + "." + when);
 }
 
 function renderEmendaLockInfo(rec) {

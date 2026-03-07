@@ -343,11 +343,29 @@ textarea {
   display: inline-block;
   padding: 6px 10px;
   border-radius: 10px;
-  border: 1px solid #f4d9a6;
-  background: #fff8e9;
-  color: #7a4b00;
   font-size: 0.8rem;
   font-weight: 700;
+  border: 1px solid #e0e0e0;
+  background: #f8fafc;
+  color: #374151;
+}
+
+.modal-access-state.access-mode-readonly {
+  border-color: #f4d9a6;
+  background: #fff8e9;
+  color: #7a4b00;
+}
+
+.modal-access-state.access-mode-warning {
+  border-color: #f8d7a8;
+  background: #fff4d6;
+  color: #8a5a10;
+}
+
+.modal-access-state.access-mode-edit {
+  border-color: #bce7d3;
+  background: #e7fbef;
+  color: #0f6b4a;
 }
 
 .modal-foot {
