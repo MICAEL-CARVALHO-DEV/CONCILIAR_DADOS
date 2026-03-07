@@ -60,6 +60,28 @@
     }
   }
 
+  function readAuthenticatedProfile(keys) {
+    var user = readAuthenticatedUser(keys);
+    return {
+      name: user.name,
+      role: user.role
+    };
+  }
+
+  function writeAuthenticatedProfile(profile, keys) {
+    writeAuthenticatedUser(profile || {}, keys);
+  }
+
+  function clearSessionAndProfile(keys) {
+    var cfg = withDefaults(keys);
+    clearStoredSessionToken(cfg);
+    clearAuthenticatedUser(cfg);
+  }
+
+  function hasStoredSession(keys) {
+    return !!readStoredSessionToken(keys);
+  }
+
   function redirectToAuth(page, query, nextPath) {
     var target = page || "login.html";
     var suffix = query ? (String(query).startsWith("?") ? String(query) : "?" + String(query)) : "";
@@ -75,8 +97,12 @@
     readStoredSessionToken: readStoredSessionToken,
     writeStoredSessionToken: writeStoredSessionToken,
     clearStoredSessionToken: clearStoredSessionToken,
+    clearSessionAndProfile: clearSessionAndProfile,
     readAuthenticatedUser: readAuthenticatedUser,
     writeAuthenticatedUser: writeAuthenticatedUser,
+    readAuthenticatedProfile: readAuthenticatedProfile,
+    writeAuthenticatedProfile: writeAuthenticatedProfile,
+    hasStoredSession: hasStoredSession,
     clearAuthenticatedUser: clearAuthenticatedUser,
     redirectToAuth: redirectToAuth
   };

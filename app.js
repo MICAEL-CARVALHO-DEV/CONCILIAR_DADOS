@@ -75,6 +75,12 @@ const authGuard = SEC_FRONTEND.authGuard || null;
 const apiClient = SEC_FRONTEND.apiClient || null;
 const concurrencyService = SEC_FRONTEND.concurrencyService || null;
 const uiRender = SEC_FRONTEND.uiRender || null;
+const AUTH_KEYS = Object.freeze({
+  userName: USER_NAME_KEY,
+  userRole: USER_ROLE_KEY,
+  sessionToken: SESSION_TOKEN_KEY,
+  sessionTokenBackup: SESSION_TOKEN_BACKUP_KEY
+});
 const API_WS_PATH = "/ws";
 const WS_RECONNECT_BASE_MS = 1500;
 const WS_RECONNECT_MAX_MS = 15000;
@@ -2598,14 +2604,11 @@ function removeStorageValue(store, key) {
 function setAuthenticatedUser(usuario) {
   CURRENT_USER = String(usuario.nome || CURRENT_USER).trim() || CURRENT_USER;
   CURRENT_ROLE = normalizeUserRole(usuario.perfil || CURRENT_ROLE);
-  if (authStore && typeof authStore.writeAuthenticatedUser === "function") {
-    authStore.writeAuthenticatedUser({
+  if (authStore && typeof authStore.writeAuthenticatedProfile === "function") {
+    authStore.writeAuthenticatedProfile({
       name: CURRENT_USER,
       role: CURRENT_ROLE
-    }, {
-      userName: USER_NAME_KEY,
-      userRole: USER_ROLE_KEY
-    });
+    }, AUTH_KEYS);
   } else {
     writeStorageValue(localStorage, USER_NAME_KEY, CURRENT_USER);
     writeStorageValue(localStorage, USER_ROLE_KEY, CURRENT_ROLE);
@@ -2637,13 +2640,10 @@ async function logoutCurrentUser() {
       // ignora erro de logout remoto
     }
   }
-  clearStoredSessionToken();
-  if (authStore && typeof authStore.clearAuthenticatedUser === "function") {
-    authStore.clearAuthenticatedUser({
-      userName: USER_NAME_KEY,
-      userRole: USER_ROLE_KEY
-    });
+  if (authStore && typeof authStore.clearSessionAndProfile === "function") {
+    authStore.clearSessionAndProfile(AUTH_KEYS);
   } else {
+    clearStoredSessionToken();
     removeStorageValue(localStorage, USER_NAME_KEY);
     removeStorageValue(localStorage, USER_ROLE_KEY);
   }
@@ -2662,10 +2662,7 @@ function isLocalFrontendContext() {
 
 function readStoredSessionToken() {
   if (authStore && typeof authStore.readStoredSessionToken === "function") {
-    return authStore.readStoredSessionToken({
-      sessionToken: SESSION_TOKEN_KEY,
-      sessionTokenBackup: SESSION_TOKEN_BACKUP_KEY
-    });
+    return authStore.readStoredSessionToken(AUTH_KEYS);
   }
   let sessionToken = readStorageValue(sessionStorage, SESSION_TOKEN_KEY);
   if (sessionToken) {
@@ -2683,10 +2680,7 @@ function readStoredSessionToken() {
 
 function writeStoredSessionToken(token) {
   if (authStore && typeof authStore.writeStoredSessionToken === "function") {
-    authStore.writeStoredSessionToken(token, {
-      sessionToken: SESSION_TOKEN_KEY,
-      sessionTokenBackup: SESSION_TOKEN_BACKUP_KEY
-    });
+    authStore.writeStoredSessionToken(token, AUTH_KEYS);
     return;
   }
   const raw = String(token || "").trim();
@@ -2700,10 +2694,7 @@ function writeStoredSessionToken(token) {
 
 function clearStoredSessionToken() {
   if (authStore && typeof authStore.clearStoredSessionToken === "function") {
-    authStore.clearStoredSessionToken({
-      sessionToken: SESSION_TOKEN_KEY,
-      sessionTokenBackup: SESSION_TOKEN_BACKUP_KEY
-    });
+    authStore.clearStoredSessionToken(AUTH_KEYS);
     return;
   }
   removeStorageValue(sessionStorage, SESSION_TOKEN_KEY);
@@ -2769,11 +2760,8 @@ async function initializeAuthFlow() {
 // Carrega configuracao de usuario local (fallback quando API esta desativada).
 function loadUserConfig(forcePrompt) {
   const legacyUser = readStorageValue(localStorage, "SEC_USER_ID");
-  const savedAuthUser = authStore && typeof authStore.readAuthenticatedUser === "function"
-    ? authStore.readAuthenticatedUser({
-      userName: USER_NAME_KEY,
-      userRole: USER_ROLE_KEY
-    })
+  const savedAuthUser = authStore && typeof authStore.readAuthenticatedProfile === "function"
+    ? authStore.readAuthenticatedProfile(AUTH_KEYS)
     : null;
   const savedUser = (savedAuthUser && savedAuthUser.name) || readStorageValue(localStorage, USER_NAME_KEY) || legacyUser;
   const savedRole = (savedAuthUser && savedAuthUser.role) || readStorageValue(localStorage, USER_ROLE_KEY);
@@ -2789,14 +2777,11 @@ function loadUserConfig(forcePrompt) {
 
     CURRENT_USER = String(nameInput).trim() || CURRENT_USER;
     CURRENT_ROLE = normalizeUserRole(roleInput);
-    if (authStore && typeof authStore.writeAuthenticatedUser === "function") {
-      authStore.writeAuthenticatedUser({
+    if (authStore && typeof authStore.writeAuthenticatedProfile === "function") {
+      authStore.writeAuthenticatedProfile({
         name: CURRENT_USER,
         role: CURRENT_ROLE
-      }, {
-        userName: USER_NAME_KEY,
-        userRole: USER_ROLE_KEY
-      });
+      }, AUTH_KEYS);
     } else {
       writeStorageValue(localStorage, USER_NAME_KEY, CURRENT_USER);
       writeStorageValue(localStorage, USER_ROLE_KEY, CURRENT_ROLE);
@@ -5625,12 +5610,7 @@ function configureFrontendModules() {
       return CURRENT_ROLE;
     },
     readStoredSessionToken: function () {
-      return authStore && typeof authStore.readStoredSessionToken === "function"
-        ? authStore.readStoredSessionToken({
-          sessionToken: SESSION_TOKEN_KEY,
-          sessionTokenBackup: SESSION_TOKEN_BACKUP_KEY
-        })
-        : "";
+      return readStoredSessionToken();
     },
     getSharedApiKey: function () {
       return storageUtils
