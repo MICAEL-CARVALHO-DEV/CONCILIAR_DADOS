@@ -7,6 +7,7 @@
     return {
       userName: cfg.userName || "SEC_USER_NAME",
       userRole: cfg.userRole || "SEC_USER_ROLE",
+      legacyUserId: cfg.legacyUserId || "SEC_USER_ID",
       sessionToken: cfg.sessionToken || "SEC_SESSION_TOKEN",
       sessionTokenBackup: cfg.sessionTokenBackup || "SEC_SESSION_TOKEN_BKP"
     };
@@ -78,6 +79,15 @@
     clearAuthenticatedUser(cfg);
   }
 
+  function readLegacyAuthenticatedProfile(keys) {
+    var cfg = withDefaults(keys);
+    if (!storageUtils) return { name: "", role: "" };
+    return {
+      name: storageUtils.safeGetItem(global.localStorage, cfg.legacyUserId).trim(),
+      role: ""
+    };
+  }
+
   function hasStoredSession(keys) {
     return !!readStoredSessionToken(keys);
   }
@@ -103,6 +113,7 @@
     readAuthenticatedProfile: readAuthenticatedProfile,
     writeAuthenticatedProfile: writeAuthenticatedProfile,
     hasStoredSession: hasStoredSession,
+    readLegacyAuthenticatedProfile: readLegacyAuthenticatedProfile,
     clearAuthenticatedUser: clearAuthenticatedUser,
     redirectToAuth: redirectToAuth
   };

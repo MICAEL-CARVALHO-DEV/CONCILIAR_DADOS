@@ -76,6 +76,7 @@ const uiRender = SEC_FRONTEND.uiRender || null;
 const AUTH_KEYS = Object.freeze({
   userName: "SEC_USER_NAME",
   userRole: "SEC_USER_ROLE",
+  legacyUserId: "SEC_USER_ID",
   sessionToken: SESSION_TOKEN_KEY,
   sessionTokenBackup: SESSION_TOKEN_BACKUP_KEY
 });
@@ -2752,11 +2753,13 @@ async function initializeAuthFlow() {
 
 // Carrega configuracao de usuario local (fallback quando API esta desativada).
 function loadUserConfig(forcePrompt) {
-  const legacyUser = readStorageValue(localStorage, "SEC_USER_ID");
   const savedAuthUser = authStore && typeof authStore.readAuthenticatedProfile === "function"
     ? authStore.readAuthenticatedProfile(AUTH_KEYS)
     : null;
-  const savedUser = (savedAuthUser && savedAuthUser.name) || legacyUser;
+  const legacyAuthUser = authStore && typeof authStore.readLegacyAuthenticatedProfile === "function"
+    ? authStore.readLegacyAuthenticatedProfile(AUTH_KEYS)
+    : null;
+  const savedUser = (savedAuthUser && savedAuthUser.name) || (legacyAuthUser && legacyAuthUser.name);
   const savedRole = savedAuthUser && savedAuthUser.role;
 
   if (savedUser) CURRENT_USER = String(savedUser).trim() || CURRENT_USER;
