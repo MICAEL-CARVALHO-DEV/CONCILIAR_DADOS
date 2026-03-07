@@ -1977,11 +1977,12 @@ function processImportedRows(sourceRows, fileName) {
 
 // Cria um novo registro interno a partir de uma linha importada.
 function createRecordFromImport(incoming, ctx, fileName) {
-  const now = isoNow();
-  const ano = incoming.ano || currentYear();
-  const id = incoming.id || generateInternalId(ano, idCountersByYear);
+  const importCtx = getImportPipelineContext();
+  const now = importCtx.isoNow();
+  const ano = incoming.ano || importCtx.currentYear();
+  const id = incoming.id || importCtx.generateInternalIdForYear(ano);
 
-  const base = mkRecord({
+  const base = importCtx.mkRecord({
     id: id,
     ano: ano,
     identificacao: incoming.identificacao || "-",
@@ -2002,18 +2003,18 @@ function createRecordFromImport(incoming, ctx, fileName) {
     updated_at: now,
     source_sheet: incoming.source_sheet || ctx.sheetName || "Controle de EPI",
     source_row: ctx.rowNumber != null ? Number(ctx.rowNumber) : null,
-    all_fields: shallowCloneObj(incoming.all_fields || {}),
-    eventos: [mkEvent("IMPORT", { note: buildImportNote(fileName, ctx) })]
+    all_fields: importCtx.shallowCloneObj(incoming.all_fields || {}),
+    eventos: [importCtx.mkEvent("IMPORT", { note: importCtx.buildImportNote(fileName, ctx) })]
   });
 
-  base.ref_key = buildReferenceKey(base);
+  base.ref_key = importCtx.buildReferenceKey(base);
 
   if (incoming.status_oficial) {
-    base.eventos.unshift(mkEvent("MARK_STATUS", {
-      to: normalizeStatus(incoming.status_oficial),
+    base.eventos.unshift(importCtx.mkEvent("MARK_STATUS", {
+      to: importCtx.normalizeStatus(incoming.status_oficial),
       note: "Marcacao inicial vinda da importacao.",
-      actor_user: SYSTEM_MIGRATION_USER,
-      actor_role: SYSTEM_MIGRATION_ROLE
+      actor_user: importCtx.systemMigrationUser,
+      actor_role: importCtx.systemMigrationRole
     }));
   }
 
@@ -2022,10 +2023,11 @@ function createRecordFromImport(incoming, ctx, fileName) {
 
 // Faz merge de uma linha importada em registro existente, preservando historico.
 function mergeImportIntoRecord(target, incoming, ctx, fileName) {
+  const importCtx = getImportPipelineContext();
   const changedEvents = [];
   let changedAny = false;
 
-  const rawMergeChanged = mergeRawFields(target, incoming.all_fields || {});
+  const rawMergeChanged = importCtx.mergeRawFields(target, incoming.all_fields || {});
   if (rawMergeChanged) changedAny = true;
 
   if (incoming.source_sheet && incoming.source_sheet !== target.source_sheet) {
@@ -2037,50 +2039,50 @@ function mergeImportIntoRecord(target, incoming, ctx, fileName) {
     changedAny = true;
   }
 
-  TRACKED_FIELDS.forEach(function (def) {
+  importCtx.trackedFields.forEach(function (def) {
     const nextRaw = incoming[def.key];
-    if (!hasIncomingValue(nextRaw, def.type)) return;
+    if (!importCtx.hasIncomingValue(nextRaw, def.type)) return;
 
     const prev = target[def.key];
-    if (!hasFieldChanged(prev, nextRaw, def.type)) return;
+    if (!importCtx.hasFieldChanged(prev, nextRaw, def.type)) return;
 
     if (def.type === "money" || def.type === "number") target[def.key] = Number(nextRaw);
     else target[def.key] = String(nextRaw).trim();
 
-    changedEvents.push(mkEvent("EDIT_FIELD", {
+    changedEvents.push(importCtx.mkEvent("EDIT_FIELD", {
       field: def.label,
-      from: stringifyFieldValue(prev, def.type),
-      to: stringifyFieldValue(target[def.key], def.type),
+      from: importCtx.stringifyFieldValue(prev, def.type),
+      to: importCtx.stringifyFieldValue(target[def.key], def.type),
       note: "Atualizado via importacao."
     }));
     changedAny = true;
   });
 
   if (incoming.status_oficial) {
-    const nextStatus = normalizeStatus(incoming.status_oficial);
-    const prevMarked = latestMarkedStatus(target);
-    if (normalizeStatus(prevMarked || "") !== nextStatus) {
-      changedEvents.push(mkEvent("MARK_STATUS", {
+    const nextStatus = importCtx.normalizeStatus(incoming.status_oficial);
+    const prevMarked = importCtx.latestMarkedStatus(target);
+    if (importCtx.normalizeStatus(prevMarked || "") !== nextStatus) {
+      changedEvents.push(importCtx.mkEvent("MARK_STATUS", {
         to: nextStatus,
         note: "Marcacao atualizada via importacao.",
-        actor_user: SYSTEM_MIGRATION_USER,
-        actor_role: SYSTEM_MIGRATION_ROLE
+        actor_user: importCtx.systemMigrationUser,
+        actor_role: importCtx.systemMigrationRole
       }));
       changedAny = true;
     }
   }
 
   const oldRef = target.ref_key || "";
-  syncCanonicalToAllFields(target);
-  target.ref_key = buildReferenceKey(target);
+  importCtx.syncCanonicalToAllFields(target);
+  target.ref_key = importCtx.buildReferenceKey(target);
   if (oldRef !== target.ref_key) {
-    changedEvents.push(mkEvent("EDIT_FIELD", { field: "Chave Referencia", from: oldRef, to: target.ref_key, note: "Recalculada apos importacao." }));
+    changedEvents.push(importCtx.mkEvent("EDIT_FIELD", { field: "Chave Referencia", from: oldRef, to: target.ref_key, note: "Recalculada apos importacao." }));
     changedAny = true;
   }
 
   if (changedAny) {
-    target.updated_at = isoNow();
-    changedEvents.push(mkEvent("IMPORT", { note: buildImportNote(fileName, ctx) + " (com atualizacoes)" }));
+    target.updated_at = importCtx.isoNow();
+    changedEvents.push(importCtx.mkEvent("IMPORT", { note: importCtx.buildImportNote(fileName, ctx) + " (com atualizacoes)" }));
     target.eventos = changedEvents.concat(target.eventos || []);
   }
 
@@ -2088,44 +2090,45 @@ function mergeImportIntoRecord(target, incoming, ctx, fileName) {
 }
 
 function mapImportRow(ctx) {
-  const rawOriginal = shallowCloneObj(ctx.row || {});
+  const importCtx = getImportPipelineContext();
+  const rawOriginal = importCtx.shallowCloneObj(ctx.row || {});
   const row = normalizeRowKeys(rawOriginal);
 
-  const ano = toInt(pickValue(row, IMPORT_ALIASES.ano));
-  const identificacao = asText(pickValue(row, IMPORT_ALIASES.identificacao));
-  const codSubfonte = asText(pickValue(row, IMPORT_ALIASES.cod_subfonte));
-  const codAcao = asText(pickValue(row, IMPORT_ALIASES.cod_acao));
-  const municipio = asText(pickValue(row, IMPORT_ALIASES.municipio));
-  const deputado = asText(pickValue(row, IMPORT_ALIASES.deputado));
+  const ano = importCtx.toInt(importCtx.pickValue(row, importCtx.importAliases.ano));
+  const identificacao = importCtx.asText(importCtx.pickValue(row, importCtx.importAliases.identificacao));
+  const codSubfonte = importCtx.asText(importCtx.pickValue(row, importCtx.importAliases.cod_subfonte));
+  const codAcao = importCtx.asText(importCtx.pickValue(row, importCtx.importAliases.cod_acao));
+  const municipio = importCtx.asText(importCtx.pickValue(row, importCtx.importAliases.municipio));
+  const deputado = importCtx.asText(importCtx.pickValue(row, importCtx.importAliases.deputado));
 
   const record = {
-    id: asText(pickValue(row, IMPORT_ALIASES.id)),
-    ano: ano || currentYear(),
+    id: importCtx.asText(importCtx.pickValue(row, importCtx.importAliases.id)),
+    ano: ano || importCtx.currentYear(),
     identificacao: identificacao,
     cod_subfonte: codSubfonte,
     deputado: deputado,
-    cod_uo: asText(pickValue(row, IMPORT_ALIASES.cod_uo)),
-    sigla_uo: asText(pickValue(row, IMPORT_ALIASES.sigla_uo)),
-    cod_orgao: asText(pickValue(row, IMPORT_ALIASES.cod_orgao)),
+    cod_uo: importCtx.asText(importCtx.pickValue(row, importCtx.importAliases.cod_uo)),
+    sigla_uo: importCtx.asText(importCtx.pickValue(row, importCtx.importAliases.sigla_uo)),
+    cod_orgao: importCtx.asText(importCtx.pickValue(row, importCtx.importAliases.cod_orgao)),
     cod_acao: codAcao,
-    descricao_acao: asText(pickValue(row, IMPORT_ALIASES.descricao_acao)),
-    plan_a: asText(pickValue(row, IMPORT_ALIASES.plan_a)),
-    plan_b: asText(pickValue(row, IMPORT_ALIASES.plan_b)),
+    descricao_acao: importCtx.asText(importCtx.pickValue(row, importCtx.importAliases.descricao_acao)),
+    plan_a: importCtx.asText(importCtx.pickValue(row, importCtx.importAliases.plan_a)),
+    plan_b: importCtx.asText(importCtx.pickValue(row, importCtx.importAliases.plan_b)),
     municipio: municipio,
-    valor_inicial: toNumberOrNull(pickValue(row, IMPORT_ALIASES.valor_inicial)),
-    valor_atual: toNumberOrNull(pickValue(row, IMPORT_ALIASES.valor_atual)),
-    processo_sei: asText(pickValue(row, IMPORT_ALIASES.processo_sei)),
+    valor_inicial: importCtx.toNumberOrNull(importCtx.pickValue(row, importCtx.importAliases.valor_inicial)),
+    valor_atual: importCtx.toNumberOrNull(importCtx.pickValue(row, importCtx.importAliases.valor_atual)),
+    processo_sei: importCtx.asText(importCtx.pickValue(row, importCtx.importAliases.processo_sei)),
     status_oficial: "",
     all_fields: rawOriginal,
     source_sheet: ctx.sheetName || "XLSX",
     source_row: ctx.rowNumber != null ? Number(ctx.rowNumber) : null
   };
 
-  const statusRaw = asText(pickValue(row, IMPORT_ALIASES.status_oficial));
-  if (statusRaw) record.status_oficial = normalizeStatus(statusRaw);
+  const statusRaw = importCtx.asText(importCtx.pickValue(row, importCtx.importAliases.status_oficial));
+  if (statusRaw) record.status_oficial = importCtx.normalizeStatus(statusRaw);
 
-  syncCanonicalToAllFields(record);
-  record.ref_key = buildReferenceKey(record);
+  importCtx.syncCanonicalToAllFields(record);
+  record.ref_key = importCtx.buildReferenceKey(record);
   return record;
 }
 
@@ -2333,10 +2336,11 @@ function buildImportValidationReport(sourceRows) {
 }
 
 function buildKnownHeaderSet() {
+  const importCtx = getImportPipelineContext();
   const set = new Set();
-  Object.keys(IMPORT_ALIASES).forEach(function (key) {
-    (IMPORT_ALIASES[key] || []).forEach(function (alias) {
-      set.add(normalizeHeader(alias));
+  Object.keys(importCtx.importAliases).forEach(function (key) {
+    (importCtx.importAliases[key] || []).forEach(function (alias) {
+      set.add(importCtx.normalizeHeader(alias));
     });
   });
   return set;
@@ -4626,6 +4630,38 @@ function getProgressContext() {
     escapeHtml: escapeHtml,
     statusClass: statusClass,
     daysSince: daysSince
+  };
+}
+
+function getImportPipelineContext() {
+  return {
+    importAliases: IMPORT_ALIASES,
+    trackedFields: TRACKED_FIELDS,
+    systemMigrationUser: SYSTEM_MIGRATION_USER,
+    systemMigrationRole: SYSTEM_MIGRATION_ROLE,
+    currentYear: currentYear,
+    generateInternalIdForYear: function (ano) {
+      return generateInternalId(ano, idCountersByYear);
+    },
+    mkRecord: mkRecord,
+    mkEvent: mkEvent,
+    shallowCloneObj: shallowCloneObj,
+    buildImportNote: buildImportNote,
+    buildReferenceKey: buildReferenceKey,
+    normalizeStatus: normalizeStatus,
+    mergeRawFields: mergeRawFields,
+    hasIncomingValue: hasIncomingValue,
+    hasFieldChanged: hasFieldChanged,
+    stringifyFieldValue: stringifyFieldValue,
+    syncCanonicalToAllFields: syncCanonicalToAllFields,
+    isoNow: isoNow,
+    latestMarkedStatus: latestMarkedStatus,
+    toInt: toInt,
+    asText: asText,
+    pickValue: pickValue,
+    toNumberOrNull: toNumberOrNull,
+    normalizeHeader: normalizeHeader,
+    text: text
   };
 }
 

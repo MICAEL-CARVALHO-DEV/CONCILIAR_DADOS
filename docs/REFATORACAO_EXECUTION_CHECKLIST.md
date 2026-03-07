@@ -49,6 +49,7 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Criar `getFilterContext()` no `app.js` para centralizar dependencias dos wrappers de filtros principais e exportacao customizada.
 - [DONE] Criar `getApiClientConfigContext()` e `getConcurrencyConfigContext()` no `app.js` para tirar configuracoes inline de `configureFrontendModules()`.
 - [DONE] Criar `getProgressContext()` no `app.js` para centralizar dependencias passadas aos wrappers de `progressUtils`.
+- [DONE] Criar `getImportPipelineContext()` no `app.js` para centralizar dependencias do fluxo de mapeamento, criacao e merge de importacao.
 
-Active: ID-FE-45
+Active: ID-FE-46
 Risks: validar comportamento em dispositivos com storage bloqueado.
