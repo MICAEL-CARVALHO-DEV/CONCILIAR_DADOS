@@ -689,6 +689,62 @@
     container.appendChild(footer);
   }
 
+  function updateModalDraftUi(container, draftHintEl, saveGuardEl, saveButtonEl, draftState, options) {
+    var opts = options || {};
+    var dirty = !!opts.dirty;
+    var pending = !!opts.pending;
+    var hasDraft = dirty || pending;
+    var canSave = !!opts.canSave;
+    var blockReason = String(opts.blockReason || "");
+
+    if (draftHintEl) {
+      draftHintEl.classList.toggle("hidden", !hasDraft);
+      if (hasDraft) {
+        if (pending) {
+          draftHintEl.textContent = "Marcacao/nota pronta: somente Salvar edicoes grava no historico.";
+        } else if (canSave) {
+          draftHintEl.textContent = "Edicao pendente: pronta para salvar.";
+        } else {
+          draftHintEl.textContent = "Edicao pendente: informe status e motivo na marcacao para salvar.";
+        }
+      }
+    }
+
+    if (saveGuardEl) {
+      saveGuardEl.classList.toggle("hidden", !hasDraft || !blockReason);
+      saveGuardEl.textContent = blockReason;
+    }
+
+    if (saveButtonEl) saveButtonEl.disabled = !canSave;
+
+    if (!container) return;
+    var inputs = container.querySelectorAll("[data-kv-field]");
+    inputs.forEach(function (el) {
+      var key = el.getAttribute("data-kv-field");
+      var isDirty = !!(draftState && draftState.dirty && draftState.dirty[key]);
+      el.classList.toggle("kv-dirty", isDirty);
+    });
+  }
+
+  function applyModalAccessProfile(container, controls, options) {
+    var opts = options || {};
+    var readOnlyMode = !!opts.readOnlyMode;
+    var fieldContainer = container || null;
+    var refs = controls && typeof controls === "object" ? controls : {};
+
+    if (refs.markStatus) refs.markStatus.disabled = readOnlyMode;
+    if (refs.markReason) refs.markReason.disabled = readOnlyMode;
+    if (refs.btnMarkStatus) refs.btnMarkStatus.disabled = readOnlyMode;
+    if (refs.btnAddNote) refs.btnAddNote.disabled = readOnlyMode;
+    if (refs.btnKvSave) refs.btnKvSave.style.display = readOnlyMode ? "none" : "inline-block";
+
+    if (!fieldContainer) return;
+    var inputs = fieldContainer.querySelectorAll("[data-kv-field]");
+    inputs.forEach(function (el) {
+      el.disabled = readOnlyMode;
+    });
+  }
+
   function resetAccessState(container) {
     if (!container) return;
     container.classList.add("hidden");
@@ -819,6 +875,8 @@
     renderPendingUsersTable,
     renderKvEditor,
     renderUserProgressBox,
+    updateModalDraftUi,
+    applyModalAccessProfile,
     renderModalAccessState,
     renderEmendaLockInfo,
     renderLivePresence

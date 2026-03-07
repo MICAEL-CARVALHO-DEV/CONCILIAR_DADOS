@@ -1204,6 +1204,16 @@ function updateModalDraftUi() {
   const hasDraft = dirty || pending;
   const canSave = canSaveDraftNow();
   const blockReason = getDraftSaveBlockReason();
+  const updateModalDraftUiUtil = getUiRenderUtil("updateModalDraftUi");
+  if (updateModalDraftUiUtil) {
+    updateModalDraftUiUtil(kv, kvDraftHint, modalSaveGuard, btnKvSave, modalDraftState, {
+      dirty: dirty,
+      pending: pending,
+      canSave: canSave,
+      blockReason: blockReason
+    });
+    return;
+  }
 
   if (kvDraftHint) {
     kvDraftHint.classList.toggle("hidden", !hasDraft);
@@ -1236,6 +1246,20 @@ function updateModalDraftUi() {
 
 function applyModalAccessProfile() {
   const readOnlyMode = !canMutateRecords() || isEmendaLockReadOnly();
+  const applyModalAccessProfileUtil = getUiRenderUtil("applyModalAccessProfile");
+  if (applyModalAccessProfileUtil) {
+    applyModalAccessProfileUtil(kv, {
+      markStatus: markStatus,
+      markReason: markReason,
+      btnMarkStatus: btnMarkStatus,
+      btnAddNote: btnAddNote,
+      btnKvSave: btnKvSave
+    }, {
+      readOnlyMode: readOnlyMode
+    });
+    return;
+  }
+
   if (markStatus) markStatus.disabled = readOnlyMode;
   if (markReason) markReason.disabled = readOnlyMode;
   if (btnMarkStatus) btnMarkStatus.disabled = readOnlyMode;

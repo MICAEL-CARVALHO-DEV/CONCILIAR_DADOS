@@ -61,6 +61,7 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Extrair o fluxo de exportacao por escopo para `frontend/js/utils/exportFlow.js`, incluindo filtro de registros e orquestracao de `runExportByScope()`.
 - [DONE] Extrair renderizadores de acesso/presenca do modal para `frontend/js/ui/renderers.js`, deixando `app.js` apenas com bridges de estado.
 - [DONE] Extrair o editor de campos do modal e o box de progresso do usuario para `frontend/js/ui/renderers.js`, reduzindo UI local do `app.js`.
+- [DONE] Extrair a atualizacao visual do rascunho e o perfil de acesso do modal para `frontend/js/ui/renderers.js`, deixando `app.js` com estado e regras.
 
-Active: ID-FE-57
+Active: ID-FE-58
 Risks: validar comportamento em dispositivos com storage bloqueado.
