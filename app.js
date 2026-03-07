@@ -4216,16 +4216,14 @@ function buildApiHeaders(eventOrigin) {
     headers["X-Session-Token"] = token;
   }
 
-  const key = String(sessionStorage.getItem(API_SHARED_KEY_SESSION_KEY) || "").trim();
+  const key = readStorageValue(sessionStorage, API_SHARED_KEY_SESSION_KEY);
   if (key) headers["X-API-Key"] = key;
 
   return headers;
 }
 
 function getStorageMode() {
-  const configured = storageUtils
-    ? storageUtils.safeGetItem(localStorage, STORAGE_MODE_KEY).trim().toLowerCase()
-    : String(localStorage.getItem(STORAGE_MODE_KEY) || "").trim().toLowerCase();
+  const configured = readStorageValue(localStorage, STORAGE_MODE_KEY).toLowerCase();
   if (configured === STORAGE_MODE_LOCAL) return STORAGE_MODE_LOCAL;
   return STORAGE_MODE_SESSION;
 }
@@ -4502,7 +4500,7 @@ function notifyStateUpdated() {
   if (stateChannel) {
     stateChannel.postMessage({ type: "state_updated", at: Date.now(), tabId: LOCAL_TAB_ID });
   }
-  localStorage.setItem(CROSS_TAB_PING_KEY, String(Date.now()));
+  writeStorageValue(localStorage, CROSS_TAB_PING_KEY, String(Date.now()));
 }
 
 // Recarrega estado salvo e redesenha interface.
@@ -4519,20 +4517,20 @@ function loadState() {
   try {
     const primary = getPrimaryStorage();
     const secondary = getSecondaryStorage();
-    const raw = primary.getItem(STORAGE_KEY);
+    const raw = readStorageValue(primary, STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (parsed && Array.isArray(parsed.records)) return parsed;
     }
 
-    const rawSecondary = secondary.getItem(STORAGE_KEY);
+    const rawSecondary = readStorageValue(secondary, STORAGE_KEY);
     if (rawSecondary) {
       const parsedSecondary = JSON.parse(rawSecondary);
       if (parsedSecondary && Array.isArray(parsedSecondary.records)) return parsedSecondary;
     }
 
     for (let i = 0; i < LEGACY_STORAGE_KEYS.length; i += 1) {
-      const legacyRaw = localStorage.getItem(LEGACY_STORAGE_KEYS[i]);
+      const legacyRaw = readStorageValue(localStorage, LEGACY_STORAGE_KEYS[i]);
       if (!legacyRaw) continue;
       const parsedLegacy = JSON.parse(legacyRaw);
       if (parsedLegacy && Array.isArray(parsedLegacy.records)) return { records: parsedLegacy.records };
@@ -6067,7 +6065,7 @@ function configureFrontendModules() {
     getSharedApiKey: function () {
       return storageUtils
         ? storageUtils.safeGetItem(sessionStorage, API_SHARED_KEY_SESSION_KEY).trim()
-        : String(sessionStorage.getItem(API_SHARED_KEY_SESSION_KEY) || "").trim();
+        : readStorageValue(sessionStorage, API_SHARED_KEY_SESSION_KEY);
     },
     onNetworkError: function (message) {
       apiOnline = false;
