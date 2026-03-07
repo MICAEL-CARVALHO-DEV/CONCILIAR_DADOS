@@ -27,6 +27,7 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Ajustar `frontend/js/auth/authStore.js` para reutilizar helpers genéricos de `storageUtils` em acessos de autenticação, reduzindo fallback duplicado.
 - [DONE] Delegar leitura/gravação/limpeza de token do `app.js` para `storageUtils` (com fallback preservado).
 - [DONE] Ler `API shared key` via `storageUtils.readStorageValue` na configuração do `apiClient`.
+- [DONE] Usar `storageUtils.readStorageValue` ao montar headers da API para `X-API-Key`.
 
 Active: ID-FE-24
 Risks: validar comportamento em dispositivos com storage bloqueado.
