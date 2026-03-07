@@ -490,19 +490,10 @@ function getEscapeUtil(methodName) {
 
 // Inicializa os filtros da UI principal e prepara os selects dependentes.
 function initSelects() {
+  const filterCtx = getFilterContext();
   const initSelectsUtil = getFilterUtil("initSelects");
   if (initSelectsUtil) {
-    initSelectsUtil({
-      statusFilter: statusFilter,
-      markStatus: markStatus,
-      yearFilter: yearFilter,
-      exportCustomYear: exportCustomYear,
-      exportCustomStatus: exportCustomStatus,
-      statusFilters: STATUS_FILTERS,
-      statusValues: STATUS,
-      records: state.records,
-      toInt: toInt
-    });
+    initSelectsUtil(filterCtx);
     return;
   }
 
@@ -517,14 +508,13 @@ function initSelects() {
 }
 
 function syncYearFilter() {
+  const filterCtx = getFilterContext();
   const syncYearFilterUtil = getFilterUtil("syncYearFilter");
   if (syncYearFilterUtil) {
-    syncYearFilterUtil({
+    syncYearFilterUtil(Object.assign({}, filterCtx, {
       select: yearFilter,
-      current: yearFilter.value,
-      records: state.records,
-      toInt: toInt
-    });
+      current: yearFilter.value
+    }));
     return;
   }
 
@@ -545,17 +535,10 @@ function syncYearFilter() {
 }
 
 function syncCustomExportFilters() {
+  const filterCtx = getFilterContext();
   const syncCustomExportFiltersUtil = getFilterUtil("syncCustomExportFilters");
   if (syncCustomExportFiltersUtil) {
-    syncCustomExportFiltersUtil({
-      exportCustomYear: exportCustomYear,
-      exportCustomStatus: exportCustomStatus,
-      records: state.records,
-      statusValues: STATUS,
-      toInt: toInt,
-      currentYear: exportCustomYear ? exportCustomYear.value : "",
-      currentStatus: exportCustomStatus ? exportCustomStatus.value : ""
-    });
+    syncCustomExportFiltersUtil(filterCtx);
     return;
   }
 
@@ -4622,6 +4605,22 @@ function getUiRenderContext() {
     },
     roles: USER_ROLE_OPTIONS,
     normalizeUserRole: normalizeUserRole
+  };
+}
+
+function getFilterContext() {
+  return {
+    statusFilter: statusFilter,
+    markStatus: markStatus,
+    yearFilter: yearFilter,
+    exportCustomYear: exportCustomYear,
+    exportCustomStatus: exportCustomStatus,
+    statusFilters: STATUS_FILTERS,
+    statusValues: STATUS,
+    records: state.records,
+    toInt: toInt,
+    currentYear: exportCustomYear ? exportCustomYear.value : "",
+    currentStatus: exportCustomStatus ? exportCustomStatus.value : ""
   };
 }
 
