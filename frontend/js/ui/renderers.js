@@ -34,33 +34,29 @@
     return badge;
   }
 
-  function appendRenderedMarkup(container, rendered) {
-    if (!container || rendered == null) return;
-    if (domUtils && typeof domUtils.appendRenderedMarkup === "function") {
-      domUtils.appendRenderedMarkup(container, rendered);
-      return;
-    }
+  var appendRenderedMarkup = (domUtils && typeof domUtils.appendRenderedMarkup === "function")
+    ? domUtils.appendRenderedMarkup
+    : function (container, rendered) {
+        if (!container || rendered == null) return;
 
-    var isNode = (typeof Node !== "undefined" && rendered instanceof Node)
-      || (typeof DocumentFragment !== "undefined" && rendered instanceof DocumentFragment);
-    if (isNode) {
-      container.appendChild(rendered);
-      return;
-    }
+        if (typeof Node !== "undefined" && rendered instanceof Node || typeof DocumentFragment !== "undefined" && rendered instanceof DocumentFragment) {
+          container.appendChild(rendered);
+          return;
+        }
 
-    var html = String(rendered);
-    if (!html) return;
-    var fragment = null;
-    if (typeof document.createRange === "function") {
-      fragment = document.createRange().createContextualFragment(html);
-    } else {
-      var tmp = document.createElement("div");
-      tmp.innerHTML = html;
-      fragment = document.createDocumentFragment();
-      while (tmp.firstChild) fragment.appendChild(tmp.firstChild);
-    }
-    container.appendChild(fragment);
-  }
+        var html = String(rendered);
+        if (!html) return;
+        var fragment = null;
+        if (typeof document.createRange === "function") {
+          fragment = document.createRange().createContextualFragment(html);
+        } else {
+          var tmp = document.createElement("div");
+          tmp.innerHTML = html;
+          fragment = document.createDocumentFragment();
+          while (tmp.firstChild) fragment.appendChild(tmp.firstChild);
+        }
+        container.appendChild(fragment);
+      };
 
   function renderHistoryToContainer(container, events, options) {
     if (!container) return;
