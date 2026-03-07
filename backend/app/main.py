@@ -11,8 +11,8 @@ from sqlalchemy import func, inspect, or_, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from .core.dependencies import _actor_from_headers, _actor_optional_from_headers, _require_manager, _require_owner
 from .core.security import (
-    ALLOWED_ROLES,
     IMMUTABLE_OWNER_NAMES,
     _actor_from_bearer_token,
     _actor_from_legacy_session,
@@ -76,7 +76,6 @@ app.add_middleware(
 )
 ai_orchestrator = AIOrchestrator(settings)
 
-MANAGER_ROLES = {"APG", "SUPERVISAO", "PROGRAMADOR"}
 EDITOR_ROLES = {"APG", "CONTABIL", "PROGRAMADOR"}
 OWNER_ROLE = "PROGRAMADOR"
 PUBLIC_REGISTER_ROLES = {"APG", "SUPERVISAO", "CONTABIL", "POWERBI"}
@@ -551,87 +550,9 @@ def _apply_emenda_field_edit(emenda: Emenda, field_name: str, raw_value: str | N
     setattr(emenda, field_name, value)
 
 
-def _actor_from_headers(
-    authorization: Annotated[str | None, Header(alias="Authorization")] = None,
-    x_session_token: Annotated[str | None, Header(alias="X-Session-Token")] = None,
-    x_api_key: Annotated[str | None, Header(alias="X-API-Key")] = None,
-    x_user_name: Annotated[str | None, Header(alias="X-User-Name")] = None,
-    x_user_role: Annotated[str | None, Header(alias="X-User-Role")] = None,
-    db: Session = Depends(get_db),
-) -> dict:
-    # EstratÃ©gia de autenticaÃ§Ã£o:
-    # 1) Bearer JWT (preferencial)
-    # 2) X-Session-Token (compatibilidade)
-    # 3) Shared key apenas se explicitamente habilitada (dev/legado).
-    if not settings.API_AUTH_ENABLED:
-        name = (x_user_name or "sistema").strip() or "sistema"
-        role = _normalize_role(x_user_role or "PROGRAMADOR")
-        return {"id": None, "name": name, "role": role, "session_token": None, "session_sid": None, "auth_type": "disabled"}
-
-    auth_value = (authorization or "").strip()
-    if auth_value.lower().startswith("bearer "):
-        bearer_token = auth_value[7:].strip()
-        actor = _actor_from_bearer_token(bearer_token, db)
-        if actor:
-            return actor
-
-    session_token = (x_session_token or "").strip()
-    if session_token:
-        actor = _actor_from_bearer_token(session_token, db)
-        if actor:
-            return actor
-
-        actor = _actor_from_legacy_session(session_token, db)
-        if actor:
-            return actor
-
-    if settings.shared_key_auth_enabled and x_api_key and x_api_key == settings.API_SHARED_KEY:
-        name = (x_user_name or "").strip()
-        role = (x_user_role or "").strip().upper()
-        if name and role in ALLOWED_ROLES:
-            return {"id": None, "name": name, "role": role, "session_token": None, "session_sid": None, "auth_type": "shared_key"}
-
-    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="nao autenticado")
-
-
-def _actor_optional_from_headers(
-    authorization: str | None,
-    x_session_token: str | None,
-    db: Session,
-) -> dict | None:
-    auth_value = (authorization or "").strip()
-    if auth_value.lower().startswith("bearer "):
-        bearer_token = auth_value[7:].strip()
-        actor = _actor_from_bearer_token(bearer_token, db)
-        if actor:
-            return actor
-
-    token = (x_session_token or "").strip()
-    if not token:
-        return None
-
-    actor = _actor_from_bearer_token(token, db)
-    if actor:
-        return actor
-
-    return _actor_from_legacy_session(token, db)
-
-
-def _require_manager(actor: dict = Depends(_actor_from_headers)) -> dict:
-    if actor["role"] not in MANAGER_ROLES:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="perfil sem permissao")
-    return actor
-
-
-def _require_owner(actor: dict = Depends(_actor_from_headers)) -> dict:
-    if actor["role"] != OWNER_ROLE:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="apenas PROGRAMADOR pode aprovar perfis")
-    return actor
-
-
 def _ensure_legacy_schema() -> None:
     # Compatibilidade com bancos legados (principalmente SQLite local):
-    # adiciona colunas/Ã­ndices ausentes quando necessÃ¡rio.
+    # adiciona colunas/ÃƒÂ­ndices ausentes quando necessÃƒÂ¡rio.
     insp = inspect(engine)
     tables = set(insp.get_table_names())
 
@@ -825,8 +746,8 @@ def ai_workflow_review_loop(
 
 @app.post("/auth/google-intake")
 def auth_google_intake(payload: AuthGoogleIn, request: Request, db: Session = Depends(get_db)) -> dict:
-    # PrÃ©-cadastro com Google: valida token e devolve nome/email para preencher a tela.
-    # NÃ£o cria usuÃ¡rio neste passo.
+    # PrÃƒÂ©-cadastro com Google: valida token e devolve nome/email para preencher a tela.
+    # NÃƒÂ£o cria usuÃƒÂ¡rio neste passo.
     identity = _verify_google_identity_token(payload.credential)
 
     user = db.query(Usuario).filter(Usuario.google_sub == identity["sub"]).first()
@@ -899,8 +820,8 @@ def auth_register(
     db: Session = Depends(get_db),
 ):
     # Cadastro com 2 caminhos:
-    # - PÃºblico: cria usuÃ¡rio inativo (pendente aprovaÃ§Ã£o do PROGRAMADOR).
-    # - Privado (ator PROGRAMADOR): cria usuÃ¡rio jÃ¡ ativo.
+    # - PÃƒÂºblico: cria usuÃƒÂ¡rio inativo (pendente aprovaÃƒÂ§ÃƒÂ£o do PROGRAMADOR).
+    # - Privado (ator PROGRAMADOR): cria usuÃƒÂ¡rio jÃƒÂ¡ ativo.
     nome = payload.nome.strip()
     email = (payload.email or "").strip().lower()
     role = payload.perfil
@@ -1027,8 +948,8 @@ def auth_register(
 @app.post("/auth/google", response_model=AuthOut)
 def auth_google(payload: AuthGoogleIn, request: Request, db: Session = Depends(get_db)):
     # Login Google direto:
-    # - sÃ³ funciona apÃ³s existir PROGRAMADOR local ativo (evita lock-in externo).
-    # - rejeita conta nÃ£o aprovada e conflitos de vÃ­nculo Gmail/sub.
+    # - sÃƒÂ³ funciona apÃƒÂ³s existir PROGRAMADOR local ativo (evita lock-in externo).
+    # - rejeita conta nÃƒÂ£o aprovada e conflitos de vÃƒÂ­nculo Gmail/sub.
     identity = _verify_google_identity_token(payload.credential)
 
     owner_exists = (
@@ -1129,8 +1050,8 @@ def auth_google(payload: AuthGoogleIn, request: Request, db: Session = Depends(g
 
 @app.post("/auth/login", response_model=AuthOut)
 def auth_login(payload: AuthLoginIn, request: Request, db: Session = Depends(get_db)):
-    # Login local por usuÃ¡rio/Gmail + senha.
-    # Se hash legado for detectado, migra para hash moderno no primeiro login vÃ¡lido.
+    # Login local por usuÃƒÂ¡rio/Gmail + senha.
+    # Se hash legado for detectado, migra para hash moderno no primeiro login vÃƒÂ¡lido.
     nome = payload.nome.strip()
     user = _find_user_by_login(db, nome)
     if not user:
@@ -1205,8 +1126,8 @@ def auth_login(payload: AuthLoginIn, request: Request, db: Session = Depends(get
 
 @app.post("/auth/recovery-request")
 def auth_recovery_request(payload: AuthRecoveryRequestIn, request: Request, db: Session = Depends(get_db)):
-    # Recovery sem reset automÃ¡tico:
-    # registra solicitaÃ§Ã£o para fluxo controlado por PROGRAMADOR (governanÃ§a).
+    # Recovery sem reset automÃƒÂ¡tico:
+    # registra solicitaÃƒÂ§ÃƒÂ£o para fluxo controlado por PROGRAMADOR (governanÃƒÂ§a).
     identificador = payload.identificador.strip()
     user = _find_user_by_login(db, identificador)
     if not user:
@@ -1268,7 +1189,7 @@ def auth_me(actor: dict = Depends(_actor_from_headers)):
 
 @app.post("/auth/logout")
 def auth_logout(actor: dict = Depends(_actor_from_headers), db: Session = Depends(get_db)):
-    # Revoga sessÃ£o atual por sid (JWT) ou por hash de token legado.
+    # Revoga sessÃƒÂ£o atual por sid (JWT) ou por hash de token legado.
     sid = (actor.get("session_sid") or "").strip()
     if sid:
         session_hash = _hash_text(sid)
@@ -1321,8 +1242,8 @@ def alterar_status_usuario(
     actor: dict = Depends(_require_owner),
     db: Session = Depends(get_db),
 ):
-    # AprovaÃ§Ã£o/desativaÃ§Ã£o administrativa de usuÃ¡rio.
-    # Ao desativar, revoga sessÃµes ativas para efeito imediato.
+    # AprovaÃƒÂ§ÃƒÂ£o/desativaÃƒÂ§ÃƒÂ£o administrativa de usuÃƒÂ¡rio.
+    # Ao desativar, revoga sessÃƒÂµes ativas para efeito imediato.
     user = db.get(Usuario, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="usuario nao encontrado")
@@ -1376,8 +1297,8 @@ def listar_emendas(
     _actor: dict = Depends(_actor_from_headers),
     db: Session = Depends(get_db),
 ):
-    # Listagem principal com filtros combinÃ¡veis e busca textual.
-    # include_old=False mantÃ©m apenas versÃµes correntes por padrÃ£o.
+    # Listagem principal com filtros combinÃƒÂ¡veis e busca textual.
+    # include_old=False mantÃƒÂ©m apenas versÃƒÂµes correntes por padrÃƒÂ£o.
     query = db.query(Emenda)
 
     if not include_old:
