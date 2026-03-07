@@ -4624,6 +4624,117 @@ function getFilterContext() {
   };
 }
 
+function getApiClientConfigContext() {
+  return {
+    runtimeConfig: RUNTIME_CONFIG,
+    keys: {
+      apiBaseUrl: API_BASE_URL_KEY,
+      apiEnabled: API_ENABLED_KEY,
+      apiSharedKeySession: API_SHARED_KEY_SESSION_KEY
+    },
+    defaultApiBaseUrl: DEFAULT_API_BASE_URL,
+    defaultEventOrigin: API_DEFAULT_EVENT_ORIGIN,
+    getCurrentUser: function () {
+      return CURRENT_USER;
+    },
+    getCurrentRole: function () {
+      return CURRENT_ROLE;
+    },
+    readStoredSessionToken: function () {
+      return readStoredSessionToken();
+    },
+    getSharedApiKey: function () {
+      const readStorageValueUtil = getStorageUtil("readStorageValue");
+      if (readStorageValueUtil) {
+        return readStorageValueUtil(sessionStorage, API_SHARED_KEY_SESSION_KEY);
+      }
+      return readStorageValue(sessionStorage, API_SHARED_KEY_SESSION_KEY);
+    },
+    onNetworkError: function (message) {
+      apiOnline = false;
+      apiLastError = String(message || "sem conexao com API");
+      applyAccessProfile();
+    },
+    onHttpError: function (statusCode, detailMessage) {
+      const transportError = !statusCode || statusCode >= 500;
+      apiOnline = !transportError;
+      apiLastError = "HTTP " + statusCode + " " + String(detailMessage || "");
+      applyAccessProfile();
+    },
+    onAuthFailure: function () {
+      clearStoredSessionToken();
+      closeApiSocket();
+      showAuthGate("Sessao expirada. Faca login novamente.");
+    }
+  };
+}
+
+function getConcurrencyConfigContext() {
+  return {
+    isApiEnabled: function () {
+      return isApiEnabled();
+    },
+    canMutateRecords: function () {
+      return canMutateRecords();
+    },
+    ensureBackendEmenda: function (rec, options) {
+      return ensureBackendEmenda(rec, options);
+    },
+    apiRequest: function (method, path, body, eventOrigin, requestOptions) {
+      return apiRequest(method, path, body, eventOrigin, requestOptions);
+    },
+    getSelected: function () {
+      return getSelected();
+    },
+    getBackendIdForRecord: function (rec) {
+      return getBackendIdForRecord(rec);
+    },
+    getApiBaseUrl: function () {
+      return getApiBaseUrl();
+    },
+    getSessionToken: function () {
+      return readStoredSessionToken();
+    },
+    isApiSocketEnabled: function () {
+      return API_WS_ENABLED;
+    },
+    getCurrentUser: function () {
+      return CURRENT_USER;
+    },
+    getCurrentRole: function () {
+      return CURRENT_ROLE;
+    },
+    emendaLockPollMs: EMENDA_LOCK_POLL_MS,
+    apiWsPath: API_WS_PATH,
+    wsReconnectBaseMs: WS_RECONNECT_BASE_MS,
+    wsReconnectMaxMs: WS_RECONNECT_MAX_MS,
+    wsRefreshDebounceMs: WS_REFRESH_DEBOUNCE_MS,
+    text: function (value) {
+      return text(value);
+    },
+    fmtDateTime: function (value) {
+      return fmtDateTime(value);
+    },
+    extractApiError: function (err, fallback) {
+      return extractApiError(err, fallback);
+    },
+    onPresenceUpdated: function () {
+      const rec = getSelected();
+      if (rec) renderLivePresence(rec);
+    },
+    onQueueApiRefresh: async function () {
+      await bootstrapApiIntegration();
+    },
+    onLockStateChanged: function (payload) {
+      emendaLockState = payload && payload.state && typeof payload.state === "object" ? payload.state : null;
+      emendaLockReadOnly = !!(payload && payload.readOnly);
+      renderEmendaLockInfo(getSelected());
+      applyModalAccessProfile();
+      updateModalDraftUi();
+    }
+  };
+}
+
 function renderImportDashboard() {
   const ctx = getImportReportContext();
   const renderImportDashboardUtil = getImportReportUtil("renderImportDashboard");
@@ -6128,112 +6239,9 @@ function deepClone(obj) {
 function configureFrontendModules() {
   const configureApiClientUtil = getApiClientUtil("configure");
   if (!configureApiClientUtil) return;
-  configureApiClientUtil({
-    runtimeConfig: RUNTIME_CONFIG,
-    keys: {
-      apiBaseUrl: API_BASE_URL_KEY,
-      apiEnabled: API_ENABLED_KEY,
-      apiSharedKeySession: API_SHARED_KEY_SESSION_KEY
-    },
-    defaultApiBaseUrl: DEFAULT_API_BASE_URL,
-    defaultEventOrigin: API_DEFAULT_EVENT_ORIGIN,
-    getCurrentUser: function () {
-      return CURRENT_USER;
-    },
-    getCurrentRole: function () {
-      return CURRENT_ROLE;
-    },
-    readStoredSessionToken: function () {
-      return readStoredSessionToken();
-    },
-    getSharedApiKey: function () {
-      const readStorageValueUtil = getStorageUtil("readStorageValue");
-      if (readStorageValueUtil) {
-        return readStorageValueUtil(sessionStorage, API_SHARED_KEY_SESSION_KEY);
-      }
-      return readStorageValue(sessionStorage, API_SHARED_KEY_SESSION_KEY);
-    },
-    onNetworkError: function (message) {
-      apiOnline = false;
-      apiLastError = String(message || "sem conexao com API");
-      applyAccessProfile();
-    },
-    onHttpError: function (statusCode, detailMessage) {
-      const transportError = !statusCode || statusCode >= 500;
-      apiOnline = !transportError;
-      apiLastError = "HTTP " + statusCode + " " + String(detailMessage || "");
-      applyAccessProfile();
-    },
-    onAuthFailure: function () {
-      clearStoredSessionToken();
-      closeApiSocket();
-      showAuthGate("Sessao expirada. Faca login novamente.");
-    }
-  });
+  configureApiClientUtil(getApiClientConfigContext());
 
   const configureConcurrencyUtil = getConcurrencyUtil("configure");
   if (!configureConcurrencyUtil) return;
-  configureConcurrencyUtil({
-    isApiEnabled: function () {
-      return isApiEnabled();
-    },
-    canMutateRecords: function () {
-      return canMutateRecords();
-    },
-    ensureBackendEmenda: function (rec, options) {
-      return ensureBackendEmenda(rec, options);
-    },
-    apiRequest: function (method, path, body, eventOrigin, requestOptions) {
-      return apiRequest(method, path, body, eventOrigin, requestOptions);
-    },
-    getSelected: function () {
-      return getSelected();
-    },
-    getBackendIdForRecord: function (rec) {
-      return getBackendIdForRecord(rec);
-    },
-    getApiBaseUrl: function () {
-      return getApiBaseUrl();
-    },
-    getSessionToken: function () {
-      return readStoredSessionToken();
-    },
-    isApiSocketEnabled: function () {
-      return API_WS_ENABLED;
-    },
-    getCurrentUser: function () {
-      return CURRENT_USER;
-    },
-    getCurrentRole: function () {
-      return CURRENT_ROLE;
-    },
-    emendaLockPollMs: EMENDA_LOCK_POLL_MS,
-    apiWsPath: API_WS_PATH,
-    wsReconnectBaseMs: WS_RECONNECT_BASE_MS,
-    wsReconnectMaxMs: WS_RECONNECT_MAX_MS,
-    wsRefreshDebounceMs: WS_REFRESH_DEBOUNCE_MS,
-    text: function (value) {
-      return text(value);
-    },
-    fmtDateTime: function (value) {
-      return fmtDateTime(value);
-    },
-    extractApiError: function (err, fallback) {
-      return extractApiError(err, fallback);
-    },
-    onPresenceUpdated: function () {
-      const rec = getSelected();
-      if (rec) renderLivePresence(rec);
-    },
-    onQueueApiRefresh: async function () {
-      await bootstrapApiIntegration();
-    },
-    onLockStateChanged: function (payload) {
-      emendaLockState = payload && payload.state && typeof payload.state === "object" ? payload.state : null;
-      emendaLockReadOnly = !!(payload && payload.readOnly);
-      renderEmendaLockInfo(getSelected());
-      applyModalAccessProfile();
-      updateModalDraftUi();
-    }
-  });
+  configureConcurrencyUtil(getConcurrencyConfigContext());
 }

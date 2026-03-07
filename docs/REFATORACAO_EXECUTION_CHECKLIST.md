@@ -47,6 +47,7 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Reutilizar `getXlsxApi()` em `parseInputFile()` para remover o acesso direto restante a `window.XLSX` no fluxo de importacao.
 - [DONE] Criar `getUiRenderContext()` no `app.js` para centralizar dependencias passadas aos renderizadores de grade, historico, supervisao e pendencias.
 - [DONE] Criar `getFilterContext()` no `app.js` para centralizar dependencias dos wrappers de filtros principais e exportacao customizada.
+- [DONE] Criar `getApiClientConfigContext()` e `getConcurrencyConfigContext()` no `app.js` para tirar configuracoes inline de `configureFrontendModules()`.
 
-Active: ID-FE-43
+Active: ID-FE-44
 Risks: validar comportamento em dispositivos com storage bloqueado.
