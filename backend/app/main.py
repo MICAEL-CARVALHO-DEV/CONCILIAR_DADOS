@@ -1,24 +1,37 @@
 import asyncio
 from datetime import datetime, timedelta, timezone
-import hashlib
 import json
 import re
-import secrets
 import unicodedata
 from typing import Annotated
-from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
-from urllib.request import urlopen
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
-from jose import JWTError, jwt
-from passlib.context import CryptContext
-from passlib.exc import UnknownHashError
 from sqlalchemy import func, inspect, or_, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from .core.security import (
+    ALLOWED_ROLES,
+    IMMUTABLE_OWNER_NAMES,
+    _actor_from_bearer_token,
+    _actor_from_legacy_session,
+    _add_auth_audit,
+    _assert_allowed_owner_identity,
+    _build_unique_public_username,
+    _create_jwt_session,
+    _find_user_by_email,
+    _find_user_by_login,
+    _hash_password,
+    _hash_text,
+    _mask_history_pair,
+    _normalize_role,
+    _normalize_user_name,
+    _try_decode_jwt,
+    _validate_runtime_security_settings,
+    _verify_google_identity_token,
+    _verify_user_password,
+)
 from .ai_schemas import AIProviderStatusResponse, AIWorkflowRequest, AIWorkflowResponse
 from .db import Base, SessionLocal, engine, get_db
 from .models import AuthAuditLog, Emenda, EmendaLock, ExportLog, Historico, ImportLinha, ImportLote, Usuario, UsuarioSessao
@@ -63,54 +76,12 @@ app.add_middleware(
 )
 ai_orchestrator = AIOrchestrator(settings)
 
-ALLOWED_ROLES = set(ROLES)
 MANAGER_ROLES = {"APG", "SUPERVISAO", "PROGRAMADOR"}
 EDITOR_ROLES = {"APG", "CONTABIL", "PROGRAMADOR"}
 OWNER_ROLE = "PROGRAMADOR"
 PUBLIC_REGISTER_ROLES = {"APG", "SUPERVISAO", "CONTABIL", "POWERBI"}
-# Apenas estes usuarios podem ser PROGRAMADOR e sao imutaveis por regra de governanca.
-IMMUTABLE_OWNER_NAMES = {"MICAEL_DEV", "VITOR_DEV"}
 EDIT_LOCK_TTL_SECONDS = 90
-SESSION_HOURS = max(int(settings.JWT_EXPIRE_HOURS or 12), 1)
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 VERSIONED_ID_RE = re.compile(r"^(?P<base>.+)-v(?P<num>\d+)$", re.IGNORECASE)
-GOOGLE_ISSUERS = {"accounts.google.com", "https://accounts.google.com"}
-GOOGLE_USERNAME_SANITIZE_RE = re.compile(r"\s+")
-AUTH_AUDIT_UA_MAX_LEN = 255
-PLACEHOLDER_SECRET_TOKENS = {
-    "",
-    "troque-esta-chave",
-    "troque-esta-chave-jwt",
-    "changeme",
-    "change-me",
-    "secret",
-    "default",
-}
-SENSITIVE_FIELD_HINTS = {
-    "cpf",
-    "cnpj",
-    "rg",
-    "email",
-    "e-mail",
-    "telefone",
-    "celular",
-    "endereco",
-    "data_nascimento",
-    "nascimento",
-    "senha",
-    "password",
-    "token",
-    "api_key",
-    "chave",
-    "matricula",
-    "nome",
-}
-AUDIT_MASK_TEXT = "[REDACTED]"
-AUDIT_VALUE_MAX_LEN = 500
-RE_EMAIL = re.compile(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", re.IGNORECASE)
-RE_CPF = re.compile(r"\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b")
-RE_CNPJ = re.compile(r"\b\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}\b")
-RE_BEARER_OR_JWT = re.compile(r"(?i)(bearer\s+[a-z0-9\-._~+/]+=*|eyJ[a-zA-Z0-9_\-\.]{20,})")
 
 STATUS_TRANSITIONS = {
     "Recebido": {"Em analise", "Pendente", "Cancelado"},
@@ -536,73 +507,6 @@ def _resolve_event_origin(origin_raw: str | None, actor: dict | None = None, fal
     return fb if fb in EVENT_ORIGINS else "API"
 
 
-def _hash_text(value: str) -> str:
-    return hashlib.sha256((value or "").encode("utf-8")).hexdigest()
-
-
-def _hash_password(password: str) -> str:
-    return pwd_context.hash(password)
-
-
-def _validate_runtime_security_settings() -> None:
-    if not settings.API_AUTH_ENABLED:
-        return
-
-    jwt_secret = (settings.JWT_SECRET_KEY or "").strip()
-    if not jwt_secret:
-        raise RuntimeError("JWT_SECRET_KEY obrigatoria quando API_AUTH_ENABLED=true.")
-
-    if not settings.is_dev_environment and jwt_secret.lower() in PLACEHOLDER_SECRET_TOKENS:
-        raise RuntimeError("JWT_SECRET_KEY fraca em ambiente nao-dev. Defina segredo forte no ambiente.")
-
-    if not settings.is_dev_environment and settings.ALLOW_SHARED_KEY_AUTH:
-        raise RuntimeError("ALLOW_SHARED_KEY_AUTH nao pode ficar habilitado fora de desenvolvimento.")
-
-    if settings.shared_key_auth_enabled and (settings.API_SHARED_KEY or "").strip().lower() in PLACEHOLDER_SECRET_TOKENS:
-        raise RuntimeError("API_SHARED_KEY fraca; desabilite shared key ou defina chave forte.")
-
-
-def _history_field_is_sensitive(field_name: str | None) -> bool:
-    raw = (field_name or "").strip().lower()
-    if not raw:
-        return False
-    normalized = raw.replace("-", "_").replace(" ", "_")
-    if normalized in SENSITIVE_FIELD_HINTS:
-        return True
-    return any(hint in normalized for hint in SENSITIVE_FIELD_HINTS)
-
-
-def _history_value_looks_sensitive(value: str) -> bool:
-    raw = (value or "").strip()
-    if not raw:
-        return False
-    if RE_EMAIL.search(raw) or RE_CPF.search(raw) or RE_CNPJ.search(raw):
-        return True
-    if RE_BEARER_OR_JWT.search(raw):
-        return True
-    return False
-
-
-def _mask_history_value(field_name: str | None, value: str | None) -> str:
-    raw = (value or "").strip()
-    if not raw:
-        return ""
-    if raw == AUDIT_MASK_TEXT:
-        return raw
-    if _history_field_is_sensitive(field_name) or _history_value_looks_sensitive(raw):
-        return AUDIT_MASK_TEXT
-    if len(raw) > AUDIT_VALUE_MAX_LEN:
-        return raw[:AUDIT_VALUE_MAX_LEN] + "..."
-    return raw
-
-
-def _mask_history_pair(field_name: str | None, old_value: str | None, new_value: str | None) -> tuple[str, str]:
-    return (
-        _mask_history_value(field_name, old_value),
-        _mask_history_value(field_name, new_value),
-    )
-
-
 def _normalize_edit_field_name(raw_field: str | None) -> str:
     raw = (raw_field or "").strip().lower()
     if not raw:
@@ -647,326 +551,6 @@ def _apply_emenda_field_edit(emenda: Emenda, field_name: str, raw_value: str | N
     setattr(emenda, field_name, value)
 
 
-def _verify_password_modern(password: str, stored_hash: str) -> bool:
-    raw_hash = (stored_hash or "").strip()
-    if not raw_hash:
-        return False
-    try:
-        return bool(pwd_context.verify(password, raw_hash))
-    except (UnknownHashError, ValueError):
-        return False
-
-
-def _hash_password_legacy(password: str, salt_hex: str) -> str:
-    salt = bytes.fromhex(salt_hex)
-    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 120_000)
-    return digest.hex()
-
-
-def _verify_password_legacy(password: str, salt_hex: str, expected_hash: str) -> bool:
-    if not salt_hex or not expected_hash:
-        return False
-    try:
-        calc_hash = _hash_password_legacy(password, salt_hex)
-    except ValueError:
-        return False
-    return secrets.compare_digest(calc_hash, expected_hash)
-
-
-def _verify_user_password(user: Usuario, password: str) -> tuple[bool, bool]:
-    if _verify_password_modern(password, user.senha_hash):
-        return True, False
-
-    if _verify_password_legacy(password, user.senha_salt, user.senha_hash):
-        return True, True
-
-    return False, False
-
-
-def _build_unique_public_username(db: Session, preferred: str) -> str:
-    base = GOOGLE_USERNAME_SANITIZE_RE.sub(" ", (preferred or "").strip())
-    if not base:
-        base = "Google User"
-    if len(base) < 2:
-        base = (base + " xx")[:2].strip()
-
-    candidate = base[:120]
-    suffix_num = 2
-    while db.query(Usuario.id).filter(func.lower(Usuario.nome) == candidate.lower()).first():
-        suffix = f" - {suffix_num}"
-        safe_len = max(2, 120 - len(suffix))
-        candidate = (base[:safe_len].rstrip() + suffix).strip()
-        suffix_num += 1
-
-    return candidate
-
-
-def _verify_google_identity_token(id_token: str) -> dict:
-    # Valida o ID token no endpoint oficial do Google e retorna identidade minimizada.
-    # Aqui garantimos audience/issuer/email_verified para evitar token forjado.
-    raw_token = (id_token or "").strip()
-    client_id = (settings.GOOGLE_CLIENT_ID or "").strip()
-
-    if not client_id:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="login com google indisponivel",
-        )
-    if not raw_token:
-        raise HTTPException(status_code=400, detail="credential google ausente")
-
-    query = urlencode({"id_token": raw_token})
-    verify_url = f"{settings.GOOGLE_TOKENINFO_URL}?{query}"
-
-    try:
-        with urlopen(verify_url, timeout=8) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except HTTPError:
-        raise HTTPException(status_code=401, detail="token google invalido")
-    except (URLError, TimeoutError, json.JSONDecodeError):
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="falha ao validar token google",
-        )
-
-    aud = str(payload.get("aud") or "").strip()
-    azp = str(payload.get("azp") or "").strip()
-    if aud != client_id and azp != client_id:
-        raise HTTPException(status_code=401, detail="token google com audience invalida")
-
-    issuer = str(payload.get("iss") or "").strip()
-    if issuer not in GOOGLE_ISSUERS:
-        raise HTTPException(status_code=401, detail="issuer google invalido")
-
-    if str(payload.get("email_verified") or "").strip().lower() != "true":
-        raise HTTPException(status_code=403, detail="conta google nao verificada")
-
-    email = str(payload.get("email") or "").strip().lower()
-    sub = str(payload.get("sub") or "").strip()
-    if not email or not sub:
-        raise HTTPException(status_code=401, detail="token google sem identidade valida")
-
-    display_name = str(payload.get("name") or "").strip()
-    if not display_name:
-        display_name = email.split("@", 1)[0]
-
-    return {
-        "email": email,
-        "sub": sub,
-        "name": display_name,
-    }
-
-
-def _create_jwt_session(db: Session, user: Usuario) -> str:
-    # Cria sessão persistida em banco (revogável) e emite JWT com sid.
-    # O sid do token é conferido em cada request para permitir logout/revogação real.
-    session_id = secrets.token_urlsafe(24)
-    session_hash = _hash_text(session_id)
-    now = _utcnow()
-    exp = now + timedelta(hours=SESSION_HOURS)
-
-    sessao = UsuarioSessao(
-        usuario_id=user.id,
-        token_hash=session_hash,
-        created_at=now,
-        expires_at=exp,
-    )
-    db.add(sessao)
-    user.ultimo_login = now
-    db.commit()
-
-    payload = {
-        "sub": str(user.id),
-        "name": user.nome,
-        "role": user.perfil,
-        "sid": session_id,
-        "iat": int(now.replace(tzinfo=timezone.utc).timestamp()),
-        "exp": int(exp.replace(tzinfo=timezone.utc).timestamp()),
-        "typ": "access",
-    }
-    return jwt.encode(payload, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
-
-
-def _request_ip(request: Request) -> str:
-    forwarded = (request.headers.get("x-forwarded-for") or "").strip()
-    if forwarded:
-        return forwarded.split(",", 1)[0].strip()[:64]
-    if request.client and request.client.host:
-        return str(request.client.host).strip()[:64]
-    return ""
-
-
-def _request_user_agent(request: Request) -> str:
-    return (request.headers.get("user-agent") or "").strip()[:AUTH_AUDIT_UA_MAX_LEN]
-
-
-def _add_auth_audit(
-    db: Session,
-    *,
-    request: Request,
-    event_type: str,
-    login_identificador: str,
-    detail: str,
-    success: bool,
-    provider: str,
-    user: Usuario | None = None,
-    ) -> None:
-    # Auditoria central de autenticação: sucesso/falha, provedor e metadados de request.
-    db.add(
-        AuthAuditLog(
-            user_id=(user.id if user else None),
-            user_nome=(user.nome if user else ""),
-            login_identificador=(login_identificador or "").strip()[:255],
-            event_type=event_type,
-            provider=provider,
-            success=bool(success),
-            detail=(detail or "").strip(),
-            ip_origem=_request_ip(request),
-            user_agent=_request_user_agent(request),
-        )
-    )
-
-
-def _find_user_by_login(db: Session, identificador: str) -> Usuario | None:
-    # Login híbrido: aceita nome de usuário e, se houver "@", também Gmail.
-    # Prioriza "nome" para compatibilidade retroativa.
-    normalized_login = (identificador or "").strip().lower()
-    if not normalized_login:
-        return None
-
-    user = db.query(Usuario).filter(func.lower(Usuario.nome) == normalized_login).first()
-    if user is not None:
-        return user
-
-    if "@" in normalized_login:
-        return (
-            db.query(Usuario)
-            .filter(Usuario.email.is_not(None), func.lower(Usuario.email) == normalized_login)
-            .first()
-        )
-
-    return None
-
-
-def _find_user_by_email(db: Session, email: str) -> Usuario | None:
-    normalized_email = (email or "").strip().lower()
-    if not normalized_email:
-        return None
-
-    return (
-        db.query(Usuario)
-        .filter(Usuario.email.is_not(None), func.lower(Usuario.email) == normalized_email)
-        .first()
-    )
-
-
-def _try_decode_jwt(token: str) -> dict | None:
-    raw = (token or "").strip()
-    if not raw:
-        return None
-
-    try:
-        data = jwt.decode(raw, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
-    except JWTError:
-        return None
-
-    if not isinstance(data, dict):
-        return None
-    return data
-
-
-def _actor_from_bearer_token(token: str, db: Session) -> dict | None:
-    claims = _try_decode_jwt(token)
-    if not claims:
-        return None
-
-    sid = str(claims.get("sid") or "").strip()
-    sub = str(claims.get("sub") or "").strip()
-    if not sid or not sub:
-        return None
-
-    session_hash = _hash_text(sid)
-    sessao = (
-        db.query(UsuarioSessao)
-        .join(Usuario, Usuario.id == UsuarioSessao.usuario_id)
-        .filter(
-            UsuarioSessao.token_hash == session_hash,
-            UsuarioSessao.revoked_at.is_(None),
-            UsuarioSessao.expires_at > _utcnow(),
-            Usuario.ativo.is_(True),
-        )
-        .first()
-    )
-    if not sessao:
-        return None
-
-    if str(sessao.usuario.id) != sub:
-        return None
-
-    return {
-        "id": sessao.usuario.id,
-        "name": sessao.usuario.nome,
-        "role": sessao.usuario.perfil,
-        "session_token": token,
-        "session_sid": sid,
-        "auth_type": "bearer",
-    }
-
-
-def _actor_from_legacy_session(token: str, db: Session) -> dict | None:
-    raw = (token or "").strip()
-    if not raw:
-        return None
-
-    token_hash = _hash_text(raw)
-    sessao = (
-        db.query(UsuarioSessao)
-        .join(Usuario, Usuario.id == UsuarioSessao.usuario_id)
-        .filter(
-            UsuarioSessao.token_hash == token_hash,
-            UsuarioSessao.revoked_at.is_(None),
-            UsuarioSessao.expires_at > _utcnow(),
-            Usuario.ativo.is_(True),
-        )
-        .first()
-    )
-    if not sessao:
-        return None
-
-    return {
-        "id": sessao.usuario.id,
-        "name": sessao.usuario.nome,
-        "role": sessao.usuario.perfil,
-        "session_token": raw,
-        "session_sid": None,
-        "auth_type": "legacy",
-    }
-
-
-def _normalize_role(role: str) -> str:
-    value = (role or "").strip().upper()
-    if value not in ALLOWED_ROLES:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="setor invalido")
-    return value
-
-
-def _normalize_user_name(name: str) -> str:
-    return (name or "").strip().upper()
-
-
-def _is_immutable_owner_name(name: str) -> bool:
-    return _normalize_user_name(name) in IMMUTABLE_OWNER_NAMES
-
-
-def _assert_allowed_owner_identity(name: str) -> None:
-    if not _is_immutable_owner_name(name):
-        allowed = ", ".join(sorted(IMMUTABLE_OWNER_NAMES))
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"apenas usuarios oficiais podem ser PROGRAMADOR: {allowed}",
-        )
-
-
 def _actor_from_headers(
     authorization: Annotated[str | None, Header(alias="Authorization")] = None,
     x_session_token: Annotated[str | None, Header(alias="X-Session-Token")] = None,
@@ -975,7 +559,7 @@ def _actor_from_headers(
     x_user_role: Annotated[str | None, Header(alias="X-User-Role")] = None,
     db: Session = Depends(get_db),
 ) -> dict:
-    # Estratégia de autenticação:
+    # EstratÃ©gia de autenticaÃ§Ã£o:
     # 1) Bearer JWT (preferencial)
     # 2) X-Session-Token (compatibilidade)
     # 3) Shared key apenas se explicitamente habilitada (dev/legado).
@@ -1047,7 +631,7 @@ def _require_owner(actor: dict = Depends(_actor_from_headers)) -> dict:
 
 def _ensure_legacy_schema() -> None:
     # Compatibilidade com bancos legados (principalmente SQLite local):
-    # adiciona colunas/índices ausentes quando necessário.
+    # adiciona colunas/Ã­ndices ausentes quando necessÃ¡rio.
     insp = inspect(engine)
     tables = set(insp.get_table_names())
 
@@ -1241,8 +825,8 @@ def ai_workflow_review_loop(
 
 @app.post("/auth/google-intake")
 def auth_google_intake(payload: AuthGoogleIn, request: Request, db: Session = Depends(get_db)) -> dict:
-    # Pré-cadastro com Google: valida token e devolve nome/email para preencher a tela.
-    # Não cria usuário neste passo.
+    # PrÃ©-cadastro com Google: valida token e devolve nome/email para preencher a tela.
+    # NÃ£o cria usuÃ¡rio neste passo.
     identity = _verify_google_identity_token(payload.credential)
 
     user = db.query(Usuario).filter(Usuario.google_sub == identity["sub"]).first()
@@ -1315,8 +899,8 @@ def auth_register(
     db: Session = Depends(get_db),
 ):
     # Cadastro com 2 caminhos:
-    # - Público: cria usuário inativo (pendente aprovação do PROGRAMADOR).
-    # - Privado (ator PROGRAMADOR): cria usuário já ativo.
+    # - PÃºblico: cria usuÃ¡rio inativo (pendente aprovaÃ§Ã£o do PROGRAMADOR).
+    # - Privado (ator PROGRAMADOR): cria usuÃ¡rio jÃ¡ ativo.
     nome = payload.nome.strip()
     email = (payload.email or "").strip().lower()
     role = payload.perfil
@@ -1443,8 +1027,8 @@ def auth_register(
 @app.post("/auth/google", response_model=AuthOut)
 def auth_google(payload: AuthGoogleIn, request: Request, db: Session = Depends(get_db)):
     # Login Google direto:
-    # - só funciona após existir PROGRAMADOR local ativo (evita lock-in externo).
-    # - rejeita conta não aprovada e conflitos de vínculo Gmail/sub.
+    # - sÃ³ funciona apÃ³s existir PROGRAMADOR local ativo (evita lock-in externo).
+    # - rejeita conta nÃ£o aprovada e conflitos de vÃ­nculo Gmail/sub.
     identity = _verify_google_identity_token(payload.credential)
 
     owner_exists = (
@@ -1545,8 +1129,8 @@ def auth_google(payload: AuthGoogleIn, request: Request, db: Session = Depends(g
 
 @app.post("/auth/login", response_model=AuthOut)
 def auth_login(payload: AuthLoginIn, request: Request, db: Session = Depends(get_db)):
-    # Login local por usuário/Gmail + senha.
-    # Se hash legado for detectado, migra para hash moderno no primeiro login válido.
+    # Login local por usuÃ¡rio/Gmail + senha.
+    # Se hash legado for detectado, migra para hash moderno no primeiro login vÃ¡lido.
     nome = payload.nome.strip()
     user = _find_user_by_login(db, nome)
     if not user:
@@ -1621,8 +1205,8 @@ def auth_login(payload: AuthLoginIn, request: Request, db: Session = Depends(get
 
 @app.post("/auth/recovery-request")
 def auth_recovery_request(payload: AuthRecoveryRequestIn, request: Request, db: Session = Depends(get_db)):
-    # Recovery sem reset automático:
-    # registra solicitação para fluxo controlado por PROGRAMADOR (governança).
+    # Recovery sem reset automÃ¡tico:
+    # registra solicitaÃ§Ã£o para fluxo controlado por PROGRAMADOR (governanÃ§a).
     identificador = payload.identificador.strip()
     user = _find_user_by_login(db, identificador)
     if not user:
@@ -1684,7 +1268,7 @@ def auth_me(actor: dict = Depends(_actor_from_headers)):
 
 @app.post("/auth/logout")
 def auth_logout(actor: dict = Depends(_actor_from_headers), db: Session = Depends(get_db)):
-    # Revoga sessão atual por sid (JWT) ou por hash de token legado.
+    # Revoga sessÃ£o atual por sid (JWT) ou por hash de token legado.
     sid = (actor.get("session_sid") or "").strip()
     if sid:
         session_hash = _hash_text(sid)
@@ -1737,8 +1321,8 @@ def alterar_status_usuario(
     actor: dict = Depends(_require_owner),
     db: Session = Depends(get_db),
 ):
-    # Aprovação/desativação administrativa de usuário.
-    # Ao desativar, revoga sessões ativas para efeito imediato.
+    # AprovaÃ§Ã£o/desativaÃ§Ã£o administrativa de usuÃ¡rio.
+    # Ao desativar, revoga sessÃµes ativas para efeito imediato.
     user = db.get(Usuario, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="usuario nao encontrado")
@@ -1792,8 +1376,8 @@ def listar_emendas(
     _actor: dict = Depends(_actor_from_headers),
     db: Session = Depends(get_db),
 ):
-    # Listagem principal com filtros combináveis e busca textual.
-    # include_old=False mantém apenas versões correntes por padrão.
+    # Listagem principal com filtros combinÃ¡veis e busca textual.
+    # include_old=False mantÃ©m apenas versÃµes correntes por padrÃ£o.
     query = db.query(Emenda)
 
     if not include_old:
@@ -2378,5 +1962,6 @@ async def websocket_updates(websocket: WebSocket):
         changes = await presence_broker.disconnect(websocket)
         for emenda_id, users in changes.items():
             await ws_broker.broadcast(_presence_payload(emenda_id, users))
+
 
 
