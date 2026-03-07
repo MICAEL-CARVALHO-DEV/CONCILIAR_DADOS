@@ -66,6 +66,7 @@ const normalizeUtils = SEC_FRONTEND.normalizeUtils || null;
 const importNormalizationUtils = SEC_FRONTEND.importNormalizationUtils || null;
 const importValidationUtils = SEC_FRONTEND.importValidationUtils || null;
 const importPipelineUtils = SEC_FRONTEND.importPipelineUtils || null;
+const importProcessorUtils = SEC_FRONTEND.importProcessorUtils || null;
 const idUtils = SEC_FRONTEND.idUtils || null;
 const statusUtils = SEC_FRONTEND.statusUtils || null;
 const progressUtils = SEC_FRONTEND.progressUtils || null;
@@ -434,6 +435,12 @@ function getImportValidationUtil(methodName) {
 function getImportPipelineUtil(methodName) {
   if (!importPipelineUtils) return null;
   const method = importPipelineUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getImportProcessorUtil(methodName) {
+  if (!importProcessorUtils) return null;
+  const method = importProcessorUtils[methodName];
   return typeof method === "function" ? method : null;
 }
 
@@ -1886,6 +1893,18 @@ function getSelected() {
 
 // Pipeline de importacao: cria/atualiza registros e gera relatorio consolidado.
 function processImportedRows(sourceRows, fileName) {
+  const processImportedRowsUtil = getImportProcessorUtil("processImportedRows");
+  if (processImportedRowsUtil) {
+    return processImportedRowsUtil(sourceRows, fileName, state.records, {
+      initialValidation: lastImportValidation || null,
+      mapImportRow: mapImportRow,
+      hasUsefulData: hasUsefulData,
+      createRecordFromImport: createRecordFromImport,
+      mergeImportIntoRecord: mergeImportIntoRecord,
+      buildImportValidationReport: buildImportValidationReport
+    });
+  }
+
   const report = {
     fileName: fileName,
     totalRows: sourceRows.length,
