@@ -30,6 +30,25 @@
     return Number.isFinite(n) ? n : null;
   }
 
+  function normalizeDraftFieldValue(value, type) {
+    if (type === "money") return toNumber(value);
+    if (type === "number") return toInt(value);
+    return asText(value);
+  }
+
+  function formatDraftInputValue(value, type) {
+    if (type === "money") return fmtMoney(value || 0);
+    if (type === "number") return String(toInt(value));
+    return String(value == null ? "" : value);
+  }
+
+  function parseDraftFieldValue(raw, type) {
+    var v = String(raw == null ? "" : raw);
+    if (type === "money") return toNumber(v);
+    if (type === "number") return toInt(v);
+    return v.trim();
+  }
+
   function fmtMoney(n) {
     var x = toNumber(n);
     return x.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -67,6 +86,9 @@
     toInt: toInt,
     toNumber: toNumber,
     toNumberOrNull: toNumberOrNull,
+    normalizeDraftFieldValue: normalizeDraftFieldValue,
+    formatDraftInputValue: formatDraftInputValue,
+    parseDraftFieldValue: parseDraftFieldValue,
     fmtMoney: fmtMoney,
     fmtDateTime: fmtDateTime,
     isoNow: isoNow,

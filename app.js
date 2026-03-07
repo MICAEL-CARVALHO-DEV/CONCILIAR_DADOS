@@ -931,18 +931,27 @@ function getModalFieldLabel(fieldKey, fallback) {
 }
 
 function normalizeDraftFieldValue(value, type) {
+  if (formatUtils && typeof formatUtils.normalizeDraftFieldValue === "function") {
+    return formatUtils.normalizeDraftFieldValue(value, type);
+  }
   if (type === "money") return toNumber(value);
   if (type === "number") return toInt(value);
   return String(value == null ? "" : value).trim();
 }
 
 function formatDraftInputValue(value, type) {
+  if (formatUtils && typeof formatUtils.formatDraftInputValue === "function") {
+    return formatUtils.formatDraftInputValue(value, type);
+  }
   if (type === "money") return fmtMoney(value || 0);
   if (type === "number") return String(toInt(value));
   return String(value == null ? "" : value);
 }
 
 function parseDraftFieldValue(raw, type) {
+  if (formatUtils && typeof formatUtils.parseDraftFieldValue === "function") {
+    return formatUtils.parseDraftFieldValue(raw, type);
+  }
   const v = String(raw == null ? "" : raw);
   if (type === "money") return toNumber(v);
   if (type === "number") return toInt(v);
