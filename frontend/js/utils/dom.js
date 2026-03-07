@@ -50,11 +50,7 @@
       return;
     }
 
-    var temp = document.createElement("div");
-    temp.innerHTML = html;
-    while (temp.firstChild) {
-      container.appendChild(temp.firstChild);
-    }
+    container.appendChild(document.createTextNode(html));
   }
 
   root.domUtils = {

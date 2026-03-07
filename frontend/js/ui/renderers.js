@@ -50,10 +50,27 @@
         if (typeof document.createRange === "function") {
           fragment = document.createRange().createContextualFragment(html);
         } else {
-          var tmp = document.createElement("div");
-          tmp.innerHTML = html;
-          fragment = document.createDocumentFragment();
-          while (tmp.firstChild) fragment.appendChild(tmp.firstChild);
+          if (typeof DOMParser === "function") {
+            try {
+              var parser = new DOMParser();
+              var doc = parser.parseFromString("<body>" + html + "</body>", "text/html");
+              var body = doc && doc.body;
+              if (body && body.childNodes) {
+                fragment = document.createDocumentFragment();
+                while (body.firstChild) {
+                  fragment.appendChild(body.firstChild);
+                }
+              } else {
+                fragment = null;
+              }
+            } catch (_err) {
+              fragment = null;
+            }
+          }
+          if (!fragment) {
+            fragment = document.createDocumentFragment();
+            fragment.appendChild(document.createTextNode(html));
+          }
         }
         container.appendChild(fragment);
       };
