@@ -19,6 +19,7 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Extrair helpers de template/export (`buildCanonicalColumnMap`, `findHeaderIndexByAliases`, `setWorksheetCellValue`, `runRoundTripCheck`, `buildPlanilha1Aoa`) para `frontend/js/utils/exportTemplate.js`.
 - [DONE] Extrair builders de dados de exportação (`buildExportTableData`, `buildAuditLogTableData`, `buildSummaryAoa`) para `frontend/js/utils/exportData.js`.
 - [DONE] Extrair utilitário de render da Planilha1 para `frontend/js/ui/importReport.js` com fallback local.
+- [DONE] Extrair badge de resumo de exportação (`buildExportSummaryBadgeHtml`) para `frontend/js/ui/importReport.js`.
 
-Active: ID-FE-17
+Active: ID-FE-18
 Risks: validar comportamento em dispositivos com storage bloqueado.

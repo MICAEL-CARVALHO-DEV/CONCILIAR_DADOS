@@ -18,6 +18,32 @@
       .replaceAll("'", "&#039;");
   }
 
+  function buildExportSummaryBadgeHtml(report, escapeHtmlFn, exportScopeLabelFn, fmtDateTimeFn) {
+    var escapeHtml = typeof escapeHtmlFn === "function" ? escapeHtmlFn : escape;
+    var scopeLabel = typeof exportScopeLabelFn === "function" ? exportScopeLabelFn : function (value) {
+      if (value == null) return "-";
+      var normalized = String(value).trim();
+      return normalized || "-";
+    };
+    var _fmtDateTime = typeof fmtDateTimeFn === "function" ? fmtDateTimeFn : function () { return "-"; };
+    if (!report) {
+      return '<div class="export-summary-banner muted small">MODO: -</div>';
+    }
+
+    var scope = scopeLabel(report.escopo || "ATUAIS");
+    var file = report.arquivoNome ? escapeHtml(String(report.arquivoNome)) : "-";
+    var qty = Number.isFinite(Number(report.quantidadeRegistros)) ? Number(report.quantidadeRegistros) : 0;
+    var when = report.geradoEm ? _fmtDateTime(report.geradoEm) : "-";
+
+    return ''
+      + '<div class="export-summary-banner">'
+      + '  <span class="export-summary-mode">MODO: ' + scope + '</span>'
+      + '  <span class="muted small">Arquivo: ' + file + '</span>'
+      + '  <span class="muted small">Registros: ' + String(qty) + '</span>'
+      + '  <span class="muted small">Gerado em: ' + escapeHtml(String(when)) + '</span>'
+      + '</div>';
+  }
+
   function buildPlanilha1HtmlFromUtils(aoa, escapeHtmlFn, normalizeLooseTextFn) {
     if (!root.importReportUtils || typeof root.importReportUtils.buildPlanilha1Html !== "function") {
       return "";
@@ -320,6 +346,7 @@
 
   root.importReportUtils = root.importReportUtils || {};
   root.importReportUtils.renderImportDashboard = renderImportDashboard;
+  root.importReportUtils.buildExportSummaryBadgeHtml = buildExportSummaryBadgeHtml;
   root.importReportUtils.buildImportSummaryPlaceholderHtml = buildImportSummaryPlaceholderHtml;
   root.importReportUtils.buildImportSummaryHtml = buildImportSummaryHtml;
   root.importReportUtils.buildImportValidationHtml = buildImportValidationHtml;

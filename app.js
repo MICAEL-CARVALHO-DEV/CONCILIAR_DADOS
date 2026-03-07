@@ -4330,6 +4330,14 @@ function renderImportDashboard() {
 }
 
 function buildExportSummaryBadgeHtml(report) {
+  if (typeof importReportUtils !== "undefined" && importReportUtils && typeof importReportUtils.buildExportSummaryBadgeHtml === "function") {
+    return importReportUtils.buildExportSummaryBadgeHtml(
+      report,
+      escapeHtml,
+      exportScopeLabel,
+      fmtDateTime
+    );
+  }
   if (!report) {
     return '<div class="export-summary-banner muted small">MODO: -</div>';
   }
