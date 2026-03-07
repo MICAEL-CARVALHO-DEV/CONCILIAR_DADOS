@@ -606,6 +606,7 @@ function setSelectOptions(select, options, preferredValue) {
 // Render da grade principal de emendas (dados + progresso + acoes).
 function render() {
   const rows = getFiltered();
+  const uiCtx = getUiRenderContext();
   while (tbody && tbody.firstChild) {
     tbody.removeChild(tbody.firstChild);
   }
@@ -614,20 +615,7 @@ function render() {
   const useRenderer = !!renderMainRowUtil;
   const renderMainRows = function (r) {
     if (useRenderer) {
-      renderMainRowUtil(tbody, r, {
-        fmtMoney: fmtMoney,
-        fmtDateTime: fmtDateTime,
-        getActiveUsersWithLastMark: getActiveUsersWithLastMark,
-        calcProgress: calcProgress,
-        renderProgressBar: renderProgressBar,
-        renderMemberChips: renderMemberChips,
-        getLastEventDays: function (row) {
-          return daysSince(lastEventAt(row));
-        },
-        onView: function (id) {
-          openModal(id);
-        }
-      });
+      renderMainRowUtil(tbody, r, uiCtx);
       return;
     }
 
@@ -1599,12 +1587,10 @@ function getEventsSorted(rec) {
 
 function renderMarksSummary(lastMarks) {
   if (!marksSummary) return;
+  const uiCtx = getUiRenderContext();
   const renderMarksSummaryUtil = getUiRenderUtil("renderMarksSummary");
   if (renderMarksSummaryUtil) {
-    renderMarksSummaryUtil(marksSummary, lastMarks, {
-      fmtDateTime: fmtDateTime,
-      statusColor: statusColor
-    });
+    renderMarksSummaryUtil(marksSummary, lastMarks, uiCtx);
     return;
   }
 
@@ -1617,9 +1603,10 @@ function renderMarksSummary(lastMarks) {
 
 function renderHistoryFallback(rec) {
   if (!historyEl) return;
+  const uiCtx = getUiRenderContext();
   const renderHistoryToContainerUtil = getUiRenderUtil("renderHistoryToContainer");
   if (renderHistoryToContainerUtil) {
-    renderHistoryToContainerUtil(historyEl, getEventsSorted(rec), { fmtDateTime: fmtDateTime });
+    renderHistoryToContainerUtil(historyEl, getEventsSorted(rec), uiCtx);
     return;
   }
 
@@ -3272,15 +3259,16 @@ async function syncModalEmendaLock(rec) {
 
 function renderRoleNotice() {
   if (!roleNotice) return;
+  const uiCtx = getUiRenderContext();
   const renderRoleNoticeUtil = getUiRenderUtil("renderRoleNotice");
   if (renderRoleNoticeUtil) {
-    renderRoleNoticeUtil(roleNotice, { isSupervisor: isSupervisorUser() });
+    renderRoleNoticeUtil(roleNotice, uiCtx);
     return;
   }
 
-  roleNotice.classList.toggle("hidden", !isSupervisorUser());
+  roleNotice.classList.toggle("hidden", !uiCtx.isSupervisor);
   clearNodeChildren(roleNotice);
-  if (isSupervisorUser()) {
+  if (uiCtx.isSupervisor) {
     const h4 = document.createElement("h4");
     h4.textContent = "Modo supervisao: somente monitoramento";
     const p = document.createElement("p");
@@ -3295,18 +3283,12 @@ function renderRoleNotice() {
 function renderSupervisorQuickPanel(prefilteredRows) {
   if (!supervisorQuickPanel) return;
   const rows = Array.isArray(prefilteredRows) ? prefilteredRows : getFiltered();
+  const uiCtx = getUiRenderContext();
   const renderSupervisorQuickPanelUtil = getUiRenderUtil("renderSupervisorQuickPanel");
   if (renderSupervisorQuickPanelUtil) {
-    renderSupervisorQuickPanelUtil(supervisorQuickPanel, {
-      isSupervisor: isSupervisorUser(),
-      rows: rows,
-      getGlobalProgressState: getGlobalProgressState,
-      getActiveUsersWithLastMark: getActiveUsersWithLastMark,
-      getStaleDays: function (rec) { return daysSince(lastEventAt(rec)); },
-      onOpen: function (recId) {
-        if (recId) openModal(recId);
-      }
-    });
+    renderSupervisorQuickPanelUtil(supervisorQuickPanel, Object.assign({}, uiCtx, {
+      rows: rows
+    }));
     return;
   }
 
@@ -3386,13 +3368,10 @@ function closePendingUsersModal() {
 
 function renderPendingUsersTable(items) {
   if (!pendingUsersTableWrap) return;
+  const uiCtx = getUiRenderContext();
   const renderPendingUsersTableUtil = getUiRenderUtil("renderPendingUsersTable");
   if (renderPendingUsersTableUtil) {
-    renderPendingUsersTableUtil(pendingUsersTableWrap, items, {
-      roles: USER_ROLE_OPTIONS,
-      normalizeUserRole: normalizeUserRole,
-      fmtDateTime: fmtDateTime
-    });
+    renderPendingUsersTableUtil(pendingUsersTableWrap, items, uiCtx);
     return;
   }
 
@@ -4615,6 +4594,34 @@ function getExportTemplateContext() {
     normalizeCompareValue: normalizeCompareValue,
     xlsxApi: getXlsxApi(),
     inferDemoSeed: inferDemoSeed
+  };
+}
+
+function getUiRenderContext() {
+  return {
+    fmtMoney: fmtMoney,
+    fmtDateTime: fmtDateTime,
+    statusColor: statusColor,
+    getActiveUsersWithLastMark: getActiveUsersWithLastMark,
+    calcProgress: calcProgress,
+    renderProgressBar: renderProgressBar,
+    renderMemberChips: renderMemberChips,
+    getLastEventDays: function (row) {
+      return daysSince(lastEventAt(row));
+    },
+    onView: function (id) {
+      openModal(id);
+    },
+    isSupervisor: isSupervisorUser(),
+    getGlobalProgressState: getGlobalProgressState,
+    getStaleDays: function (rec) {
+      return daysSince(lastEventAt(rec));
+    },
+    onOpen: function (recId) {
+      if (recId) openModal(recId);
+    },
+    roles: USER_ROLE_OPTIONS,
+    normalizeUserRole: normalizeUserRole
   };
 }
 

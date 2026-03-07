@@ -45,6 +45,7 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Alinhar `renderImportDashboard` do modulo `importReport` com `HOME_CHANGES_LIMIT`, removendo o limite fixo `10` e o reset redundante de `innerHTML`.
 - [DONE] Criar `getXlsxApi()`, `getExportTemplateContext()` e `getExportDataContext()` no `app.js` para centralizar dependencias dos wrappers de exportacao/template.
 - [DONE] Reutilizar `getXlsxApi()` em `parseInputFile()` para remover o acesso direto restante a `window.XLSX` no fluxo de importacao.
+- [DONE] Criar `getUiRenderContext()` no `app.js` para centralizar dependencias passadas aos renderizadores de grade, historico, supervisao e pendencias.
 
-Active: ID-FE-41
+Active: ID-FE-42
 Risks: validar comportamento em dispositivos com storage bloqueado.
