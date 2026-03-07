@@ -4361,9 +4361,16 @@ function upsertRawField(rawObj, canonicalKey, value) {
   rawObj[finalKey] = value == null ? "" : value;
 }
 
+function getImportReportUtil(methodName) {
+  if (!importReportUtils) return null;
+  const method = importReportUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
 function renderImportDashboard() {
-  if (importReportUtils && typeof importReportUtils.renderImportDashboard === "function") {
-    importReportUtils.renderImportDashboard(
+  const renderImportDashboardUtil = getImportReportUtil("renderImportDashboard");
+  if (renderImportDashboardUtil) {
+    renderImportDashboardUtil(
       state.records || [],
       latestImportReport,
       lastImportedPlanilha1Aoa,
@@ -4407,8 +4414,9 @@ function renderImportDashboard() {
 }
 
 function buildExportSummaryBadgeHtml(report) {
-  if (importReportUtils && typeof importReportUtils.buildExportSummaryBadgeHtml === "function") {
-    return importReportUtils.buildExportSummaryBadgeHtml(
+  const buildExportSummaryBadgeHtmlUtil = getImportReportUtil("buildExportSummaryBadgeHtml");
+  if (buildExportSummaryBadgeHtmlUtil) {
+    return buildExportSummaryBadgeHtmlUtil(
       report,
       escapeHtml,
       exportScopeLabel,
@@ -4433,8 +4441,9 @@ function buildExportSummaryBadgeHtml(report) {
     + '</div>';
 }
 function buildImportSummaryPlaceholderHtml() {
-  if (importReportUtils && typeof importReportUtils.buildImportSummaryPlaceholderHtml === "function") {
-    return importReportUtils.buildImportSummaryPlaceholderHtml(
+  const buildImportSummaryPlaceholderHtmlUtil = getImportReportUtil("buildImportSummaryPlaceholderHtml");
+  if (buildImportSummaryPlaceholderHtmlUtil) {
+    return buildImportSummaryPlaceholderHtmlUtil(
       state.records || [],
       lastImportedPlanilha1Aoa,
       escapeHtml,
@@ -4473,8 +4482,9 @@ function buildImportSummaryPlaceholderHtml() {
 }
 
 function buildImportSummaryHtml(report) {
-  if (importReportUtils && typeof importReportUtils.buildImportSummaryHtml === "function") {
-    return importReportUtils.buildImportSummaryHtml(
+  const buildImportSummaryHtmlUtil = getImportReportUtil("buildImportSummaryHtml");
+  if (buildImportSummaryHtmlUtil) {
+    return buildImportSummaryHtmlUtil(
       report,
       state.records || [],
       lastImportedPlanilha1Aoa,
@@ -4527,8 +4537,9 @@ function buildImportSummaryHtml(report) {
 }
 
 function buildImportValidationHtml(validation) {
-  if (importReportUtils && typeof importReportUtils.buildImportValidationHtml === "function") {
-    return importReportUtils.buildImportValidationHtml(validation, escapeHtml);
+  const buildImportValidationHtmlUtil = getImportReportUtil("buildImportValidationHtml");
+  if (buildImportValidationHtmlUtil) {
+    return buildImportValidationHtmlUtil(validation, escapeHtml);
   }
   const v = validation || {};
   const recognized = Array.isArray(v.recognizedHeaders) ? v.recognizedHeaders : [];
@@ -4563,8 +4574,9 @@ function buildImportValidationHtml(validation) {
   return html;
 }
 function buildRecentChangesPanelHtml(items) {
-  if (importReportUtils && typeof importReportUtils.buildRecentChangesPanelHtml === "function") {
-    return importReportUtils.buildRecentChangesPanelHtml(items, escapeHtml, fmtDateTime, function (item) { return describeEventForPanel(item); }, text);
+  const buildRecentChangesPanelHtmlUtil = getImportReportUtil("buildRecentChangesPanelHtml");
+  if (buildRecentChangesPanelHtmlUtil) {
+    return buildRecentChangesPanelHtmlUtil(items, escapeHtml, fmtDateTime, function (item) { return describeEventForPanel(item); }, text);
   }
   if (!items.length) {
     return ""
@@ -4595,8 +4607,9 @@ function buildRecentChangesPanelHtml(items) {
 }
 
 function getRecentChangesForPanel(limit) {
-  if (importReportUtils && typeof importReportUtils.getRecentChangesForPanel === "function") {
-    return importReportUtils.getRecentChangesForPanel(state.records || [], getEventsSorted, toInt, limit);
+  const getRecentChangesForPanelUtil = getImportReportUtil("getRecentChangesForPanel");
+  if (getRecentChangesForPanelUtil) {
+    return getRecentChangesForPanelUtil(state.records || [], getEventsSorted, toInt, limit);
   }
   const out = [];
 
@@ -4631,8 +4644,9 @@ function getRecentChangesForPanel(limit) {
 }
 
 function describeEventForPanel(item) {
-  if (importReportUtils && typeof importReportUtils.describeEventForPanel === "function") {
-    return importReportUtils.describeEventForPanel(item, text);
+  const describeEventForPanelUtil = getImportReportUtil("describeEventForPanel");
+  if (describeEventForPanelUtil) {
+    return describeEventForPanelUtil(item, text);
   }
   if (!item) return "Alteracao registrada";
 
@@ -4664,8 +4678,9 @@ function wireImportReportTabs(targetOrTab, maybeDefaultTab) {
   const target = targetOrTab && typeof targetOrTab.querySelectorAll === "function" ? targetOrTab : importReport;
   const defaultTab = target === targetOrTab ? maybeDefaultTab : targetOrTab;
 
-  if (importReportUtils && typeof importReportUtils.wireImportReportTabs === "function") {
-    importReportUtils.wireImportReportTabs(target, defaultTab);
+  const wireImportReportTabsUtil = getImportReportUtil("wireImportReportTabs");
+  if (wireImportReportTabsUtil) {
+    wireImportReportTabsUtil(target, defaultTab);
     return;
   }
   if (!target) return;
@@ -4701,8 +4716,9 @@ function wireImportReportTabs(targetOrTab, maybeDefaultTab) {
 }
 
 function buildPlanilha1Html(aoa) {
-  if (importReportUtils && typeof importReportUtils.buildPlanilha1Html === "function") {
-    return importReportUtils.buildPlanilha1Html(aoa, {
+  const buildPlanilha1HtmlUtil = getImportReportUtil("buildPlanilha1Html");
+  if (buildPlanilha1HtmlUtil) {
+    return buildPlanilha1HtmlUtil(aoa, {
       escapeHtml: escapeHtml,
       normalizeLooseText: normalizeLooseText
     });
