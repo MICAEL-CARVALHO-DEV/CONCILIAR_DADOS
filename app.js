@@ -3085,11 +3085,6 @@ function renderRoleNotice() {
     roleNotice.appendChild(p);
     return;
   }
-
-  const hiddenText = document.createElement("p");
-  hiddenText.className = "muted small";
-  hiddenText.textContent = "Renderizador indisponível.";
-  roleNotice.appendChild(hiddenText);
 }
 
 function renderSupervisorQuickPanel(prefilteredRows) {
