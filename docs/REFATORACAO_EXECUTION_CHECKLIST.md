@@ -32,6 +32,7 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Passar `buildExportSummaryBadgeHtml` e `exportScopeLabel` explicitamente para `renderImportDashboard`, reduzindo dependência de fallback implícito.
 - [DONE] Padronizar o acesso a `importReportUtils` no topo do `app.js`, removendo verificações repetidas por `typeof`.
 - [DONE] Criar `getImportReportUtil()` no `app.js` para centralizar a ponte com `frontend/js/ui/importReport.js`.
+- [DONE] Criar `getFilterUtil()` no `app.js` para centralizar a ponte com `frontend/js/ui/filters.js`.
 
-Active: ID-FE-28
+Active: ID-FE-29
 Risks: validar comportamento em dispositivos com storage bloqueado.

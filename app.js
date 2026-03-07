@@ -373,10 +373,17 @@ setupCrossTabSync();
 render();
 initializeAuthFlow();
 
+function getFilterUtil(methodName) {
+  if (!filterUtils) return null;
+  const method = filterUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
 // Inicializa os filtros da UI principal e prepara os selects dependentes.
 function initSelects() {
-  if (filterUtils && typeof filterUtils.initSelects === "function") {
-    filterUtils.initSelects({
+  const initSelectsUtil = getFilterUtil("initSelects");
+  if (initSelectsUtil) {
+    initSelectsUtil({
       statusFilter: statusFilter,
       markStatus: markStatus,
       yearFilter: yearFilter,
@@ -401,8 +408,9 @@ function initSelects() {
 }
 
 function syncYearFilter() {
-  if (filterUtils && typeof filterUtils.syncYearFilter === "function") {
-    filterUtils.syncYearFilter({
+  const syncYearFilterUtil = getFilterUtil("syncYearFilter");
+  if (syncYearFilterUtil) {
+    syncYearFilterUtil({
       select: yearFilter,
       current: yearFilter.value,
       records: state.records,
@@ -428,8 +436,9 @@ function syncYearFilter() {
 }
 
 function syncCustomExportFilters() {
-  if (filterUtils && typeof filterUtils.syncCustomExportFilters === "function") {
-    filterUtils.syncCustomExportFilters({
+  const syncCustomExportFiltersUtil = getFilterUtil("syncCustomExportFilters");
+  if (syncCustomExportFiltersUtil) {
+    syncCustomExportFiltersUtil({
       exportCustomYear: exportCustomYear,
       exportCustomStatus: exportCustomStatus,
       records: state.records,
@@ -465,8 +474,9 @@ function syncCustomExportFilters() {
 
 // Preenche um <select> mantendo valor anterior quando ainda for valido.
 function setSelectOptions(select, options, preferredValue) {
-  if (filterUtils && typeof filterUtils.setSelectOptions === "function") {
-    return filterUtils.setSelectOptions(select, options, preferredValue);
+  const setSelectOptionsUtil = getFilterUtil("setSelectOptions");
+  if (setSelectOptionsUtil) {
+    return setSelectOptionsUtil(select, options, preferredValue);
   }
 
   const prev = preferredValue !== undefined ? preferredValue : select.value;
