@@ -1,11 +1,11 @@
 ﻿# CHECKLIST
-Goal: reduzir acoplamento do `app.js` extraindo utilitarios de filtros e selects para modulo de UI
-Success: filtros e selects continuam funcionando sem alteração de comportamento, com fallback compatível.
+Goal: reduzir acoplamento do `app.js` extraindo utilitarios de exportacao para modulo dedicado
+Success: filtros e exportacao usam funcoes utilitarias compartilhadas sem alterar comportamento.
 
-- [DONE] Criar `frontend/js/ui/filters.js` com `setSelectOptions`, `syncYearFilter`, `syncCustomExportFilters`, `initSelects`.
-- [DONE] Trocar chamadas de `app.js` para usar `filterUtils` com fallback local.
-- [DONE] Atualizar `index.html` para carregar `frontend/js/ui/filters.js`.
-- [DONE] Validar sintaxe e registrar commit `ID-FE-08`.
+- [DONE] Criar `frontend/js/utils/export.js` com `getCurrentFilterSnapshot`, `countAuditEvents`, `exportScopeLabel`, `buildExportFilename`, `isCurrentRecord`, `matchesTextFilter`, `buildExportFiltersSnapshot`.
+- [DONE] Atualizar `app.js` para usar `exportUtils` com fallback local.
+- [DONE] Atualizar `index.html` para carregar `frontend/js/utils/export.js`.
+- [DONE] Validar sintaxe e registrar commit `ID-FE-09`.
 
-Active: ID-FE-09
-Risks: nenhum ativo. Múltiplas chamadas a `syncYearFilter` e `syncCustomExportFilters` já cobertas por fallback e parâmetros explícitos no módulo.
+Active: ID-FE-10
+Risks: nenhum ativo.

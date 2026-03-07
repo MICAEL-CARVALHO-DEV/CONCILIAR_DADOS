@@ -68,6 +68,7 @@ const normalizeUtils = SEC_FRONTEND.normalizeUtils || null;
 const idUtils = SEC_FRONTEND.idUtils || null;
 const statusUtils = SEC_FRONTEND.statusUtils || null;
 const filterUtils = SEC_FRONTEND.filterUtils || null;
+const exportUtils = SEC_FRONTEND.exportUtils || null;
 const authStore = SEC_FRONTEND.authStore || null;
 const authGuard = SEC_FRONTEND.authGuard || null;
 const apiClient = SEC_FRONTEND.apiClient || null;
@@ -4567,6 +4568,13 @@ function quickHashString(input) {
 }
 
 function getCurrentFilterSnapshot() {
+  if (exportUtils && typeof exportUtils.getCurrentFilterSnapshot === "function") {
+    return exportUtils.getCurrentFilterSnapshot({
+      statusFilter: statusFilter,
+      yearFilter: yearFilter,
+      searchInput: searchInput
+    });
+  }
   return {
     status: statusFilter ? statusFilter.value : "",
     ano: yearFilter ? yearFilter.value : "",
@@ -4575,23 +4583,35 @@ function getCurrentFilterSnapshot() {
 }
 
 function countAuditEvents(records) {
+  if (exportUtils && typeof exportUtils.countAuditEvents === "function") {
+    return exportUtils.countAuditEvents(records);
+  }
   return (records || []).reduce(function (acc, rec) {
     return acc + ((rec && Array.isArray(rec.eventos)) ? rec.eventos.length : 0);
   }, 0);
 }
 
 function exportScopeLabel(scope) {
+  if (exportUtils && typeof exportUtils.exportScopeLabel === "function") {
+    return exportUtils.exportScopeLabel(scope, EXPORT_SCOPE);
+  }
   if (scope === EXPORT_SCOPE.HISTORICO) return "HISTORICO";
   if (scope === EXPORT_SCOPE.PERSONALIZADO) return "PERSONALIZADO";
   return "ATUAIS";
 }
 
 function buildExportFilename(scope) {
+  if (exportUtils && typeof exportUtils.buildExportFilename === "function") {
+    return exportUtils.buildExportFilename(scope, EXPORT_SCOPE, EXPORT_SCOPE_SUFFIX, dateStamp);
+  }
   const suffix = EXPORT_SCOPE_SUFFIX[scope] || EXPORT_SCOPE_SUFFIX.ATUAIS;
   return "emendas_export_" + dateStamp() + "_" + suffix + ".xlsx";
 }
 
 function isCurrentRecord(rec) {
+  if (exportUtils && typeof exportUtils.isCurrentRecord === "function") {
+    return exportUtils.isCurrentRecord(rec);
+  }
   return !(rec && Object.prototype.hasOwnProperty.call(rec, "is_current") && rec.is_current === false);
 }
 
@@ -4600,6 +4620,9 @@ function getRecordCurrentStatus(rec) {
 }
 
 function matchesTextFilter(value, term) {
+  if (exportUtils && typeof exportUtils.matchesTextFilter === "function") {
+    return exportUtils.matchesTextFilter(value, term, normalizeLooseText);
+  }
   const src = normalizeLooseText(value || "");
   const q = normalizeLooseText(term || "");
   if (!q) return true;
@@ -4637,6 +4660,14 @@ function filterRecordsForExport(scope, customFilters) {
 }
 
 function buildExportFiltersSnapshot(scope, customFilters) {
+  if (exportUtils && typeof exportUtils.buildExportFiltersSnapshot === "function") {
+    return exportUtils.buildExportFiltersSnapshot(scope, customFilters, function () {
+      return getCurrentFilterSnapshot();
+    }, function (currentScope) {
+      return exportScopeLabel(currentScope);
+    });
+  }
+
   const base = getCurrentFilterSnapshot();
   base.escopo = exportScopeLabel(scope);
   if (scope === EXPORT_SCOPE.PERSONALIZADO) {
