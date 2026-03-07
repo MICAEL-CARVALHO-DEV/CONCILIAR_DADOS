@@ -379,6 +379,18 @@ function getFilterUtil(methodName) {
   return typeof method === "function" ? method : null;
 }
 
+function getUiRenderUtil(methodName) {
+  if (!uiRender) return null;
+  const method = uiRender[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getProgressUtil(methodName) {
+  if (!progressUtils) return null;
+  const method = progressUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
 // Inicializa os filtros da UI principal e prepara os selects dependentes.
 function initSelects() {
   const initSelectsUtil = getFilterUtil("initSelects");
@@ -501,10 +513,11 @@ function render() {
     tbody.removeChild(tbody.firstChild);
   }
 
-  const useRenderer = uiRender && typeof uiRender.renderMainRow === "function";
+  const renderMainRowUtil = getUiRenderUtil("renderMainRow");
+  const useRenderer = !!renderMainRowUtil;
   const renderMainRows = function (r) {
     if (useRenderer) {
-      uiRender.renderMainRow(tbody, r, {
+      renderMainRowUtil(tbody, r, {
         fmtMoney: fmtMoney,
         fmtDateTime: fmtDateTime,
         getActiveUsersWithLastMark: getActiveUsersWithLastMark,
@@ -578,7 +591,7 @@ function render() {
   };
 
   rows.forEach(renderMainRows);
-  if (!(uiRender && typeof uiRender.renderMainRow === "function")) {
+  if (!useRenderer) {
     Array.prototype.forEach.call(tbody.querySelectorAll("button[data-action='view']"), function (btn) {
       btn.addEventListener("click", function () {
         openModal(btn.dataset.id);
@@ -1462,9 +1475,10 @@ function renderUserProgressBox(progressContainer, progress, delays, options) {
 
 function renderRawFields(rec) {
   if (!rawFields) return;
-  if (uiRender && typeof uiRender.renderRawFields === "function") {
+  const renderRawFieldsUtil = getUiRenderUtil("renderRawFields");
+  if (renderRawFieldsUtil) {
     const source = rec && rec.all_fields && typeof rec.all_fields === "object" ? rec.all_fields : null;
-    uiRender.renderRawFields(rawFields, source, {});
+    renderRawFieldsUtil(rawFields, source, {});
     return;
   }
 
@@ -1485,8 +1499,9 @@ function getEventsSorted(rec) {
 
 function renderMarksSummary(lastMarks) {
   if (!marksSummary) return;
-  if (uiRender && typeof uiRender.renderMarksSummary === "function") {
-    uiRender.renderMarksSummary(marksSummary, lastMarks, {
+  const renderMarksSummaryUtil = getUiRenderUtil("renderMarksSummary");
+  if (renderMarksSummaryUtil) {
+    renderMarksSummaryUtil(marksSummary, lastMarks, {
       fmtDateTime: fmtDateTime,
       statusColor: statusColor
     });
@@ -1502,8 +1517,9 @@ function renderMarksSummary(lastMarks) {
 
 function renderHistoryFallback(rec) {
   if (!historyEl) return;
-  if (uiRender && typeof uiRender.renderHistoryToContainer === "function") {
-    uiRender.renderHistoryToContainer(historyEl, getEventsSorted(rec), { fmtDateTime: fmtDateTime });
+  const renderHistoryToContainerUtil = getUiRenderUtil("renderHistoryToContainer");
+  if (renderHistoryToContainerUtil) {
+    renderHistoryToContainerUtil(historyEl, getEventsSorted(rec), { fmtDateTime: fmtDateTime });
     return;
   }
 
@@ -1526,8 +1542,9 @@ function getLastMarksByUser(rec) {
 }
 
 function getActiveUsersWithLastMark(rec) {
-  if (progressUtils && typeof progressUtils.getActiveUsersWithLastMark === "function") {
-    return progressUtils.getActiveUsersWithLastMark(rec, {
+  const getActiveUsersWithLastMarkUtil = getProgressUtil("getActiveUsersWithLastMark");
+  if (getActiveUsersWithLastMarkUtil) {
+    return getActiveUsersWithLastMarkUtil(rec, {
       normalizeStatus: function (value) {
         return normalizeStatus(value);
       },
@@ -1540,29 +1557,33 @@ function getActiveUsersWithLastMark(rec) {
 }
 
 function calcProgress(users) {
-  if (progressUtils && typeof progressUtils.calcProgress === "function") {
-    return progressUtils.calcProgress(users);
+  const calcProgressUtil = getProgressUtil("calcProgress");
+  if (calcProgressUtil) {
+    return calcProgressUtil(users);
   }
   return legacyCalcProgress(users);
 }
 
 function getAttentionIssues(users) {
-  if (progressUtils && typeof progressUtils.getAttentionIssues === "function") {
-    return progressUtils.getAttentionIssues(users);
+  const getAttentionIssuesUtil = getProgressUtil("getAttentionIssues");
+  if (getAttentionIssuesUtil) {
+    return getAttentionIssuesUtil(users);
   }
   return legacyGetAttentionIssues(users);
 }
 
 function getGlobalProgressState(users) {
-  if (progressUtils && typeof progressUtils.getGlobalProgressState === "function") {
-    return progressUtils.getGlobalProgressState(users);
+  const getGlobalProgressStateUtil = getProgressUtil("getGlobalProgressState");
+  if (getGlobalProgressStateUtil) {
+    return getGlobalProgressStateUtil(users);
   }
   return legacyGetGlobalProgressState(users);
 }
 
 function getInitials(name) {
-  if (progressUtils && typeof progressUtils.getInitials === "function") {
-    return progressUtils.getInitials(name);
+  const getInitialsUtil = getProgressUtil("getInitials");
+  if (getInitialsUtil) {
+    return getInitialsUtil(name);
   }
   return legacyGetInitials(name);
 }
@@ -1581,8 +1602,9 @@ function statusClass(status) {
 }
 
 function renderMemberChips(users) {
-  if (progressUtils && typeof progressUtils.renderMemberChips === "function") {
-    return progressUtils.renderMemberChips(users, {
+  const renderMemberChipsUtil = getProgressUtil("renderMemberChips");
+  if (renderMemberChipsUtil) {
+    return renderMemberChipsUtil(users, {
       escapeHtml: escapeHtml,
       statusClass: statusClass,
       daysSince: daysSince
@@ -1592,29 +1614,33 @@ function renderMemberChips(users) {
 }
 
 function renderProgressBar(progress) {
-  if (progressUtils && typeof progressUtils.renderProgressBar === "function") {
-    return progressUtils.renderProgressBar(progress);
+  const renderProgressBarUtil = getProgressUtil("renderProgressBar");
+  if (renderProgressBarUtil) {
+    return renderProgressBarUtil(progress);
   }
   return legacyRenderProgressBar(progress);
 }
 
 function lastEventAt(rec) {
-  if (progressUtils && typeof progressUtils.lastEventAt === "function") {
-    return progressUtils.lastEventAt(rec);
+  const lastEventAtUtil = getProgressUtil("lastEventAt");
+  if (lastEventAtUtil) {
+    return lastEventAtUtil(rec);
   }
   return legacyLastEventAt(rec);
 }
 
 function daysSince(iso) {
-  if (progressUtils && typeof progressUtils.daysSince === "function") {
-    return progressUtils.daysSince(iso);
+  const daysSinceUtil = getProgressUtil("daysSince");
+  if (daysSinceUtil) {
+    return daysSinceUtil(iso);
   }
   return legacyDaysSince(iso);
 }
 
 function whoIsDelaying(users) {
-  if (progressUtils && typeof progressUtils.whoIsDelaying === "function") {
-    return progressUtils.whoIsDelaying(users);
+  const whoIsDelayingUtil = getProgressUtil("whoIsDelaying");
+  if (whoIsDelayingUtil) {
+    return whoIsDelayingUtil(users);
   }
   return legacyWhoIsDelaying(users);
 }
@@ -3115,8 +3141,9 @@ async function syncModalEmendaLock(rec) {
 
 function renderRoleNotice() {
   if (!roleNotice) return;
-  if (uiRender && typeof uiRender.renderRoleNotice === "function") {
-    uiRender.renderRoleNotice(roleNotice, { isSupervisor: isSupervisorUser() });
+  const renderRoleNoticeUtil = getUiRenderUtil("renderRoleNotice");
+  if (renderRoleNoticeUtil) {
+    renderRoleNoticeUtil(roleNotice, { isSupervisor: isSupervisorUser() });
     return;
   }
 
@@ -3137,8 +3164,9 @@ function renderRoleNotice() {
 function renderSupervisorQuickPanel(prefilteredRows) {
   if (!supervisorQuickPanel) return;
   const rows = Array.isArray(prefilteredRows) ? prefilteredRows : getFiltered();
-  if (uiRender && typeof uiRender.renderSupervisorQuickPanel === "function") {
-    uiRender.renderSupervisorQuickPanel(supervisorQuickPanel, {
+  const renderSupervisorQuickPanelUtil = getUiRenderUtil("renderSupervisorQuickPanel");
+  if (renderSupervisorQuickPanelUtil) {
+    renderSupervisorQuickPanelUtil(supervisorQuickPanel, {
       isSupervisor: isSupervisorUser(),
       rows: rows,
       getGlobalProgressState: getGlobalProgressState,
@@ -3227,8 +3255,9 @@ function closePendingUsersModal() {
 
 function renderPendingUsersTable(items) {
   if (!pendingUsersTableWrap) return;
-  if (uiRender && typeof uiRender.renderPendingUsersTable === "function") {
-    uiRender.renderPendingUsersTable(pendingUsersTableWrap, items, {
+  const renderPendingUsersTableUtil = getUiRenderUtil("renderPendingUsersTable");
+  if (renderPendingUsersTableUtil) {
+    renderPendingUsersTableUtil(pendingUsersTableWrap, items, {
       roles: USER_ROLE_OPTIONS,
       normalizeUserRole: normalizeUserRole,
       fmtDateTime: fmtDateTime
