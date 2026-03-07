@@ -1612,16 +1612,10 @@ function getLastMarksByUser(rec) {
 }
 
 function getActiveUsersWithLastMark(rec) {
+  const progressCtx = getProgressContext();
   const getActiveUsersWithLastMarkUtil = getProgressUtil("getActiveUsersWithLastMark");
   if (getActiveUsersWithLastMarkUtil) {
-    return getActiveUsersWithLastMarkUtil(rec, {
-      normalizeStatus: function (value) {
-        return normalizeStatus(value);
-      },
-      localeCompare: function (a, b, locale) {
-        return String(a || "").localeCompare(String(b || ""), locale);
-      }
-    });
+    return getActiveUsersWithLastMarkUtil(rec, progressCtx);
   }
   return legacyGetActiveUsersWithLastMark(rec);
 }
@@ -1673,13 +1667,10 @@ function statusClass(status) {
 }
 
 function renderMemberChips(users) {
+  const progressCtx = getProgressContext();
   const renderMemberChipsUtil = getProgressUtil("renderMemberChips");
   if (renderMemberChipsUtil) {
-    return renderMemberChipsUtil(users, {
-      escapeHtml: escapeHtml,
-      statusClass: statusClass,
-      daysSince: daysSince
-    });
+    return renderMemberChipsUtil(users, progressCtx);
   }
   return legacyRenderMemberChips(users);
 }
@@ -4621,6 +4612,20 @@ function getFilterContext() {
     toInt: toInt,
     currentYear: exportCustomYear ? exportCustomYear.value : "",
     currentStatus: exportCustomStatus ? exportCustomStatus.value : ""
+  };
+}
+
+function getProgressContext() {
+  return {
+    normalizeStatus: function (value) {
+      return normalizeStatus(value);
+    },
+    localeCompare: function (a, b, locale) {
+      return String(a || "").localeCompare(String(b || ""), locale);
+    },
+    escapeHtml: escapeHtml,
+    statusClass: statusClass,
+    daysSince: daysSince
   };
 }
 
