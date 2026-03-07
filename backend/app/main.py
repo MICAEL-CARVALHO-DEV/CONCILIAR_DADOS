@@ -1,40 +1,25 @@
 import asyncio
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 import json
 import re
-import unicodedata
 from typing import Annotated
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import func, inspect, or_, text
-from sqlalchemy.exc import IntegrityError
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
 from .core.dependencies import _actor_from_headers, _actor_optional_from_headers, _require_manager, _require_owner
 from .core.security import (
-    IMMUTABLE_OWNER_NAMES,
     _actor_from_bearer_token,
     _actor_from_legacy_session,
-    _add_auth_audit,
-    _assert_allowed_owner_identity,
-    _build_unique_public_username,
-    _create_jwt_session,
-    _find_user_by_email,
-    _find_user_by_login,
-    _hash_password,
-    _hash_text,
     _mask_history_pair,
-    _normalize_role,
-    _normalize_user_name,
     _try_decode_jwt,
     _validate_runtime_security_settings,
-    _verify_google_identity_token,
-    _verify_user_password,
 )
 from .ai_schemas import AIProviderStatusResponse, AIWorkflowRequest, AIWorkflowResponse
 from .db import Base, SessionLocal, engine, get_db
-from .models import AuthAuditLog, Emenda, EmendaLock, ExportLog, Historico, ImportLinha, ImportLote, Usuario, UsuarioSessao
+from .models import Emenda, ExportLog, Historico, ImportLinha, ImportLote
 from .schemas import (
     AuthGoogleIn,
     AuthAuditLogOut,
@@ -61,6 +46,7 @@ from .schemas import (
     UserOut,
     UserStatusUpdate,
 )
+from .services import auth_service, emenda_service
 from .services.ai_orchestrator import AIOrchestrator, OrchestrationError
 from .settings import settings
 
@@ -76,77 +62,7 @@ app.add_middleware(
 )
 ai_orchestrator = AIOrchestrator(settings)
 
-EDITOR_ROLES = {"APG", "CONTABIL", "PROGRAMADOR"}
-OWNER_ROLE = "PROGRAMADOR"
-PUBLIC_REGISTER_ROLES = {"APG", "SUPERVISAO", "CONTABIL", "POWERBI"}
-EDIT_LOCK_TTL_SECONDS = 90
 VERSIONED_ID_RE = re.compile(r"^(?P<base>.+)-v(?P<num>\d+)$", re.IGNORECASE)
-
-STATUS_TRANSITIONS = {
-    "Recebido": {"Em analise", "Pendente", "Cancelado"},
-    "Em analise": {"Pendente", "Aguardando execucao", "Aprovado", "Cancelado"},
-    "Pendente": {"Em analise", "Aguardando execucao", "Cancelado"},
-    "Aguardando execucao": {"Em execucao", "Pendente", "Cancelado"},
-    "Em execucao": {"Aprovado", "Concluido", "Pendente", "Cancelado"},
-    "Aprovado": {"Concluido", "Em execucao", "Cancelado"},
-    "Concluido": {"Pendente"},
-    "Cancelado": set(),
-}
-
-EMENDA_EDITABLE_FIELDS = {
-    "ano": "ano",
-    "identificacao": "identificacao",
-    "cod_subfonte": "cod_subfonte",
-    "deputado": "deputado",
-    "cod_uo": "cod_uo",
-    "sigla_uo": "sigla_uo",
-    "cod_orgao": "cod_orgao",
-    "cod_acao": "cod_acao",
-    "descricao_acao": "descricao_acao",
-    "plan_a": "plan_a",
-    "plan_b": "plan_b",
-    "municipio": "municipio",
-    "valor_inicial": "valor_inicial",
-    "valor_atual": "valor_atual",
-    "processo_sei": "processo_sei",
-}
-
-EMENDA_EDITABLE_FIELD_ALIASES = {
-    "ano": "ano",
-    "identificacao": "identificacao",
-    "identificacao_da_emenda": "identificacao",
-    "cod_subfonte": "cod_subfonte",
-    "codigo_subfonte": "cod_subfonte",
-    "deputado": "deputado",
-    "cod_uo": "cod_uo",
-    "codigo_uo": "cod_uo",
-    "sigla_uo": "sigla_uo",
-    "sigla_da_uo": "sigla_uo",
-    "cod_orgao": "cod_orgao",
-    "codigo_orgao": "cod_orgao",
-    "cod_acao": "cod_acao",
-    "codacao": "cod_acao",
-    "codigo_acao": "cod_acao",
-    "codigo_da_acao": "cod_acao",
-    "descricao_acao": "descricao_acao",
-    "descricao_da_acao": "descricao_acao",
-    "descritor_da_acao": "descricao_acao",
-    "plan_a": "plan_a",
-    "plano_a": "plan_a",
-    "planoa": "plan_a",
-    "plano_a_acao": "plan_a",
-    "plan_b": "plan_b",
-    "plano_b": "plan_b",
-    "planob": "plan_b",
-    "plano_b_acao": "plan_b",
-    "municipio": "municipio",
-    "valor_inicial": "valor_inicial",
-    "valor_inicial_epi": "valor_inicial",
-    "valor_atual": "valor_atual",
-    "valor_atual_epi": "valor_atual",
-    "processo_sei": "processo_sei",
-    "processo": "processo_sei",
-}
 
 
 class WsConnectionBroker:
@@ -264,226 +180,6 @@ def _utcnow() -> datetime:
     return datetime.utcnow()
 
 
-def _validate_status_transition(current_status: str, next_status: str) -> None:
-    current = (current_status or "").strip()
-    target = (next_status or "").strip()
-
-    if not current or current == target:
-        return
-
-    allowed = STATUS_TRANSITIONS.get(current)
-    if allowed is None:
-        return
-
-    if target not in allowed:
-        allowed_list = ", ".join(sorted(allowed)) if allowed else "nenhuma"
-        raise HTTPException(
-            status_code=409,
-            detail=f"transicao invalida: {current} -> {target}. Permitidos: {allowed_list}",
-        )
-
-
-def _emenda_row_version(emenda: Emenda) -> int:
-    raw = int(emenda.row_version or 1)
-    return raw if raw > 0 else 1
-
-
-def _raise_row_version_conflict(emenda: Emenda, expected: int | None, action: str) -> None:
-    raise HTTPException(
-        status_code=409,
-        detail={
-            "code": "row_version_conflict",
-            "message": "conflito de atualizacao: registro foi alterado por outro usuario",
-            "action": action,
-            "expected_row_version": int(expected or 0),
-            "current_row_version": _emenda_row_version(emenda),
-            "current_updated_at": (emenda.updated_at.isoformat() + "Z") if emenda.updated_at else "",
-        },
-    )
-
-
-def _assert_row_version_match(emenda: Emenda, expected: int | None, action: str) -> None:
-    if expected is None:
-        return
-    current = _emenda_row_version(emenda)
-    if int(expected) != current:
-        _raise_row_version_conflict(emenda, expected, action)
-
-
-def _bump_row_version(emenda: Emenda) -> None:
-    emenda.row_version = _emenda_row_version(emenda) + 1
-
-
-def _actor_can_edit_records(actor: dict | None) -> bool:
-    role = str((actor or {}).get("role") or "").strip().upper()
-    return role in EDITOR_ROLES
-
-
-def _lock_expires_at(now: datetime | None = None) -> datetime:
-    base = now or _utcnow()
-    return base + timedelta(seconds=EDIT_LOCK_TTL_SECONDS)
-
-
-def _get_valid_emenda_lock(db: Session, emenda_id: int) -> EmendaLock | None:
-    lock = db.get(EmendaLock, emenda_id)
-    if not lock:
-        return None
-
-    now = _utcnow()
-    if lock.expires_at and lock.expires_at <= now:
-        return None
-    return lock
-
-
-def _lock_payload(
-    emenda_id: int,
-    lock: EmendaLock | None,
-    actor: dict | None,
-    message: str = "",
-) -> dict:
-    actor_id = int((actor or {}).get("id") or 0)
-    is_owner = bool(lock and actor_id > 0 and int(lock.usuario_id or 0) == actor_id)
-    can_edit_role = _actor_can_edit_records(actor)
-    can_edit = can_edit_role and (lock is None or is_owner)
-
-    return {
-        "emenda_id": emenda_id,
-        "locked": bool(lock),
-        "owner_user_id": (int(lock.usuario_id) if lock and lock.usuario_id is not None else None),
-        "owner_user_name": str(lock.usuario_nome or "") if lock else "",
-        "owner_user_role": str(lock.setor or "") if lock else "",
-        "acquired_at": (lock.acquired_at if lock else None),
-        "heartbeat_at": (lock.heartbeat_at if lock else None),
-        "expires_at": (lock.expires_at if lock else None),
-        "is_owner": is_owner,
-        "can_edit": can_edit,
-        "message": message,
-    }
-
-
-def _upsert_emenda_lock(db: Session, emenda_id: int, actor: dict, now: datetime | None = None) -> EmendaLock:
-    at = now or _utcnow()
-    lock = db.get(EmendaLock, emenda_id)
-    if not lock:
-        lock = EmendaLock(
-            emenda_id=emenda_id,
-            usuario_id=actor.get("id"),
-            usuario_nome=str(actor.get("name") or ""),
-            setor=str(actor.get("role") or ""),
-            acquired_at=at,
-            heartbeat_at=at,
-            expires_at=_lock_expires_at(at),
-        )
-        db.add(lock)
-        db.flush()
-        return lock
-
-    lock.usuario_id = actor.get("id")
-    lock.usuario_nome = str(actor.get("name") or "")
-    lock.setor = str(actor.get("role") or "")
-    lock.acquired_at = at
-    lock.heartbeat_at = at
-    lock.expires_at = _lock_expires_at(at)
-    db.add(lock)
-    db.flush()
-    return lock
-
-
-def _acquire_emenda_lock(db: Session, emenda_id: int, actor: dict, force: bool = False) -> dict:
-    lock = _get_valid_emenda_lock(db, emenda_id)
-    if not _actor_can_edit_records(actor):
-        return _lock_payload(
-            emenda_id,
-            lock,
-            actor,
-            message="Perfil sem permissao de edicao. Modo leitura.",
-        )
-
-    actor_id = int(actor.get("id") or 0)
-    now = _utcnow()
-    if lock:
-        lock_owner_id = int(lock.usuario_id or 0)
-        if lock_owner_id == actor_id:
-            lock.heartbeat_at = now
-            lock.expires_at = _lock_expires_at(now)
-            db.add(lock)
-            db.flush()
-            return _lock_payload(emenda_id, lock, actor, message="Lock renovado.")
-
-        if not force:
-            return _lock_payload(
-                emenda_id,
-                lock,
-                actor,
-                message="Emenda em edicao por outro usuario. Modo leitura ativo.",
-            )
-
-        if str(actor.get("role") or "").strip().upper() != OWNER_ROLE:
-            raise HTTPException(status_code=403, detail="somente PROGRAMADOR pode forcar lock")
-
-    new_lock = _upsert_emenda_lock(db, emenda_id, actor, now)
-    return _lock_payload(emenda_id, new_lock, actor, message="Lock adquirido.")
-
-
-def _renew_emenda_lock(db: Session, emenda_id: int, actor: dict) -> dict:
-    return _acquire_emenda_lock(db, emenda_id, actor, force=False)
-
-
-def _release_emenda_lock(db: Session, emenda_id: int, actor: dict) -> dict:
-    lock = _get_valid_emenda_lock(db, emenda_id)
-    if not lock:
-        return _lock_payload(emenda_id, None, actor, message="Sem lock ativo.")
-
-    actor_id = int(actor.get("id") or 0)
-    lock_owner_id = int(lock.usuario_id or 0)
-    actor_role = str(actor.get("role") or "").strip().upper()
-    can_force = actor_role == OWNER_ROLE
-
-    if actor_id != lock_owner_id and not can_force:
-        return _lock_payload(
-            emenda_id,
-            lock,
-            actor,
-            message="Lock pertence a outro usuario. Sem permissao para liberar.",
-        )
-
-    db.delete(lock)
-    db.flush()
-    return _lock_payload(emenda_id, None, actor, message="Lock liberado.")
-
-
-def _assert_edit_lock_or_raise(db: Session, emenda_id: int, actor: dict, action: str) -> None:
-    if not _actor_can_edit_records(actor):
-        raise HTTPException(status_code=403, detail="perfil sem permissao de edicao")
-
-    lock = _get_valid_emenda_lock(db, emenda_id)
-    actor_id = int(actor.get("id") or 0)
-    now = _utcnow()
-
-    if lock:
-        lock_owner_id = int(lock.usuario_id or 0)
-        if lock_owner_id != actor_id:
-            raise HTTPException(
-                status_code=409,
-                detail={
-                    "code": "edit_lock_conflict",
-                    "message": "emenda em edicao por outro usuario (modo leitura)",
-                    "action": action,
-                    "lock_owner_user_id": int(lock.usuario_id) if lock.usuario_id is not None else None,
-                    "lock_owner_name": str(lock.usuario_nome or ""),
-                    "lock_owner_role": str(lock.setor or ""),
-                    "lock_expires_at": (lock.expires_at.isoformat() + "Z") if lock.expires_at else "",
-                },
-            )
-        lock.heartbeat_at = now
-        lock.expires_at = _lock_expires_at(now)
-        db.add(lock)
-        db.flush()
-        return
-
-    _upsert_emenda_lock(db, emenda_id, actor, now)
-
-
 def _presence_payload(emenda_id: int, users: list[dict]) -> dict:
     return {
         "type": "presence",
@@ -504,50 +200,6 @@ def _resolve_event_origin(origin_raw: str | None, actor: dict | None = None, fal
 
     fb = (fallback or "API").strip().upper()
     return fb if fb in EVENT_ORIGINS else "API"
-
-
-def _normalize_edit_field_name(raw_field: str | None) -> str:
-    raw = (raw_field or "").strip().lower()
-    if not raw:
-        return ""
-    normalized = unicodedata.normalize("NFD", raw)
-    normalized = "".join(ch for ch in normalized if unicodedata.category(ch) != "Mn")
-    normalized = re.sub(r"[^a-z0-9]+", "_", normalized).strip("_")
-    return normalized
-
-
-def _resolve_emenda_edit_field(raw_field: str | None) -> str:
-    normalized = _normalize_edit_field_name(raw_field)
-    if not normalized:
-        return ""
-    if normalized in EMENDA_EDITABLE_FIELDS:
-        return normalized
-    return EMENDA_EDITABLE_FIELD_ALIASES.get(normalized, "")
-
-
-def _apply_emenda_field_edit(emenda: Emenda, field_name: str, raw_value: str | None) -> None:
-    value = (raw_value or "").strip()
-    if field_name == "ano":
-        try:
-            emenda.ano = int(value or 0)
-        except ValueError as err:
-            raise HTTPException(status_code=400, detail="valor invalido para campo ano") from err
-        if emenda.ano <= 0:
-            raise HTTPException(status_code=400, detail="valor invalido para campo ano")
-        return
-
-    if field_name in {"valor_inicial", "valor_atual"}:
-        if not value:
-            setattr(emenda, field_name, 0)
-            return
-        try:
-            numeric = float(value.replace(".", "").replace(",", ".")) if value.count(",") == 1 and value.count(".") > 1 else float(value.replace(",", "."))
-        except ValueError as err:
-            raise HTTPException(status_code=400, detail=f"valor invalido para campo {field_name}") from err
-        setattr(emenda, field_name, numeric)
-        return
-
-    setattr(emenda, field_name, value)
 
 
 def _ensure_legacy_schema() -> None:
@@ -746,71 +398,7 @@ def ai_workflow_review_loop(
 
 @app.post("/auth/google-intake")
 def auth_google_intake(payload: AuthGoogleIn, request: Request, db: Session = Depends(get_db)) -> dict:
-    # PrÃƒÂ©-cadastro com Google: valida token e devolve nome/email para preencher a tela.
-    # NÃƒÂ£o cria usuÃƒÂ¡rio neste passo.
-    identity = _verify_google_identity_token(payload.credential)
-
-    user = db.query(Usuario).filter(Usuario.google_sub == identity["sub"]).first()
-    if user is not None:
-        detail = (
-            "Sua conta esta em analise. Aguarde aprovacao do PROGRAMADOR."
-            if not user.ativo
-            else "Sua conta Google ja esta cadastrada. Use o login."
-        )
-        _add_auth_audit(
-            db,
-            request=request,
-            event_type="GOOGLE_INTAKE",
-            login_identificador=identity["email"],
-            detail=detail,
-            success=False,
-            provider="GOOGLE",
-            user=user,
-        )
-        db.commit()
-        raise HTTPException(status_code=(403 if not user.ativo else 409), detail=detail)
-
-    existing_by_email = _find_user_by_email(db, identity["email"])
-    if existing_by_email is not None:
-        if not existing_by_email.ativo:
-            detail = "Sua conta esta em analise. Aguarde aprovacao do PROGRAMADOR."
-            status_code = 403
-        elif existing_by_email.google_sub:
-            detail = "Conta Google nao corresponde ao cadastro."
-            status_code = 409
-        else:
-            detail = "Ja existe cadastro com este Gmail. Use o login normal e depois sincronize o Google."
-            status_code = 409
-        _add_auth_audit(
-            db,
-            request=request,
-            event_type="GOOGLE_INTAKE",
-            login_identificador=identity["email"],
-            detail=detail,
-            success=False,
-            provider="GOOGLE",
-            user=existing_by_email,
-        )
-        db.commit()
-        raise HTTPException(status_code=status_code, detail=detail)
-
-    _add_auth_audit(
-        db,
-        request=request,
-        event_type="GOOGLE_INTAKE",
-        login_identificador=identity["email"],
-        detail="identidade google validada para pre-cadastro",
-        success=True,
-        provider="GOOGLE",
-    )
-    db.commit()
-
-    return {
-        "nome": identity["name"],
-        "email": identity["email"],
-        "email_verificado": True,
-    }
-
+    return auth_service.auth_google_intake_service(payload=payload, request=request, db=db)
 
 @app.post("/auth/register", response_model=AuthOut)
 def auth_register(
@@ -819,395 +407,28 @@ def auth_register(
     x_session_token: Annotated[str | None, Header(alias="X-Session-Token")] = None,
     db: Session = Depends(get_db),
 ):
-    # Cadastro com 2 caminhos:
-    # - PÃƒÂºblico: cria usuÃƒÂ¡rio inativo (pendente aprovaÃƒÂ§ÃƒÂ£o do PROGRAMADOR).
-    # - Privado (ator PROGRAMADOR): cria usuÃƒÂ¡rio jÃƒÂ¡ ativo.
-    nome = payload.nome.strip()
-    email = (payload.email or "").strip().lower()
-    role = payload.perfil
-    google_credential = (payload.google_credential or "").strip()
-    using_google = bool(google_credential)
-    google_identity = None
-
-    if using_google:
-        google_identity = _verify_google_identity_token(google_credential)
-        if email and email != google_identity["email"]:
-            raise HTTPException(status_code=409, detail="gmail informado nao corresponde ao Google")
-        email = google_identity["email"]
-
-    exists = db.query(Usuario).filter(func.lower(Usuario.nome) == nome.lower()).first()
-    if exists:
-        raise HTTPException(status_code=409, detail="usuario ja existe")
-
-    if email:
-        existing_email = _find_user_by_email(db, email)
-        if existing_email is not None:
-            raise HTTPException(status_code=409, detail="gmail ja cadastrado")
-
-    if google_identity is not None:
-        existing_google = db.query(Usuario).filter(Usuario.google_sub == google_identity["sub"]).first()
-        if existing_google is not None:
-            detail = (
-                "Sua conta esta em analise. Aguarde aprovacao do PROGRAMADOR."
-                if not existing_google.ativo
-                else "Sua conta Google ja esta cadastrada. Use o login."
-            )
-            raise HTTPException(status_code=(403 if not existing_google.ativo else 409), detail=detail)
-
     actor = _actor_optional_from_headers(authorization, x_session_token, db)
-    owner_exists = (
-        db.query(Usuario.id)
-        .filter(Usuario.ativo.is_(True), Usuario.perfil == OWNER_ROLE)
-        .first()
-        is not None
-    )
-
-    activate_now = True
-    pending_approval = False
-
-    # Sem PROGRAMADOR ativo, permitimos bootstrap do primeiro dono.
-    if not owner_exists and actor is None:
-        if role != OWNER_ROLE:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="primeiro cadastro deve ser PROGRAMADOR",
-            )
-        _assert_allowed_owner_identity(nome)
-    elif actor is None:
-        if role not in PUBLIC_REGISTER_ROLES:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="cadastro publico nao permite este perfil",
-            )
-        if not email:
-            raise HTTPException(status_code=400, detail="informe um gmail valido para solicitar acesso")
-        activate_now = False
-        pending_approval = True
-    else:
-        actor_role = actor.get("role")
-        if actor_role != OWNER_ROLE:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="apenas PROGRAMADOR pode criar/aprovar perfis",
-            )
-        if role == OWNER_ROLE:
-            _assert_allowed_owner_identity(nome)
-
-    if using_google:
-        pwd_hash = ""
-    else:
-        raw_password = (payload.senha or "").strip()
-        if not raw_password:
-            raise HTTPException(status_code=400, detail="senha obrigatoria no cadastro normal")
-        pwd_hash = _hash_password(raw_password)
-
-    user = Usuario(
-        nome=nome,
-        email=(email or None),
-        google_sub=(google_identity["sub"] if google_identity else None),
-        setor=role,
-        perfil=role,
-        senha_salt="",
-        senha_hash=pwd_hash,
-        ativo=activate_now,
-    )
-    db.add(user)
-    try:
-        db.commit()
-    except IntegrityError:
-        db.rollback()
-        conflict = db.query(Usuario.id).filter(func.lower(Usuario.nome) == nome.lower()).first()
-        if conflict is not None:
-            raise HTTPException(status_code=409, detail="usuario ja existe")
-        conflict = _find_user_by_email(db, email)
-        if email and conflict is not None:
-            raise HTTPException(status_code=409, detail="gmail ja cadastrado")
-        if google_identity is not None:
-            conflict = db.query(Usuario.id).filter(Usuario.google_sub == google_identity["sub"]).first()
-            if conflict is not None:
-                raise HTTPException(status_code=409, detail="sua conta Google ja esta cadastrada")
-        raise
-    db.refresh(user)
-
-    if pending_approval:
-        return {
-            "token": None,
-            "token_type": "bearer",
-            "usuario": {"id": user.id, "nome": user.nome, "perfil": user.perfil},
-            "pending_approval": True,
-        }
-
-    token = _create_jwt_session(db, user)
-    return {
-        "token": token,
-        "token_type": "bearer",
-        "usuario": {"id": user.id, "nome": user.nome, "perfil": user.perfil},
-    }
-
+    return auth_service.auth_register_service(payload=payload, actor=actor, db=db)
 
 @app.post("/auth/google", response_model=AuthOut)
 def auth_google(payload: AuthGoogleIn, request: Request, db: Session = Depends(get_db)):
-    # Login Google direto:
-    # - sÃƒÂ³ funciona apÃƒÂ³s existir PROGRAMADOR local ativo (evita lock-in externo).
-    # - rejeita conta nÃƒÂ£o aprovada e conflitos de vÃƒÂ­nculo Gmail/sub.
-    identity = _verify_google_identity_token(payload.credential)
-
-    owner_exists = (
-        db.query(Usuario.id)
-        .filter(Usuario.ativo.is_(True), Usuario.perfil == OWNER_ROLE)
-        .first()
-        is not None
-    )
-    if not owner_exists:
-        _add_auth_audit(
-            db,
-            request=request,
-            event_type="LOGIN_GOOGLE",
-            login_identificador=identity["email"],
-            detail="login google bloqueado ate existir PROGRAMADOR local",
-            success=False,
-            provider="GOOGLE",
-        )
-        db.commit()
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="configure um PROGRAMADOR local antes de habilitar o login google",
-        )
-
-    user = db.query(Usuario).filter(Usuario.google_sub == identity["sub"]).first()
-    if user is not None:
-        if not user.ativo:
-            detail = "Sua conta esta em analise. Aguarde aprovacao do PROGRAMADOR."
-            _add_auth_audit(
-                db,
-                request=request,
-                event_type="LOGIN_GOOGLE",
-                login_identificador=identity["email"],
-                detail=detail,
-                success=False,
-                provider="GOOGLE",
-                user=user,
-            )
-            db.commit()
-            raise HTTPException(status_code=403, detail=detail)
-
-        _add_auth_audit(
-            db,
-            request=request,
-            event_type="LOGIN_GOOGLE",
-            login_identificador=identity["email"],
-            detail="login com google realizado com sucesso",
-            success=True,
-            provider="GOOGLE",
-            user=user,
-        )
-        token = _create_jwt_session(db, user)
-        return {
-            "token": token,
-            "token_type": "bearer",
-            "usuario": {"id": user.id, "nome": user.nome, "perfil": user.perfil},
-            "pending_approval": False,
-        }
-
-    existing_by_email = _find_user_by_email(db, identity["email"])
-    if existing_by_email is not None:
-        if existing_by_email.google_sub and existing_by_email.google_sub != identity["sub"]:
-            detail = "Conta Google nao corresponde ao cadastro."
-            status_code = 409
-        elif not existing_by_email.ativo:
-            detail = "Sua conta esta em analise. Aguarde aprovacao do PROGRAMADOR."
-            status_code = 403
-        else:
-            detail = "Ja existe cadastro com este Gmail. Use o login normal e depois sincronize o Google."
-            status_code = 409
-
-        _add_auth_audit(
-            db,
-            request=request,
-            event_type="LOGIN_GOOGLE",
-            login_identificador=identity["email"],
-            detail=detail,
-            success=False,
-            provider="GOOGLE",
-            user=existing_by_email,
-        )
-        db.commit()
-        raise HTTPException(status_code=status_code, detail=detail)
-
-    detail = "Conta Google ainda nao cadastrada. Use Cadastrar para solicitar acesso."
-    _add_auth_audit(
-        db,
-        request=request,
-        event_type="LOGIN_GOOGLE",
-        login_identificador=identity["email"],
-        detail=detail,
-        success=False,
-        provider="GOOGLE",
-    )
-    db.commit()
-    raise HTTPException(status_code=404, detail=detail)
-
+    return auth_service.auth_google_service(payload=payload, request=request, db=db)
 
 @app.post("/auth/login", response_model=AuthOut)
 def auth_login(payload: AuthLoginIn, request: Request, db: Session = Depends(get_db)):
-    # Login local por usuÃƒÂ¡rio/Gmail + senha.
-    # Se hash legado for detectado, migra para hash moderno no primeiro login vÃƒÂ¡lido.
-    nome = payload.nome.strip()
-    user = _find_user_by_login(db, nome)
-    if not user:
-        audit_detail = "usuario nao encontrado"
-        public_detail = "Credenciais invalidas."
-        _add_auth_audit(
-            db,
-            request=request,
-            event_type="LOGIN_PASSWORD",
-            login_identificador=nome,
-            detail=audit_detail,
-            success=False,
-            provider="LOCAL",
-        )
-        db.commit()
-        if settings.is_dev_environment:
-            raise HTTPException(status_code=404, detail="Usuario nao encontrado. Use Cadastrar para solicitar acesso.")
-        raise HTTPException(status_code=401, detail=public_detail)
-    if not user.ativo:
-        detail = "Sua conta esta em analise. Aguarde aprovacao do PROGRAMADOR."
-        _add_auth_audit(
-            db,
-            request=request,
-            event_type="LOGIN_PASSWORD",
-            login_identificador=nome,
-            detail=detail,
-            success=False,
-            provider="LOCAL",
-            user=user,
-        )
-        db.commit()
-        raise HTTPException(status_code=403, detail=detail)
-
-    valid, used_legacy = _verify_user_password(user, payload.senha)
-    if not valid:
-        audit_detail = "senha invalida"
-        public_detail = "Credenciais invalidas."
-        _add_auth_audit(
-            db,
-            request=request,
-            event_type="LOGIN_PASSWORD",
-            login_identificador=nome,
-            detail=audit_detail,
-            success=False,
-            provider="LOCAL",
-            user=user,
-        )
-        db.commit()
-        raise HTTPException(status_code=401, detail=public_detail)
-
-    if used_legacy:
-        user.senha_hash = _hash_password(payload.senha)
-        user.senha_salt = ""
-
-    _add_auth_audit(
-        db,
-        request=request,
-        event_type="LOGIN_PASSWORD",
-        login_identificador=nome,
-        detail="login com senha realizado com sucesso",
-        success=True,
-        provider="LOCAL",
-        user=user,
-    )
-    token = _create_jwt_session(db, user)
-    return {
-        "token": token,
-        "token_type": "bearer",
-        "usuario": {"id": user.id, "nome": user.nome, "perfil": user.perfil},
-    }
-
+    return auth_service.auth_login_service(payload=payload, request=request, db=db)
 
 @app.post("/auth/recovery-request")
 def auth_recovery_request(payload: AuthRecoveryRequestIn, request: Request, db: Session = Depends(get_db)):
-    # Recovery sem reset automÃƒÂ¡tico:
-    # registra solicitaÃƒÂ§ÃƒÂ£o para fluxo controlado por PROGRAMADOR (governanÃƒÂ§a).
-    identificador = payload.identificador.strip()
-    user = _find_user_by_login(db, identificador)
-    if not user:
-        detail = "usuario nao encontrado"
-        _add_auth_audit(
-            db,
-            request=request,
-            event_type="RECOVERY_REQUEST",
-            login_identificador=identificador,
-            detail=detail,
-            success=False,
-            provider="LOCAL",
-        )
-        db.commit()
-        if settings.is_dev_environment:
-            raise HTTPException(status_code=404, detail="Usuario nao encontrado. Use Cadastrar para solicitar acesso.")
-        return {"ok": True, "detail": "Se o cadastro existir e estiver ativo, a solicitacao foi registrada."}
-
-    if not user.ativo:
-        detail = "Sua conta esta em analise. Aguarde aprovacao do PROGRAMADOR."
-        _add_auth_audit(
-            db,
-            request=request,
-            event_type="RECOVERY_REQUEST",
-            login_identificador=identificador,
-            detail=detail,
-            success=False,
-            provider="LOCAL",
-            user=user,
-        )
-        db.commit()
-        if settings.is_dev_environment:
-            raise HTTPException(status_code=403, detail=detail)
-        return {"ok": True, "detail": "Se o cadastro existir e estiver ativo, a solicitacao foi registrada."}
-
-    detail = "Solicitacao registrada. Um PROGRAMADOR deve redefinir sua senha."
-    _add_auth_audit(
-        db,
-        request=request,
-        event_type="RECOVERY_REQUEST",
-        login_identificador=identificador,
-        detail=detail,
-        success=True,
-        provider="LOCAL",
-        user=user,
-    )
-    db.commit()
-    if settings.is_dev_environment:
-        return {"ok": True, "detail": detail}
-    return {"ok": True, "detail": "Se o cadastro existir e estiver ativo, a solicitacao foi registrada."}
-
+    return auth_service.auth_recovery_request_service(payload=payload, request=request, db=db)
 
 @app.get("/auth/me", response_model=UserOut)
 def auth_me(actor: dict = Depends(_actor_from_headers)):
-    if actor["id"] is None:
-        return {"id": 0, "nome": actor["name"], "perfil": actor["role"]}
-    return {"id": actor["id"], "nome": actor["name"], "perfil": actor["role"]}
-
+    return auth_service.auth_me_service(actor=actor)
 
 @app.post("/auth/logout")
 def auth_logout(actor: dict = Depends(_actor_from_headers), db: Session = Depends(get_db)):
-    # Revoga sessÃƒÂ£o atual por sid (JWT) ou por hash de token legado.
-    sid = (actor.get("session_sid") or "").strip()
-    if sid:
-        session_hash = _hash_text(sid)
-        sessao = db.query(UsuarioSessao).filter(UsuarioSessao.token_hash == session_hash).first()
-        if sessao and not sessao.revoked_at:
-            sessao.revoked_at = _utcnow()
-            db.commit()
-        return {"ok": True}
-
-    token = (actor.get("session_token") or "").strip()
-    if token:
-        token_hash = _hash_text(token)
-        sessao = db.query(UsuarioSessao).filter(UsuarioSessao.token_hash == token_hash).first()
-        if sessao and not sessao.revoked_at:
-            sessao.revoked_at = _utcnow()
-            db.commit()
-    return {"ok": True}
-
+    return auth_service.auth_logout_service(actor=actor, db=db)
 
 @app.get("/auth/audit", response_model=list[AuthAuditLogOut])
 def auth_audit_logs(
@@ -1215,13 +436,7 @@ def auth_audit_logs(
     _actor: dict = Depends(_require_owner),
     db: Session = Depends(get_db),
 ):
-    return (
-        db.query(AuthAuditLog)
-        .order_by(AuthAuditLog.created_at.desc(), AuthAuditLog.id.desc())
-        .limit(limit)
-        .all()
-    )
-
+    return auth_service.list_auth_audit_logs_service(limit=limit, db=db)
 
 @app.get("/users", response_model=list[UserAdminOut])
 def listar_usuarios(
@@ -1229,11 +444,7 @@ def listar_usuarios(
     _actor: dict = Depends(_require_owner),
     db: Session = Depends(get_db),
 ):
-    query = db.query(Usuario)
-    if not include_inactive:
-        query = query.filter(Usuario.ativo.is_(True))
-    return query.order_by(Usuario.nome.asc(), Usuario.id.asc()).all()
-
+    return auth_service.list_users_service(include_inactive=include_inactive, db=db)
 
 @app.patch("/users/{user_id}/status")
 def alterar_status_usuario(
@@ -1242,50 +453,13 @@ def alterar_status_usuario(
     actor: dict = Depends(_require_owner),
     db: Session = Depends(get_db),
 ):
-    # AprovaÃƒÂ§ÃƒÂ£o/desativaÃƒÂ§ÃƒÂ£o administrativa de usuÃƒÂ¡rio.
-    # Ao desativar, revoga sessÃƒÂµes ativas para efeito imediato.
-    user = db.get(Usuario, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail="usuario nao encontrado")
-
-    actor_id = actor.get("id")
-    if actor_id is not None and int(actor_id) == int(user.id) and payload.ativo is False:
-        raise HTTPException(status_code=400, detail="nao e permitido desativar o proprio usuario")
-
-    normalized_name = _normalize_user_name(user.nome)
-    is_immutable_owner = normalized_name in IMMUTABLE_OWNER_NAMES
-
-    if is_immutable_owner and payload.ativo is False:
-        raise HTTPException(status_code=403, detail="programador oficial imutavel nao pode ser desativado")
-
-    if payload.perfil is not None:
-        normalized_next_role = _normalize_role(payload.perfil)
-        if is_immutable_owner and normalized_next_role != OWNER_ROLE:
-            raise HTTPException(status_code=403, detail="programador oficial imutavel nao pode mudar de perfil")
-        if normalized_next_role == OWNER_ROLE and normalized_name not in IMMUTABLE_OWNER_NAMES:
-            raise HTTPException(
-                status_code=403,
-                detail="somente MICAEL_DEV e VITOR_DEV podem permanecer como PROGRAMADOR",
-            )
-        user.perfil = normalized_next_role
-        user.setor = normalized_next_role
-
-    user.ativo = bool(payload.ativo)
-
-    if not user.ativo:
-        now = _utcnow()
-        (
-            db.query(UsuarioSessao)
-            .filter(
-                UsuarioSessao.usuario_id == user.id,
-                UsuarioSessao.revoked_at.is_(None),
-            )
-            .update({UsuarioSessao.revoked_at: now}, synchronize_session=False)
-        )
-
-    db.commit()
-    _broadcast_update("usuario", user.id)
-    return {"ok": True, "id": user.id, "ativo": user.ativo, "perfil": user.perfil}
+    return auth_service.update_user_status_service(
+        user_id=user_id,
+        payload=payload,
+        actor=actor,
+        db=db,
+        broadcast_update=_broadcast_update,
+    )
 
 @app.get("/emendas", response_model=list[EmendaOut])
 def listar_emendas(
@@ -1297,42 +471,18 @@ def listar_emendas(
     _actor: dict = Depends(_actor_from_headers),
     db: Session = Depends(get_db),
 ):
-    # Listagem principal com filtros combinÃƒÂ¡veis e busca textual.
-    # include_old=False mantÃƒÂ©m apenas versÃƒÂµes correntes por padrÃƒÂ£o.
-    query = db.query(Emenda)
-
-    if not include_old:
-        query = query.filter(Emenda.is_current.is_(True))
-    if ano is not None:
-        query = query.filter(Emenda.ano == ano)
-    if municipio:
-        query = query.filter(Emenda.municipio.ilike(f"%{municipio.strip()}%"))
-    if deputado:
-        query = query.filter(Emenda.deputado.ilike(f"%{deputado.strip()}%"))
-    if q:
-        needle = f"%{q.strip()}%"
-        query = query.filter(
-            or_(
-                Emenda.id_interno.ilike(needle),
-                Emenda.identificacao.ilike(needle),
-                Emenda.municipio.ilike(needle),
-                Emenda.deputado.ilike(needle),
-                Emenda.processo_sei.ilike(needle),
-                Emenda.plan_a.ilike(needle),
-                Emenda.plan_b.ilike(needle),
-            )
-        )
-
-    return query.order_by(Emenda.updated_at.desc(), Emenda.id.desc()).all()
-
+    return emenda_service.list_emendas_service(
+        db=db,
+        ano=ano,
+        municipio=municipio,
+        deputado=deputado,
+        q=q,
+        include_old=include_old,
+    )
 
 @app.get("/emendas/{emenda_id}", response_model=EmendaOut)
 def obter_emenda(emenda_id: int, _actor: dict = Depends(_actor_from_headers), db: Session = Depends(get_db)):
-    emenda = db.get(Emenda, emenda_id)
-    if not emenda:
-        raise HTTPException(status_code=404, detail="Emenda nao encontrada")
-    return emenda
-
+    return emenda_service.obter_emenda_service(emenda_id=emenda_id, db=db)
 
 @app.get("/emendas/{emenda_id}/lock", response_model=EmendaLockOut)
 def obter_lock_emenda(
@@ -1340,14 +490,7 @@ def obter_lock_emenda(
     actor: dict = Depends(_actor_from_headers),
     db: Session = Depends(get_db),
 ):
-    emenda = db.get(Emenda, emenda_id)
-    if not emenda:
-        raise HTTPException(status_code=404, detail="Emenda nao encontrada")
-
-    lock = _get_valid_emenda_lock(db, emenda_id)
-    message = "Sem lock ativo." if not lock else "Lock ativo."
-    return _lock_payload(emenda_id, lock, actor, message=message)
-
+    return emenda_service.obter_lock_emenda_service(emenda_id=emenda_id, actor=actor, db=db)
 
 @app.post("/emendas/{emenda_id}/lock/acquire", response_model=EmendaLockOut)
 def adquirir_lock_emenda(
@@ -1356,14 +499,12 @@ def adquirir_lock_emenda(
     actor: dict = Depends(_actor_from_headers),
     db: Session = Depends(get_db),
 ):
-    emenda = db.get(Emenda, emenda_id)
-    if not emenda:
-        raise HTTPException(status_code=404, detail="Emenda nao encontrada")
-
-    data = _acquire_emenda_lock(db, emenda_id, actor, force=bool(payload.force))
-    db.commit()
-    return data
-
+    return emenda_service.adquirir_lock_emenda_service(
+        emenda_id=emenda_id,
+        actor=actor,
+        force=bool(payload.force),
+        db=db,
+    )
 
 @app.post("/emendas/{emenda_id}/lock/renew", response_model=EmendaLockOut)
 def renovar_lock_emenda(
@@ -1371,14 +512,7 @@ def renovar_lock_emenda(
     actor: dict = Depends(_actor_from_headers),
     db: Session = Depends(get_db),
 ):
-    emenda = db.get(Emenda, emenda_id)
-    if not emenda:
-        raise HTTPException(status_code=404, detail="Emenda nao encontrada")
-
-    data = _renew_emenda_lock(db, emenda_id, actor)
-    db.commit()
-    return data
-
+    return emenda_service.renovar_lock_emenda_service(emenda_id=emenda_id, actor=actor, db=db)
 
 @app.post("/emendas/{emenda_id}/lock/release", response_model=EmendaLockOut)
 def liberar_lock_emenda(
@@ -1386,14 +520,7 @@ def liberar_lock_emenda(
     actor: dict = Depends(_actor_from_headers),
     db: Session = Depends(get_db),
 ):
-    emenda = db.get(Emenda, emenda_id)
-    if not emenda:
-        raise HTTPException(status_code=404, detail="Emenda nao encontrada")
-
-    data = _release_emenda_lock(db, emenda_id, actor)
-    db.commit()
-    return data
-
+    return emenda_service.liberar_lock_emenda_service(emenda_id=emenda_id, actor=actor, db=db)
 
 @app.post("/emendas", response_model=EmendaOut)
 def criar_emenda(
@@ -1402,57 +529,14 @@ def criar_emenda(
     x_event_origin: Annotated[str | None, Header(alias="X-Event-Origin")] = None,
     db: Session = Depends(get_db),
 ):
-    exists = db.query(Emenda).filter(Emenda.id_interno == payload.id_interno).first()
-    if exists:
-        raise HTTPException(status_code=409, detail="id_interno ja existe")
-
     origin = _resolve_event_origin(x_event_origin, actor, fallback="API")
-
-    now = _utcnow()
-    emenda = Emenda(
-        id_interno=payload.id_interno,
-        ano=payload.ano,
-        identificacao=payload.identificacao,
-        cod_subfonte=payload.cod_subfonte,
-        deputado=payload.deputado,
-        cod_uo=payload.cod_uo,
-        sigla_uo=payload.sigla_uo,
-        cod_orgao=payload.cod_orgao,
-        cod_acao=payload.cod_acao,
-        descricao_acao=payload.descricao_acao,
-        plan_a=payload.plan_a,
-        plan_b=payload.plan_b,
-        municipio=payload.municipio,
-        valor_inicial=payload.valor_inicial,
-        valor_atual=payload.valor_atual,
-        processo_sei=payload.processo_sei,
-        status_oficial=payload.status_oficial,
-        parent_id=None,
-        version=1,
-        row_version=1,
-        is_current=True,
-        created_at=now,
-        updated_at=now,
+    return emenda_service.criar_emenda_service(
+        payload=payload,
+        actor=actor,
+        event_origin=origin,
+        db=db,
+        broadcast_update=_broadcast_update,
     )
-    db.add(emenda)
-    db.flush()
-
-    db.add(
-        Historico(
-            emenda_id=emenda.id,
-            usuario_id=actor["id"],
-            usuario_nome=actor["name"],
-            setor=actor["role"],
-            tipo_evento="IMPORT",
-            origem_evento=origin,
-            motivo="Criacao inicial",
-        )
-    )
-    db.commit()
-    db.refresh(emenda)
-    _broadcast_update("emenda", emenda.id)
-    return emenda
-
 
 @app.post("/emendas/{emenda_id}/status")
 def alterar_status_oficial(
@@ -1462,54 +546,15 @@ def alterar_status_oficial(
     x_event_origin: Annotated[str | None, Header(alias="X-Event-Origin")] = None,
     db: Session = Depends(get_db),
 ):
-    emenda = db.get(Emenda, emenda_id)
-    if not emenda:
-        raise HTTPException(status_code=404, detail="Emenda nao encontrada")
-
-    _assert_edit_lock_or_raise(db, emenda_id, actor, "status_oficial")
-    _assert_row_version_match(emenda, payload.expected_row_version, "status_oficial")
     origin = _resolve_event_origin(x_event_origin, actor, fallback="UI")
-
-    anterior = emenda.status_oficial
-    if anterior == payload.novo_status:
-        db.commit()
-        return {
-            "ok": True,
-            "changed": False,
-            "row_version": _emenda_row_version(emenda),
-            "updated_at": (emenda.updated_at.isoformat() + "Z") if emenda.updated_at else "",
-        }
-
-    _validate_status_transition(anterior, payload.novo_status)
-
-    emenda.status_oficial = payload.novo_status
-    _bump_row_version(emenda)
-    emenda.updated_at = _utcnow()
-    old_value_masked, new_value_masked = _mask_history_pair("status_oficial", anterior, payload.novo_status)
-
-    db.add(
-        Historico(
-            emenda_id=emenda.id,
-            usuario_id=actor["id"],
-            usuario_nome=actor["name"],
-            setor=actor["role"],
-            tipo_evento="OFFICIAL_STATUS",
-            origem_evento=origin,
-            campo_alterado="status_oficial",
-            valor_antigo=old_value_masked,
-            valor_novo=new_value_masked,
-            motivo=payload.motivo,
-        )
+    return emenda_service.alterar_status_oficial_service(
+        emenda_id=emenda_id,
+        payload=payload,
+        actor=actor,
+        event_origin=origin,
+        db=db,
+        broadcast_update=_broadcast_update,
     )
-    db.commit()
-    db.refresh(emenda)
-    _broadcast_update("emenda", emenda.id)
-    return {
-        "ok": True,
-        "row_version": _emenda_row_version(emenda),
-        "updated_at": (emenda.updated_at.isoformat() + "Z") if emenda.updated_at else "",
-    }
-
 
 @app.post("/emendas/{emenda_id}/eventos")
 def adicionar_evento(
@@ -1519,53 +564,15 @@ def adicionar_evento(
     x_event_origin: Annotated[str | None, Header(alias="X-Event-Origin")] = None,
     db: Session = Depends(get_db),
 ):
-    emenda = db.get(Emenda, emenda_id)
-    if not emenda:
-        raise HTTPException(status_code=404, detail="Emenda nao encontrada")
-
-    _assert_edit_lock_or_raise(db, emenda_id, actor, "evento")
-    _assert_row_version_match(emenda, payload.expected_row_version, "evento")
-    if payload.tipo_evento == "OFFICIAL_STATUS":
-        raise HTTPException(status_code=400, detail="Use /status para status oficial")
-
-    editable_field = ""
-    if payload.tipo_evento == "EDIT_FIELD":
-        editable_field = _resolve_emenda_edit_field(payload.campo_alterado)
-        if editable_field == "status_oficial":
-            raise HTTPException(status_code=400, detail="Use /status para status oficial")
-        if editable_field:
-            _apply_emenda_field_edit(emenda, editable_field, payload.valor_novo)
-
     origin = _resolve_event_origin(payload.origem_evento or x_event_origin, actor, fallback="UI")
-
-    history_field = editable_field or payload.campo_alterado
-    old_value_masked, new_value_masked = _mask_history_pair(history_field, payload.valor_antigo, payload.valor_novo)
-
-    db.add(
-        Historico(
-            emenda_id=emenda.id,
-            usuario_id=actor["id"],
-            usuario_nome=actor["name"],
-            setor=actor["role"],
-            tipo_evento=payload.tipo_evento,
-            origem_evento=origin,
-            campo_alterado=history_field,
-            valor_antigo=old_value_masked,
-            valor_novo=new_value_masked,
-            motivo=payload.motivo,
-        )
+    return emenda_service.adicionar_evento_service(
+        emenda_id=emenda_id,
+        payload=payload,
+        actor=actor,
+        event_origin=origin,
+        db=db,
+        broadcast_update=_broadcast_update,
     )
-    _bump_row_version(emenda)
-    emenda.updated_at = _utcnow()
-    db.commit()
-    db.refresh(emenda)
-    _broadcast_update("emenda", emenda.id)
-    return {
-        "ok": True,
-        "row_version": _emenda_row_version(emenda),
-        "updated_at": (emenda.updated_at.isoformat() + "Z") if emenda.updated_at else "",
-    }
-
 
 @app.post("/emendas/{emenda_id}/versionar", response_model=EmendaOut)
 def versionar_emenda(
@@ -1575,76 +582,16 @@ def versionar_emenda(
     x_event_origin: Annotated[str | None, Header(alias="X-Event-Origin")] = None,
     db: Session = Depends(get_db),
 ):
-    origem = db.get(Emenda, emenda_id)
-    if not origem:
-        raise HTTPException(status_code=404, detail="Emenda nao encontrada")
-
-    _assert_edit_lock_or_raise(db, emenda_id, actor, "versionar")
-    _assert_row_version_match(origem, payload.expected_row_version, "versionar")
     origin = _resolve_event_origin(x_event_origin, actor, fallback="API")
-
-    now = _utcnow()
-    next_version = int(origem.version or 1) + 1
-
-    origem.is_current = False
-    _bump_row_version(origem)
-    origem.updated_at = now
-
-    novo_id_interno = _versioned_id_interno(origem.id_interno, next_version, db)
-
-    nova = Emenda(
-        id_interno=novo_id_interno,
-        ano=payload.ano if payload.ano is not None else origem.ano,
-        identificacao=payload.identificacao if payload.identificacao is not None else origem.identificacao,
-        cod_subfonte=payload.cod_subfonte if payload.cod_subfonte is not None else origem.cod_subfonte,
-        deputado=payload.deputado if payload.deputado is not None else origem.deputado,
-        cod_uo=payload.cod_uo if payload.cod_uo is not None else origem.cod_uo,
-        sigla_uo=payload.sigla_uo if payload.sigla_uo is not None else origem.sigla_uo,
-        cod_orgao=payload.cod_orgao if payload.cod_orgao is not None else origem.cod_orgao,
-        cod_acao=payload.cod_acao if payload.cod_acao is not None else origem.cod_acao,
-        descricao_acao=payload.descricao_acao if payload.descricao_acao is not None else origem.descricao_acao,
-        plan_a=payload.plan_a if payload.plan_a is not None else origem.plan_a,
-        plan_b=payload.plan_b if payload.plan_b is not None else origem.plan_b,
-        municipio=payload.municipio if payload.municipio is not None else origem.municipio,
-        valor_inicial=payload.valor_inicial if payload.valor_inicial is not None else origem.valor_inicial,
-        valor_atual=payload.valor_atual if payload.valor_atual is not None else origem.valor_atual,
-        processo_sei=payload.processo_sei if payload.processo_sei is not None else origem.processo_sei,
-        status_oficial=origem.status_oficial,
-        parent_id=origem.id,
-        version=next_version,
-        row_version=1,
-        is_current=True,
-        created_at=now,
-        updated_at=now,
+    return emenda_service.versionar_emenda_service(
+        emenda_id=emenda_id,
+        payload=payload,
+        actor=actor,
+        event_origin=origin,
+        db=db,
+        next_versioned_id=_versioned_id_interno,
+        broadcast_update=_broadcast_update,
     )
-    db.add(nova)
-    db.flush()
-
-    reason = (payload.motivo or "").strip() or "Nova versao"
-    old_value_masked, new_value_masked = _mask_history_pair("version", str(origem.version), str(nova.version))
-
-    db.add(
-        Historico(
-            emenda_id=nova.id,
-            usuario_id=actor["id"],
-            usuario_nome=actor["name"],
-            setor=actor["role"],
-            tipo_evento="VERSIONAR",
-            origem_evento=origin,
-            campo_alterado="version",
-            valor_antigo=old_value_masked,
-            valor_novo=new_value_masked,
-            motivo=reason,
-        )
-    )
-
-    db.commit()
-    db.refresh(nova)
-    _broadcast_update("emenda", nova.id)
-    return nova
-
-
-
 
 @app.post("/imports/lotes")
 def criar_lote_importacao(
