@@ -11,7 +11,7 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Atualizar `index.html` para carregar `frontend/js/ui/metrics.js`.
 - [DONE] Validar sintaxe de `app.js` e `frontend/js/ui/metrics.js`.
 - [DONE] Consolidar fluxo de sessao/autenticacao no modulo `frontend/js/auth/authStore.js` e consumir o novo API no `app.js` (token + perfil do usuario com fallback local).
-- [DONE] Manter compatibilidade de fallback no `app.js` enquanto o fluxo de auth modulariza o estado e reduz acoplamento.
+- [DONE] Consolidar `loadUserConfig` para priorizar leitura de perfil via `authStore`.
 
-Active: ID-FE-11
-Risks: divergencia pontual entre leitura de perfil via `authStore` e fallback legado; mitigada mantendo fallback de `localStorage` enquanto nao retirar dependencias totalmente.
+Active: ID-FE-12
+Risks: sem risco crítico; acompanhar regressao em cenarios de `SEC_USER_ID` legado.

@@ -2763,8 +2763,8 @@ function loadUserConfig(forcePrompt) {
   const savedAuthUser = authStore && typeof authStore.readAuthenticatedProfile === "function"
     ? authStore.readAuthenticatedProfile(AUTH_KEYS)
     : null;
-  const savedUser = (savedAuthUser && savedAuthUser.name) || readStorageValue(localStorage, USER_NAME_KEY) || legacyUser;
-  const savedRole = (savedAuthUser && savedAuthUser.role) || readStorageValue(localStorage, USER_ROLE_KEY);
+  const savedUser = (savedAuthUser && savedAuthUser.name) || legacyUser;
+  const savedRole = savedAuthUser && savedAuthUser.role;
 
   if (savedUser) CURRENT_USER = String(savedUser).trim() || CURRENT_USER;
   if (savedRole) CURRENT_ROLE = normalizeUserRole(savedRole);
