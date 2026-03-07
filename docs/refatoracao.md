@@ -26,6 +26,7 @@ Sair de um projeto "funciona, mas esta pesado" para um projeto:
 - [DONE] [ID-FE-10] Extrair utilitarios de progresso/marcacao para `frontend/js/ui/metrics.js`
 - [DONE] [ID-FE-11] Reduzir `innerHTML` crÃ­tico no modal e migrar linha da grade principal (`tr` da tabela) para renderizaÃ§Ã£o DOM (`frontend/js/ui/renderers.js`) com fallback local.
 - [DONE] [ID-FE-12] Centralizar autenticacao de frontend no `app.js` via `frontend/js/auth/authStore.js` (perfil/token/session).
+- [DONE] [ID-FE-13] Consolidar fluxo de token de sessão no `authStore` e remover fallback duplicado no `app.js`.
 - [TODO] Continuar migracao do `app.js` para os modulos novos (foco em componentes da tela principal e filtros adicionais).
 
 Active: ID-FE-13 — remover acoplamentos de autenticação e sessão restantes no fluxo principal do frontend

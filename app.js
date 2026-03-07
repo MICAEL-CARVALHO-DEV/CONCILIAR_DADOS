@@ -2658,17 +2658,6 @@ function readStoredSessionToken() {
   if (authStore && typeof authStore.readStoredSessionToken === "function") {
     return authStore.readStoredSessionToken(AUTH_KEYS);
   }
-  let sessionToken = readStorageValue(sessionStorage, SESSION_TOKEN_KEY);
-  if (sessionToken) {
-    writeStorageValue(localStorage, SESSION_TOKEN_BACKUP_KEY, sessionToken);
-    return sessionToken;
-  }
-
-  let backupToken = readStorageValue(localStorage, SESSION_TOKEN_BACKUP_KEY);
-  if (backupToken) {
-    writeStorageValue(sessionStorage, SESSION_TOKEN_KEY, backupToken);
-    return backupToken;
-  }
   return "";
 }
 
@@ -2677,13 +2666,7 @@ function writeStoredSessionToken(token) {
     authStore.writeStoredSessionToken(token, AUTH_KEYS);
     return;
   }
-  const raw = String(token || "").trim();
-  if (!raw) {
-    clearStoredSessionToken();
-    return;
-  }
-  writeStorageValue(sessionStorage, SESSION_TOKEN_KEY, raw);
-  writeStorageValue(localStorage, SESSION_TOKEN_BACKUP_KEY, raw);
+  // fallback removido no fluxo principal: authStore deve ser carregado antes do app.js.
 }
 
 function clearStoredSessionToken() {
@@ -2691,8 +2674,7 @@ function clearStoredSessionToken() {
     authStore.clearStoredSessionToken(AUTH_KEYS);
     return;
   }
-  removeStorageValue(sessionStorage, SESSION_TOKEN_KEY);
-  removeStorageValue(localStorage, SESSION_TOKEN_BACKUP_KEY);
+  // fallback removido no fluxo principal: authStore deve ser carregado antes do app.js.
 }
 
 // Ponto de entrada da autenticacao ao abrir index.html.

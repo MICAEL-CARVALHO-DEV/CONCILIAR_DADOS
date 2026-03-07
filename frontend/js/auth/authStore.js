@@ -2,6 +2,34 @@
   var root = global.SECFrontend = global.SECFrontend || {};
   var storageUtils = root.storageUtils;
 
+  function fallbackGetItem(storage, key) {
+    try {
+      return String(storage && storage.getItem ? storage.getItem(key) || "" : "").trim();
+    } catch (_err) {
+      return "";
+    }
+  }
+
+  function fallbackSetItem(storage, key, value) {
+    try {
+      if (!storage || !storage.setItem) return false;
+      storage.setItem(key, String(value == null ? "" : value));
+      return true;
+    } catch (_err) {
+      return false;
+    }
+  }
+
+  function fallbackRemoveItem(storage, key) {
+    try {
+      if (!storage || !storage.removeItem) return false;
+      storage.removeItem(key);
+      return true;
+    } catch (_err) {
+      return false;
+    }
+  }
+
   function withDefaults(keys) {
     var cfg = keys && typeof keys === "object" ? keys : {};
     return {
@@ -18,6 +46,16 @@
     if (storageUtils && typeof storageUtils.readSessionToken === "function") {
       return storageUtils.readSessionToken(cfg.sessionToken, cfg.sessionTokenBackup);
     }
+    var sessionToken = fallbackGetItem(global.sessionStorage, cfg.sessionToken);
+    if (sessionToken) {
+      fallbackSetItem(global.localStorage, cfg.sessionTokenBackup, sessionToken);
+      return sessionToken;
+    }
+    var backupToken = fallbackGetItem(global.localStorage, cfg.sessionTokenBackup);
+    if (backupToken) {
+      fallbackSetItem(global.sessionStorage, cfg.sessionToken, backupToken);
+      return backupToken;
+    }
     return "";
   }
 
@@ -25,14 +63,25 @@
     var cfg = withDefaults(keys);
     if (storageUtils && typeof storageUtils.writeSessionToken === "function") {
       storageUtils.writeSessionToken(token, cfg.sessionToken, cfg.sessionTokenBackup);
+      return;
     }
+    var raw = String(token == null ? "" : token).trim();
+    if (!raw) {
+      clearStoredSessionToken(cfg);
+      return;
+    }
+    fallbackSetItem(global.sessionStorage, cfg.sessionToken, raw);
+    fallbackSetItem(global.localStorage, cfg.sessionTokenBackup, raw);
   }
 
   function clearStoredSessionToken(keys) {
     var cfg = withDefaults(keys);
     if (storageUtils && typeof storageUtils.clearSessionToken === "function") {
       storageUtils.clearSessionToken(cfg.sessionToken, cfg.sessionTokenBackup);
+      return;
     }
+    fallbackRemoveItem(global.sessionStorage, cfg.sessionToken);
+    fallbackRemoveItem(global.localStorage, cfg.sessionTokenBackup);
   }
 
   function readAuthenticatedUser(keys) {
