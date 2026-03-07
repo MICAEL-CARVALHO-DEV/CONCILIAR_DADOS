@@ -51,6 +51,7 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Criar `getProgressContext()` no `app.js` para centralizar dependencias passadas aos wrappers de `progressUtils`.
 - [DONE] Criar `getImportPipelineContext()` no `app.js` para centralizar dependencias do fluxo de mapeamento, criacao e merge de importacao.
 - [DONE] Criar `getImportValidationContext()` no `app.js` para centralizar helpers usados no parsing e no diagnostico estrutural da importacao.
+- [DONE] Criar `getStatusContext()`, `getNormalizeContext()`, `getIdContext()` e `getImportNormalizationContext()` no `app.js` para reduzir parametros inline em wrappers utilitarios.
 
-Active: ID-FE-47
+Active: ID-FE-48
 Risks: validar comportamento em dispositivos com storage bloqueado.

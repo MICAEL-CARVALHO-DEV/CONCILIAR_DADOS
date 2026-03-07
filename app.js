@@ -1653,12 +1653,13 @@ function getInitials(name) {
 }
 
 function statusClass(status) {
+  const statusCtx = getStatusContext();
   const statusClassUtil = getStatusUtil("statusClass");
   if (statusClassUtil) {
-    return statusClassUtil(status, normalizeLooseText);
+    return statusClassUtil(status, statusCtx.normalizeLooseText);
   }
 
-  const s = normalizeLooseText(status);
+  const s = statusCtx.normalizeLooseText(status);
   if (s.indexOf("concl") >= 0) return "st-ok";
   if (s.indexOf("cancel") >= 0) return "st-bad";
   if (s.indexOf("pend") >= 0 || s.indexOf("aguard") >= 0) return "st-warn";
@@ -2454,13 +2455,14 @@ function isRowEmpty(arr) {
 }
 
 function renderStatus(status) {
+  const statusCtx = getStatusContext();
   const renderStatusUtil = getStatusUtil("renderStatus");
   if (renderStatusUtil) {
-    return renderStatusUtil(status, statusColor, escapeHtml);
+    return renderStatusUtil(status, statusCtx.statusColor, statusCtx.escapeHtml);
   }
 
-  const color = statusColor(status);
-  return "<span class=\"badge\"><span class=\"dot\" style=\"background:" + color + "\"></span>" + escapeHtml(status) + "</span>";
+  const color = statusCtx.statusColor(status);
+  return "<span class=\"badge\"><span class=\"dot\" style=\"background:" + color + "\"></span>" + statusCtx.escapeHtml(status) + "</span>";
 }
 
 function statusColor(status) {
@@ -2479,14 +2481,15 @@ function statusColor(status) {
 }
 
 function normalizeStatus(input) {
+  const statusCtx = getStatusContext();
   const normalizeStatusUtil = getStatusUtil("normalizeStatus");
   if (normalizeStatusUtil) {
-    return normalizeStatusUtil(input, STATUS, normalizeLooseText);
+    return normalizeStatusUtil(input, statusCtx.statusValues, statusCtx.normalizeLooseText);
   }
-  const cleaned = normalizeLooseText(input);
+  const cleaned = statusCtx.normalizeLooseText(input);
   if (!cleaned) return "Recebido";
-  const found = STATUS.find(function (st) {
-    return normalizeLooseText(st) === cleaned;
+  const found = statusCtx.statusValues.find(function (st) {
+    return statusCtx.normalizeLooseText(st) === cleaned;
   });
   return found || "Recebido";
 }
@@ -4335,9 +4338,10 @@ function buildIdCounters(records) {
 }
 
 function assignMissingIds(records, counters) {
+  const idCtx = getIdContext();
   const assignMissingIdsUtil = getIdUtil("assignMissingIds");
   if (assignMissingIdsUtil) {
-    return assignMissingIdsUtil(records, counters, generateInternalId, toInt, currentYear);
+    return assignMissingIdsUtil(records, counters, idCtx.generateInternalId, idCtx.toInt, idCtx.currentYear);
   }
 
   records.forEach(function (r) {
@@ -4347,20 +4351,22 @@ function assignMissingIds(records, counters) {
 }
 
 function generateInternalId(ano, counters) {
+  const idCtx = getIdContext();
   const generateInternalIdUtil = getIdUtil("generateInternalId");
   if (generateInternalIdUtil) {
-    return generateInternalIdUtil(ano, counters, toInt, currentYear);
+    return generateInternalIdUtil(ano, counters, idCtx.toInt, idCtx.currentYear);
   }
 
-  const year = String(toInt(ano) || currentYear());
+  const year = String(idCtx.toInt(ano) || idCtx.currentYear());
   const next = (counters[year] || 0) + 1;
   counters[year] = next;
   return "EPI-" + year + "-" + String(next).padStart(6, "0");
 }
 function syncReferenceKeys(records) {
+  const importNormalizationCtx = getImportNormalizationContext();
   const syncReferenceKeysUtil = getImportNormalizationUtil("syncReferenceKeys");
   if (syncReferenceKeysUtil) {
-    return syncReferenceKeysUtil(records, REFERENCE_FIELDS, buildReferenceKey);
+    return syncReferenceKeysUtil(records, importNormalizationCtx.referenceFields, importNormalizationCtx.buildReferenceKey);
   }
   records.forEach(function (r) {
     r.ref_key = buildReferenceKey(r);
@@ -4368,27 +4374,29 @@ function syncReferenceKeys(records) {
 }
 
 function buildReferenceKey(record) {
+  const importNormalizationCtx = getImportNormalizationContext();
   const buildReferenceKeyUtil = getImportNormalizationUtil("buildReferenceKey");
   if (buildReferenceKeyUtil) {
-    return buildReferenceKeyUtil(record, REFERENCE_FIELDS, normalizeReferencePart);
+    return buildReferenceKeyUtil(record, importNormalizationCtx.referenceFields, importNormalizationCtx.normalizeReferencePart);
   }
-  const parts = REFERENCE_FIELDS.map(function (field) {
-    return normalizeReferencePart(record[field]);
+  const parts = importNormalizationCtx.referenceFields.map(function (field) {
+    return importNormalizationCtx.normalizeReferencePart(record[field]);
   });
   if (parts.every(function (p) { return p === ""; })) return "";
   return parts.join("|");
 }
 
 function normalizeReferencePart(value) {
+  const normalizeCtx = getNormalizeContext();
   const normalizeReferencePartUtil = getImportNormalizationUtil("normalizeReferencePart");
   if (normalizeReferencePartUtil) {
-    return normalizeReferencePartUtil(value, normalizeLooseText);
+    return normalizeReferencePartUtil(value, normalizeCtx.normalizeLooseText);
   }
   const normalizeReferencePartFallbackUtil = getNormalizeUtil("normalizeReferencePart");
   if (normalizeReferencePartFallbackUtil) {
     return normalizeReferencePartFallbackUtil(value);
   }
-  return normalizeLooseText(value).replace(/\s+/g, " ").trim();
+  return normalizeCtx.normalizeLooseText(value).replace(/\s+/g, " ").trim();
 }
 
 function normalizeLooseText(value) {
@@ -4678,6 +4686,37 @@ function getImportValidationContext() {
     shallowCloneObj: shallowCloneObj,
     mapImportRow: mapImportRow,
     detectType: detectType
+  };
+}
+
+function getStatusContext() {
+  return {
+    statusValues: STATUS,
+    normalizeLooseText: normalizeLooseText,
+    statusColor: statusColor,
+    escapeHtml: escapeHtml
+  };
+}
+
+function getNormalizeContext() {
+  return {
+    normalizeLooseText: normalizeLooseText
+  };
+}
+
+function getIdContext() {
+  return {
+    generateInternalId: generateInternalId,
+    toInt: toInt,
+    currentYear: currentYear
+  };
+}
+
+function getImportNormalizationContext() {
+  return {
+    referenceFields: REFERENCE_FIELDS,
+    buildReferenceKey: buildReferenceKey,
+    normalizeReferencePart: normalizeReferencePart
   };
 }
 
