@@ -57,6 +57,7 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Extrair a orquestracao de `processImportedRows()` para `frontend/js/utils/importProcessor.js`, mantendo a assinatura do `app.js` e fallback preservado.
 - [DONE] Extrair a leitura do XLSX e a captura da `Planilha1` para `frontend/js/utils/importReader.js`, mantendo `parseInputFile()` no `app.js` apenas como wrapper de estado.
 - [DONE] Extrair a exportacao em modo template para `frontend/js/utils/exportTemplateWriter.js`, mantendo `exportRecordsToTemplateXlsx()` no `app.js` apenas como wrapper.
+- [DONE] Extrair o exportador padrao de workbook para `frontend/js/utils/exportWorkbookWriter.js`, mantendo `exportRecordsToXlsx()` no `app.js` apenas como bridge.
 
-Active: ID-FE-53
+Active: ID-FE-54
 Risks: validar comportamento em dispositivos com storage bloqueado.

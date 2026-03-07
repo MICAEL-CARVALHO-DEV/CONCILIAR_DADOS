@@ -73,6 +73,7 @@ const statusUtils = SEC_FRONTEND.statusUtils || null;
 const progressUtils = SEC_FRONTEND.progressUtils || null;
 const filterUtils = SEC_FRONTEND.filterUtils || null;
 const exportUtils = SEC_FRONTEND.exportUtils || null;
+const exportWorkbookWriterUtils = SEC_FRONTEND.exportWorkbookWriterUtils || null;
 const exportTemplateUtils = SEC_FRONTEND.exportTemplateUtils || null;
 const exportTemplateWriterUtils = SEC_FRONTEND.exportTemplateWriterUtils || null;
 const exportDataUtils = SEC_FRONTEND.exportDataUtils || null;
@@ -455,6 +456,12 @@ function getImportReaderUtil(methodName) {
 function getExportUtil(methodName) {
   if (!exportUtils) return null;
   const method = exportUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getExportWorkbookWriterUtil(methodName) {
+  if (!exportWorkbookWriterUtils) return null;
+  const method = exportWorkbookWriterUtils[methodName];
   return typeof method === "function" ? method : null;
 }
 
@@ -5736,6 +5743,22 @@ async function syncExportLogToApi(meta) {
 
 // Exportador padrao: gera abas de dados + auditoria + resumo.
 function exportRecordsToXlsx(records, filename, options) {
+  const exportRecordsToXlsxUtil = getExportWorkbookWriterUtil("exportRecordsToXlsx");
+  if (exportRecordsToXlsxUtil) {
+    return exportRecordsToXlsxUtil(records, filename, options, {
+      xlsxApi: getXlsxApi(),
+      exportRecordsToTemplateXlsx: exportRecordsToTemplateXlsx,
+      buildExportTableData: buildExportTableData,
+      buildAuditLogTableData: buildAuditLogTableData,
+      buildSummaryAoa: buildSummaryAoa,
+      exportScopeAtuais: EXPORT_SCOPE.ATUAIS,
+      buildPlanilha1Aoa: buildPlanilha1Aoa,
+      runRoundTripCheck: runRoundTripCheck,
+      dateStamp: dateStamp,
+      notify: alert
+    });
+  }
+
   const xlsxApi = getXlsxApi();
   if (!xlsxApi) {
     alert("Biblioteca XLSX nao carregada.");
