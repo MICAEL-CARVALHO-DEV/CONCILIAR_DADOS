@@ -22,6 +22,8 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Extrair badge de resumo de exportação (`buildExportSummaryBadgeHtml`) para `frontend/js/ui/importReport.js`.
 - [DONE] Delegar `renderImportDashboard` em `frontend/js/ui/importReport.js` com fallback para implementação local.
 - [DONE] Extrair `syncCanonicalToAllFields`/`upsertRawField` para `frontend/js/utils/importNormalization.js` com fallback local no `app.js`.
+- [DONE] Extrair `syncReferenceKeys`/`buildReferenceKey` para `frontend/js/utils/importNormalization.js` com fallback local.
+- [DONE] Extrair `readStorageValue`/`writeStorageValue`/`removeStorageValue` e helpers de modo de armazenamento (`getStorageMode`, `getPrimaryStorage`, `getSecondaryStorage`) para `frontend/js/utils/storage.js`; `app.js` passa a delegar com fallback.
 
-Active: ID-FE-20
+Active: ID-FE-22
 Risks: validar comportamento em dispositivos com storage bloqueado.

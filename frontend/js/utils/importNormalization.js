@@ -12,6 +12,46 @@
     };
   }
 
+  function normalizeReferencePart(value, normalizeLooseTextFn) {
+    if (typeof normalizeLooseTextFn === "function") {
+      return normalizeLooseTextFn(value).replace(/\s+/g, " ").trim();
+    }
+    if (typeof normalizeUtils.normalizeReferencePart === "function") {
+      return normalizeUtils.normalizeReferencePart(value);
+    }
+    return String(value == null ? "" : value)
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function buildReferenceKey(record, referenceFields, normalizeReferencePartFn) {
+    if (!record || typeof record !== "object") return "";
+
+    var fields = Array.isArray(referenceFields) && referenceFields.length ? referenceFields : [];
+    var normalizePart = typeof normalizeReferencePartFn === "function" ? normalizeReferencePartFn : normalizeReferencePart;
+    var parts = fields.map(function (field) {
+      return normalizePart(record[field]);
+    });
+
+    if (!parts.length) return "";
+    if (parts.every(function (part) { return part === ""; })) return "";
+    return parts.join("|");
+  }
+
+  function syncReferenceKeys(records, referenceFields, buildReferenceKeyFn) {
+    if (!Array.isArray(records)) return;
+
+    var buildKey = (typeof buildReferenceKeyFn === "function")
+      ? buildReferenceKeyFn
+      : function (record) { return buildReferenceKey(record, referenceFields, normalizeReferencePart); };
+
+    records.forEach(function (record) {
+      if (!record || typeof record !== "object") return;
+      record.ref_key = buildKey(record);
+    });
+  }
+
   function upsertRawField(rawObj, canonicalKey, value, aliasesByCanonical, preferredHeaders, normalizeHeaderFn) {
     if (!rawObj || typeof rawObj !== "object") return;
 
@@ -62,4 +102,7 @@
   root.importNormalizationUtils = root.importNormalizationUtils || {};
   root.importNormalizationUtils.upsertRawField = upsertRawField;
   root.importNormalizationUtils.syncCanonicalToAllFields = syncCanonicalToAllFields;
+  root.importNormalizationUtils.normalizeReferencePart = normalizeReferencePart;
+  root.importNormalizationUtils.buildReferenceKey = buildReferenceKey;
+  root.importNormalizationUtils.syncReferenceKeys = syncReferenceKeys;
 })(window);

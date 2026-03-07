@@ -2567,8 +2567,8 @@ function onAuthSuccess(resp) {
 
 function readStorageValue(store, key) {
   if (store == null) return "";
-  if (storageUtils && typeof storageUtils.safeGetItem === "function") {
-    return storageUtils.safeGetItem(store, key).trim();
+  if (storageUtils && typeof storageUtils.readStorageValue === "function") {
+    return storageUtils.readStorageValue(store, key);
   }
   try {
     return String(store.getItem(key) || "").trim();
@@ -2580,8 +2580,8 @@ function readStorageValue(store, key) {
 function writeStorageValue(store, key, value) {
   if (store == null) return;
   const raw = String(value == null ? "" : value);
-  if (storageUtils && typeof storageUtils.safeSetItem === "function") {
-    storageUtils.safeSetItem(store, key, raw);
+  if (storageUtils && typeof storageUtils.writeStorageValue === "function") {
+    storageUtils.writeStorageValue(store, key, raw);
     return;
   }
   try {
@@ -2591,8 +2591,8 @@ function writeStorageValue(store, key, value) {
 
 function removeStorageValue(store, key) {
   if (store == null) return;
-  if (storageUtils && typeof storageUtils.safeRemoveItem === "function") {
-    storageUtils.safeRemoveItem(store, key);
+  if (storageUtils && typeof storageUtils.removeStorageValue === "function") {
+    storageUtils.removeStorageValue(store, key);
     return;
   }
   try {
@@ -3796,16 +3796,27 @@ function buildApiHeaders(eventOrigin) {
 }
 
 function getStorageMode() {
+  if (storageUtils && typeof storageUtils.getStorageMode === "function") {
+    const mode = String(storageUtils.getStorageMode(STORAGE_MODE_KEY) || "").toLowerCase();
+    if (mode === STORAGE_MODE_LOCAL || mode === STORAGE_MODE_SESSION) return mode;
+  }
+
   const configured = readStorageValue(localStorage, STORAGE_MODE_KEY).toLowerCase();
   if (configured === STORAGE_MODE_LOCAL) return STORAGE_MODE_LOCAL;
   return STORAGE_MODE_SESSION;
 }
 
 function getPrimaryStorage() {
+  if (storageUtils && typeof storageUtils.getPrimaryStorage === "function") {
+    return storageUtils.getPrimaryStorage(STORAGE_MODE_KEY);
+  }
   return getStorageMode() === STORAGE_MODE_LOCAL ? localStorage : sessionStorage;
 }
 
 function getSecondaryStorage() {
+  if (storageUtils && typeof storageUtils.getSecondaryStorage === "function") {
+    return storageUtils.getSecondaryStorage(STORAGE_MODE_KEY);
+  }
   return getStorageMode() === STORAGE_MODE_LOCAL ? sessionStorage : localStorage;
 }
 
@@ -4178,12 +4189,18 @@ function generateInternalId(ano, counters) {
   return "EPI-" + year + "-" + String(next).padStart(6, "0");
 }
 function syncReferenceKeys(records) {
+  if (typeof importNormalizationUtils !== "undefined" && importNormalizationUtils && typeof importNormalizationUtils.syncReferenceKeys === "function") {
+    return importNormalizationUtils.syncReferenceKeys(records, REFERENCE_FIELDS, buildReferenceKey);
+  }
   records.forEach(function (r) {
     r.ref_key = buildReferenceKey(r);
   });
 }
 
 function buildReferenceKey(record) {
+  if (typeof importNormalizationUtils !== "undefined" && importNormalizationUtils && typeof importNormalizationUtils.buildReferenceKey === "function") {
+    return importNormalizationUtils.buildReferenceKey(record, REFERENCE_FIELDS, normalizeReferencePart);
+  }
   const parts = REFERENCE_FIELDS.map(function (field) {
     return normalizeReferencePart(record[field]);
   });
@@ -4192,6 +4209,9 @@ function buildReferenceKey(record) {
 }
 
 function normalizeReferencePart(value) {
+  if (typeof importNormalizationUtils !== "undefined" && importNormalizationUtils && typeof importNormalizationUtils.normalizeReferencePart === "function") {
+    return importNormalizationUtils.normalizeReferencePart(value, normalizeLooseText);
+  }
   if (normalizeUtils && typeof normalizeUtils.normalizeReferencePart === "function") {
     return normalizeUtils.normalizeReferencePart(value);
   }
