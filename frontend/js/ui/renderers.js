@@ -33,6 +33,30 @@
     return badge;
   }
 
+  function appendRenderedMarkup(container, rendered) {
+    if (!container || rendered == null) return;
+
+    var isNode = (typeof Node !== "undefined" && rendered instanceof Node)
+      || (typeof DocumentFragment !== "undefined" && rendered instanceof DocumentFragment);
+    if (isNode) {
+      container.appendChild(rendered);
+      return;
+    }
+
+    var html = String(rendered);
+    if (!html) return;
+    var fragment = null;
+    if (typeof document.createRange === "function") {
+      fragment = document.createRange().createContextualFragment(html);
+    } else {
+      var tmp = document.createElement("div");
+      tmp.innerHTML = html;
+      fragment = document.createDocumentFragment();
+      while (tmp.firstChild) fragment.appendChild(tmp.firstChild);
+    }
+    container.appendChild(fragment);
+  }
+
   function renderHistoryToContainer(container, events, options) {
     if (!container) return;
     var opts = options || {};
@@ -152,7 +176,7 @@
 
     var tdProgress = document.createElement("td");
     if (renderProgressBar) {
-      tdProgress.innerHTML = String(renderProgressBar(progress));
+      appendRenderedMarkup(tdProgress, renderProgressBar(progress));
     } else {
       tdProgress.textContent = "";
     }
@@ -160,7 +184,7 @@
 
     var tdChips = document.createElement("td");
     if (renderMemberChips) {
-      tdChips.innerHTML = String(renderMemberChips(users));
+      appendRenderedMarkup(tdChips, renderMemberChips(users));
     } else {
       tdChips.textContent = "";
     }

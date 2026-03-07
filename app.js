@@ -509,17 +509,54 @@ function render() {
     const staleDays = daysSince(lastEventAt(r));
 
     const tr = document.createElement("tr");
-    tr.innerHTML = ""
-      + "<td><code>" + escapeHtml(r.id) + "</code></td>"
-      + "<td>" + escapeHtml(r.identificacao) + "</td>"
-      + "<td>" + escapeHtml(r.municipio) + "</td>"
-      + "<td>" + escapeHtml(r.deputado) + "</td>"
-      + "<td>" + renderProgressBar(progress) + "</td>"
-      + "<td>" + renderMemberChips(users) + "</td>"
-      + "<td class=\"muted small\">" + (staleDays === Infinity ? "-" : (String(staleDays) + " dias")) + "</td>"
-      + "<td>R$ " + fmtMoney(r.valor_atual) + "</td>"
-      + "<td class=\"muted\">" + fmtDateTime(r.updated_at) + "</td>"
-      + "<td><button class=\"btn\" data-action=\"view\" data-id=\"" + escapeHtml(r.id) + "\">Ver</button></td>";
+    const tdId = document.createElement("td");
+    const code = document.createElement("code");
+    code.textContent = String(r.id || "");
+    tdId.appendChild(code);
+    tr.appendChild(tdId);
+
+    const tdIdentificacao = document.createElement("td");
+    tdIdentificacao.textContent = String(r.identificacao || "");
+    tr.appendChild(tdIdentificacao);
+
+    const tdMunicipio = document.createElement("td");
+    tdMunicipio.textContent = String(r.municipio || "");
+    tr.appendChild(tdMunicipio);
+
+    const tdDeputado = document.createElement("td");
+    tdDeputado.textContent = String(r.deputado || "");
+    tr.appendChild(tdDeputado);
+
+    const tdProgress = document.createElement("td");
+    appendRenderedMarkup(tdProgress, renderProgressBar(progress));
+    tr.appendChild(tdProgress);
+
+    const tdChips = document.createElement("td");
+    appendRenderedMarkup(tdChips, renderMemberChips(users));
+    tr.appendChild(tdChips);
+
+    const tdStale = document.createElement("td");
+    tdStale.className = "muted small";
+    tdStale.textContent = staleDays === Infinity ? "-" : (String(staleDays) + " dias");
+    tr.appendChild(tdStale);
+
+    const tdValor = document.createElement("td");
+    tdValor.textContent = "R$ " + fmtMoney(r.valor_atual);
+    tr.appendChild(tdValor);
+
+    const tdUpdated = document.createElement("td");
+    tdUpdated.className = "muted";
+    tdUpdated.textContent = fmtDateTime(r.updated_at);
+    tr.appendChild(tdUpdated);
+
+    const tdAction = document.createElement("td");
+    const btn = document.createElement("button");
+    btn.className = "btn";
+    btn.setAttribute("data-action", "view");
+    btn.setAttribute("data-id", String(r.id || ""));
+    btn.textContent = "Ver";
+    tdAction.appendChild(btn);
+    tr.appendChild(tdAction);
     tbody.appendChild(tr);
   };
 
@@ -1382,7 +1419,7 @@ function renderUserProgressBox(progressContainer, progress, delays, options) {
 
   if (progressRenderer) {
     const progressWrap = document.createElement("div");
-    progressWrap.innerHTML = String(progressRenderer(progress));
+    appendRenderedMarkup(progressWrap, progressRenderer(progress));
     progressContainer.appendChild(progressWrap);
   }
 
@@ -1390,7 +1427,7 @@ function renderUserProgressBox(progressContainer, progress, delays, options) {
     const chipWrap = document.createElement("div");
     chipWrap.className = "member-chip-wrap";
     chipWrap.style.marginTop = "8px";
-    chipWrap.innerHTML = String(chipsRenderer(users));
+    appendRenderedMarkup(chipWrap, chipsRenderer(users));
     progressContainer.appendChild(chipWrap);
   }
 
@@ -3153,13 +3190,18 @@ function renderRoleNotice() {
   }
   if (isSupervisorUser()) {
     roleNotice.classList.remove("hidden");
-    roleNotice.innerHTML = ""
-      + "<h4>Modo supervisao: somente monitoramento</h4>"
-      + "<p class=\"muted small\">Este perfil acompanha andamento e auditoria em tempo real, sem alterar dados.</p>";
+    clearNodeChildren(roleNotice);
+    const h4 = document.createElement("h4");
+    h4.textContent = "Modo supervisao: somente monitoramento";
+    const p = document.createElement("p");
+    p.className = "muted small";
+    p.textContent = "Este perfil acompanha andamento e auditoria em tempo real, sem alterar dados.";
+    roleNotice.appendChild(h4);
+    roleNotice.appendChild(p);
     return;
   }
   roleNotice.classList.add("hidden");
-  roleNotice.innerHTML = "";
+  clearNodeChildren(roleNotice);
 }
 
 function renderSupervisorQuickPanel(prefilteredRows) {
@@ -3181,7 +3223,7 @@ function renderSupervisorQuickPanel(prefilteredRows) {
 
   if (!isSupervisorUser()) {
     supervisorQuickPanel.classList.add("hidden");
-    supervisorQuickPanel.innerHTML = "";
+    clearNodeChildren(supervisorQuickPanel);
     return;
   }
 
@@ -3203,36 +3245,89 @@ function renderSupervisorQuickPanel(prefilteredRows) {
     .sort(function (a, b) { return b.staleDays - a.staleDays; })
     .slice(0, 6);
 
-  let delayedHtml = "";
-  if (!topDelayed.length) {
-    delayedHtml = "<p class=\"muted small\">Sem pendencias com atraso no filtro atual.</p>";
-  } else {
-    delayedHtml = topDelayed.map(function (x) {
-      return ""
-        + "<div class=\"supervisor-list-row\">"
-        + "  <div>"
-        + "    <div><b>" + escapeHtml(x.record.id || "-") + "</b> - " + escapeHtml(x.record.identificacao || "-") + "</div>"
-        + "    <div class=\"muted small\">" + escapeHtml(x.record.municipio || "-") + " | " + escapeHtml(x.record.deputado || "-") + " | atraso: " + String(x.staleDays) + " dias</div>"
-        + "  </div>"
-        + "  <button class=\"btn\" data-supervisor-open=\"" + escapeHtml(x.record.id || "") + "\">Abrir</button>"
-        + "</div>";
-    }).join("");
+  supervisorQuickPanel.classList.remove("hidden");
+  clearNodeChildren(supervisorQuickPanel);
+
+  const title = document.createElement("h3");
+  title.textContent = "Painel rapido da supervisao";
+  supervisorQuickPanel.appendChild(title);
+
+  const kpiGrid = document.createElement("div");
+  kpiGrid.className = "supervisor-kpi-grid";
+
+  function addKpi(label, value) {
+    const card = document.createElement("div");
+    card.className = "supervisor-kpi";
+    const pLabel = document.createElement("p");
+    pLabel.className = "supervisor-kpi-label";
+    pLabel.textContent = label;
+    const pValue = document.createElement("p");
+    pValue.className = "supervisor-kpi-value";
+    pValue.textContent = String(value);
+    card.appendChild(pLabel);
+    card.appendChild(pValue);
+    kpiGrid.appendChild(card);
   }
 
-  supervisorQuickPanel.classList.remove("hidden");
-  supervisorQuickPanel.innerHTML = ""
-    + "<h3>Painel rapido da supervisao</h3>"
-    + "<div class=\"supervisor-kpi-grid\">"
-    + "  <div class=\"supervisor-kpi\"><p class=\"supervisor-kpi-label\">Emendas no filtro</p><p class=\"supervisor-kpi-value\">" + String(rows.length) + "</p></div>"
-    + "  <div class=\"supervisor-kpi\"><p class=\"supervisor-kpi-label\">Em atencao</p><p class=\"supervisor-kpi-value\">" + String(attentionCount) + "</p></div>"
-    + "  <div class=\"supervisor-kpi\"><p class=\"supervisor-kpi-label\">Sem marcacao</p><p class=\"supervisor-kpi-value\">" + String(noMarkCount) + "</p></div>"
-    + "  <div class=\"supervisor-kpi\"><p class=\"supervisor-kpi-label\">Paradas >= 7 dias</p><p class=\"supervisor-kpi-value\">" + String(staleCount) + "</p></div>"
-    + "</div>"
-    + "<p class=\"muted small\" style=\"margin-top:10px\">Em andamento: <b>" + String(inProgressCount) + "</b> | filtro atual aplicado.</p>"
-    + "<div class=\"supervisor-list\">"
-    + "<h4>Prioridade de acompanhamento (maior atraso)</h4>"
-    + delayedHtml
-    + "</div>";
+  addKpi("Emendas no filtro", String(rows.length));
+  addKpi("Em atencao", String(attentionCount));
+  addKpi("Sem marcacao", String(noMarkCount));
+  addKpi("Paradas >= 7 dias", String(staleCount));
+  supervisorQuickPanel.appendChild(kpiGrid);
+
+  const progressP = document.createElement("p");
+  progressP.className = "muted small";
+  progressP.style.marginTop = "10px";
+  const progressText = document.createTextNode("Em andamento: ");
+  const progressValue = document.createElement("b");
+  progressValue.textContent = String(inProgressCount);
+  const progressSuffix = document.createTextNode(" | filtro atual aplicado.");
+  progressP.appendChild(progressText);
+  progressP.appendChild(progressValue);
+  progressP.appendChild(progressSuffix);
+  supervisorQuickPanel.appendChild(progressP);
+
+  const listWrap = document.createElement("div");
+  listWrap.className = "supervisor-list";
+  const listTitle = document.createElement("h4");
+  listTitle.textContent = "Prioridade de acompanhamento (maior atraso)";
+  listWrap.appendChild(listTitle);
+
+  if (!topDelayed.length) {
+    const empty = document.createElement("p");
+    empty.className = "muted small";
+    empty.textContent = "Sem pendencias com atraso no filtro atual.";
+    listWrap.appendChild(empty);
+  } else {
+    topDelayed.forEach(function (x) {
+      const row = document.createElement("div");
+      row.className = "supervisor-list-row";
+
+      const rowCol = document.createElement("div");
+      const topLine = document.createElement("div");
+      const b = document.createElement("b");
+      b.textContent = String(x.record && x.record.id ? x.record.id : "-");
+      topLine.appendChild(b);
+      topLine.appendChild(document.createTextNode(" - " + String(x.record && x.record.identificacao ? x.record.identificacao : "-")));
+      const bottomLine = document.createElement("div");
+      bottomLine.className = "muted small";
+      bottomLine.textContent = String(x.record && x.record.municipio ? x.record.municipio : "-") + " | "
+        + String(x.record && x.record.deputado ? x.record.deputado : "-") + " | atraso: "
+        + String(x.staleDays) + " dias";
+      rowCol.appendChild(topLine);
+      rowCol.appendChild(bottomLine);
+      row.appendChild(rowCol);
+
+      const btn = document.createElement("button");
+      btn.className = "btn";
+      btn.setAttribute("data-supervisor-open", String(x.record && x.record.id ? x.record.id : ""));
+      btn.textContent = "Abrir";
+      row.appendChild(btn);
+
+      listWrap.appendChild(row);
+    });
+  }
+  supervisorQuickPanel.appendChild(listWrap);
 
   Array.prototype.forEach.call(supervisorQuickPanel.querySelectorAll("button[data-supervisor-open]"), function (btn) {
     btn.addEventListener("click", function () {
@@ -3321,41 +3416,82 @@ function renderPendingUsersTable(items) {
   }
 
   if (!Array.isArray(items) || items.length === 0) {
-    pendingUsersTableWrap.innerHTML = "<p class=\"muted small\">Nao ha cadastros em analise no momento.</p>";
+    clearNodeChildren(pendingUsersTableWrap);
+    const empty = document.createElement("p");
+    empty.className = "muted small";
+    empty.textContent = "Nao ha cadastros em analise no momento.";
+    pendingUsersTableWrap.appendChild(empty);
     return;
   }
 
-  const head = ""
-    + "<table class=\"table\">"
-    + "<thead><tr>"
-    + "<th>Usuario</th>"
-    + "<th>Perfil solicitado</th>"
-    + "<th>Criado em</th>"
-    + "<th>Status</th>"
-    + "<th>Acao</th>"
-    + "</tr></thead><tbody>";
+  clearNodeChildren(pendingUsersTableWrap);
+  const table = document.createElement("table");
+  table.className = "table";
 
-  const rows = items.map(function (u) {
+  const thead = document.createElement("thead");
+  const trH = document.createElement("tr");
+  ["Usuario", "Perfil solicitado", "Criado em", "Status", "Acao"].forEach(function (label) {
+    const th = document.createElement("th");
+    th.textContent = label;
+    trH.appendChild(th);
+  });
+  thead.appendChild(trH);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  items.forEach(function (u) {
     const id = Number(u.id || 0);
-    const nome = escapeHtml(text(u.nome));
+    const nome = text(u && u.nome != null ? u.nome : "");
     const perfil = normalizeUserRole(u.perfil || "CONTABIL");
     const createdAt = u.created_at ? fmtDateTime(u.created_at) : "-";
-    const options = USER_ROLE_OPTIONS.map(function (role) {
-      const selected = role === perfil ? " selected" : "";
-      return "<option value=\"" + escapeHtml(role) + "\"" + selected + ">" + escapeHtml(role) + "</option>";
-    }).join("");
 
-    return ""
-      + "<tr data-pending-user-id=\"" + id + "\">"
-      + "<td><b>" + nome + "</b></td>"
-      + "<td><select data-pending-role=\"" + id + "\">" + options + "</select></td>"
-      + "<td class=\"muted small\">" + escapeHtml(createdAt) + "</td>"
-      + "<td><span class=\"badge pending\">Em analise</span></td>"
-      + "<td><button class=\"btn primary\" data-pending-action=\"approve\" data-user-id=\"" + id + "\">Aprovar</button></td>"
-      + "</tr>";
-  }).join("");
+    const row = document.createElement("tr");
+    row.setAttribute("data-pending-user-id", String(id));
 
-  pendingUsersTableWrap.innerHTML = head + rows + "</tbody></table>";
+    const tdNome = document.createElement("td");
+    const nomeB = document.createElement("b");
+    nomeB.textContent = nome;
+    tdNome.appendChild(nomeB);
+
+    const tdPerfil = document.createElement("td");
+    const select = document.createElement("select");
+    select.setAttribute("data-pending-role", String(id));
+    USER_ROLE_OPTIONS.forEach(function (role) {
+      const option = document.createElement("option");
+      option.value = role;
+      option.textContent = role;
+      option.selected = role === perfil;
+      select.appendChild(option);
+    });
+    tdPerfil.appendChild(select);
+
+    const tdCreated = document.createElement("td");
+    tdCreated.className = "muted small";
+    tdCreated.textContent = createdAt;
+
+    const tdStatus = document.createElement("td");
+    const badge = document.createElement("span");
+    badge.className = "badge pending";
+    badge.textContent = "Em analise";
+    tdStatus.appendChild(badge);
+
+    const tdAction = document.createElement("td");
+    const btn = document.createElement("button");
+    btn.className = "btn primary";
+    btn.setAttribute("data-pending-action", "approve");
+    btn.setAttribute("data-user-id", String(id));
+    btn.textContent = "Aprovar";
+    tdAction.appendChild(btn);
+
+    row.appendChild(tdNome);
+    row.appendChild(tdPerfil);
+    row.appendChild(tdCreated);
+    row.appendChild(tdStatus);
+    row.appendChild(tdAction);
+    tbody.appendChild(row);
+  });
+  table.appendChild(tbody);
+  pendingUsersTableWrap.appendChild(table);
 }
 
 // Busca e lista cadastros pendentes para aprovacao.
@@ -4572,12 +4708,15 @@ function renderImportDashboard() {
   const recent = getRecentChangesForPanel(HOME_CHANGES_LIMIT);
   const exportSummary = buildExportSummaryBadgeHtml(latestExportReport);
 
-  importReport.innerHTML = ""
-    + exportSummary
-    + "<div class=\"import-dashboard-grid\">"
+  clearNodeChildren(importReport);
+  appendRenderedMarkup(importReport, exportSummary);
+  appendRenderedMarkup(
+    importReport,
+    "<div class=\"import-dashboard-grid\">"
     + "  <section class=\"import-dashboard-left\">" + left + "</section>"
     + "  <section class=\"import-dashboard-right\">" + buildRecentChangesPanelHtml(recent) + "</section>"
-    + "</div>";
+    + "</div>"
+  );
 
   if (latestImportReport) {
     wireImportReportTabs("planilha1");
@@ -5797,6 +5936,34 @@ function clearNodeChildren(node) {
   while (node.firstChild) {
     node.removeChild(node.firstChild);
   }
+}
+
+function appendRenderedMarkup(container, rendered) {
+  if (!container) return;
+  if (!rendered && rendered !== 0) return;
+
+  if (typeof Node !== "undefined" && rendered instanceof Node) {
+    container.appendChild(rendered);
+    return;
+  }
+
+  if (typeof DocumentFragment !== "undefined" && rendered instanceof DocumentFragment) {
+    container.appendChild(rendered);
+    return;
+  }
+
+  const html = String(rendered);
+  if (!html) return;
+
+  if (typeof document.createRange === "function") {
+    const fragment = document.createRange().createContextualFragment(html);
+    container.appendChild(fragment);
+    return;
+  }
+
+  const temp = document.createElement("div");
+  temp.innerHTML = html;
+  while (temp.firstChild) container.appendChild(temp.firstChild);
 }
 
 function escapeHtml(str) {
