@@ -2207,7 +2207,7 @@ async function parseInputFile(file) {
     throw new Error("Formato nao suportado. Use apenas XLSX.");
   }
 
-  const xlsxApi = typeof window !== "undefined" ? window.XLSX : null;
+  const xlsxApi = getXlsxApi();
   if (!xlsxApi) throw new Error("Biblioteca XLSX nao carregada.");
 
   const buffer = await file.arrayBuffer();
