@@ -463,7 +463,7 @@ function setSelectOptions(select, options, preferredValue) {
   }
 
   const prev = preferredValue !== undefined ? preferredValue : select.value;
-  select.innerHTML = "";
+  clearNodeChildren(select);
   options.forEach(function (opt) {
     const el = document.createElement("option");
     el.value = opt.value;
@@ -1074,7 +1074,7 @@ function onModalFieldInput(e) {
 
 // Renderiza editor de campos da emenda no modal.
 function renderKvEditor(rec) {
-  kv.innerHTML = "";
+  clearNodeChildren(kv);
 
   MODAL_FIELD_ORDER.forEach(function (field) {
     const k = document.createElement("div");
@@ -1338,12 +1338,11 @@ function openModal(id, keepReasons) {
   }
 
   if (userProgressBox) {
-    userProgressBox.innerHTML = ""
-      + renderProgressBar(progress)
-      + "<div class=\"member-chip-wrap\" style=\"margin-top:8px\">" + renderMemberChips(users) + "</div>"
-      + (delays.length
-        ? ("<p class=\"muted small\" style=\"margin-top:8px\"><b>Quem esta atrasando:</b> " + delays.map(function (u) { return escapeHtml(u.name); }).join(", ") + "</p>")
-        : "<p class=\"muted small\" style=\"margin-top:8px\"><b>Todos concluiram.</b></p>");
+    renderUserProgressBox(userProgressBox, progress, delays, {
+      renderProgressBar: renderProgressBar,
+      renderMemberChips: renderMemberChips,
+      users: users
+    });
   }
 
   if (attentionIssues.length) {
@@ -1372,22 +1371,90 @@ function openModal(id, keepReasons) {
   }, 0);
 }
 
+function renderUserProgressBox(progressContainer, progress, delays, options) {
+  if (!progressContainer) return;
+  const opts = options || {};
+  const progressRenderer = typeof opts.renderProgressBar === "function" ? opts.renderProgressBar : null;
+  const chipsRenderer = typeof opts.renderMemberChips === "function" ? opts.renderMemberChips : null;
+  const users = Array.isArray(opts.users) ? opts.users : [];
+
+  clearNodeChildren(progressContainer);
+
+  if (progressRenderer) {
+    const progressWrap = document.createElement("div");
+    progressWrap.innerHTML = String(progressRenderer(progress));
+    progressContainer.appendChild(progressWrap);
+  }
+
+  if (chipsRenderer) {
+    const chipWrap = document.createElement("div");
+    chipWrap.className = "member-chip-wrap";
+    chipWrap.style.marginTop = "8px";
+    chipWrap.innerHTML = String(chipsRenderer(users));
+    progressContainer.appendChild(chipWrap);
+  }
+
+  const footer = document.createElement("p");
+  footer.className = "muted small";
+  footer.style.marginTop = "8px";
+  const label = document.createElement("b");
+  const names = Array.isArray(delays) ? delays : [];
+  if (names.length) {
+    label.textContent = "Quem esta atrasando:";
+    footer.appendChild(label);
+    footer.appendChild(document.createTextNode(" " + names.map(function (u) { return String(u && u.name ? u.name : ""); }).join(", ")));
+  } else {
+    label.textContent = "Todos concluiram.";
+    footer.appendChild(label);
+  }
+  progressContainer.appendChild(footer);
+}
+
 function renderRawFields(rec) {
   if (!rawFields) return;
   const obj = rec && rec.all_fields && typeof rec.all_fields === "object" ? rec.all_fields : {};
   const keys = Object.keys(obj);
+  clearNodeChildren(rawFields);
 
   if (!keys.length) {
-    rawFields.innerHTML = "<p class=\"muted small\">Sem campos brutos importados.</p>";
+    const empty = document.createElement("p");
+    empty.className = "muted small";
+    empty.textContent = "Sem campos brutos importados.";
+    rawFields.appendChild(empty);
     return;
   }
 
-  let html = "<table class=\"table\" style=\"min-width:760px\"><thead><tr><th>Campo</th><th>Valor</th></tr></thead><tbody>";
+  const table = document.createElement("table");
+  table.className = "table";
+  table.style.minWidth = "760px";
+  const thead = document.createElement("thead");
+  const trHead = document.createElement("tr");
+  const thField = document.createElement("th");
+  thField.textContent = "Campo";
+  const thValue = document.createElement("th");
+  thValue.textContent = "Valor";
+  trHead.appendChild(thField);
+  trHead.appendChild(thValue);
+  thead.appendChild(trHead);
+  table.appendChild(thead);
+
+  const tbodyTable = document.createElement("tbody");
   keys.forEach(function (k) {
-    html += "<tr><td><code>" + escapeHtml(k) + "</code></td><td>" + escapeHtml(String(obj[k] == null ? "" : obj[k])) + "</td></tr>";
+    const tr = document.createElement("tr");
+    const tdKey = document.createElement("td");
+    const code = document.createElement("code");
+    code.textContent = String(k);
+    tdKey.appendChild(code);
+
+    const tdValue = document.createElement("td");
+    tdValue.textContent = String(obj[k] == null ? "" : obj[k]);
+
+    tr.appendChild(tdKey);
+    tr.appendChild(tdValue);
+    tbodyTable.appendChild(tr);
   });
-  html += "</tbody></table>";
-  rawFields.innerHTML = html;
+  table.appendChild(tbodyTable);
+  rawFields.appendChild(table);
 }
 
 function getEventsSorted(rec) {
@@ -1404,57 +1471,134 @@ function renderMarksSummary(lastMarks) {
     if (a[0] === b[0]) return 0;
     return a[0] > b[0] ? 1 : -1;
   });
+  clearNodeChildren(marksSummary);
 
-  let html = ""
-    + "<table class=\"table\" style=\"min-width:700px\">"
-    + "<thead><tr>"
-    + "<th>Usuario</th><th>Setor</th><th>Ultima marcacao</th><th>Data/Hora</th><th>Observacao</th>"
-    + "</tr></thead><tbody>";
+  const table = document.createElement("table");
+  table.className = "table";
+  table.style.minWidth = "700px";
+  const thead = document.createElement("thead");
+  const trHead = document.createElement("tr");
+  ["Usuario", "Setor", "Ultima marcacao", "Data/Hora", "Observacao"].forEach(function (label) {
+    const th = document.createElement("th");
+    th.textContent = label;
+    trHead.appendChild(th);
+  });
+  thead.appendChild(trHead);
+  table.appendChild(thead);
 
+  const tbody = document.createElement("tbody");
   entries.forEach(function (entry) {
     const user = entry[0];
     const info = entry[1];
-    html += "<tr>"
-      + "<td><code>" + escapeHtml(user) + "</code></td>"
-      + "<td>" + escapeHtml(info.role || "-") + "</td>"
-      + "<td>" + renderStatus(info.status || "-") + "</td>"
-      + "<td class=\"muted\">" + fmtDateTime(info.at) + "</td>"
-      + "<td>" + escapeHtml(info.note || "") + "</td>"
-      + "</tr>";
+    const tr = document.createElement("tr");
+
+    const tdUser = document.createElement("td");
+    const code = document.createElement("code");
+    code.textContent = String(user);
+    tdUser.appendChild(code);
+
+    const tdRole = document.createElement("td");
+    tdRole.textContent = String(info.role || "-");
+
+    const tdStatus = document.createElement("td");
+    const statusBadge = document.createElement("span");
+    statusBadge.className = "badge";
+    const dot = document.createElement("span");
+    dot.className = "dot";
+    dot.style.background = statusColor(info.status || "-");
+    statusBadge.appendChild(dot);
+    statusBadge.appendChild(document.createTextNode(String(info.status || "-")));
+    tdStatus.appendChild(statusBadge);
+
+    const tdAt = document.createElement("td");
+    tdAt.className = "muted";
+    tdAt.textContent = fmtDateTime(info.at);
+
+    const tdNote = document.createElement("td");
+    tdNote.textContent = String(info.note || "");
+
+    tr.appendChild(tdUser);
+    tr.appendChild(tdRole);
+    tr.appendChild(tdStatus);
+    tr.appendChild(tdAt);
+    tr.appendChild(tdNote);
+    tbody.appendChild(tr);
   });
 
   if (!entries.length) {
-    html += "<tr><td colspan=\"5\" class=\"muted\">Nenhuma marcacao registrada ainda.</td></tr>";
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.className = "muted";
+    td.colSpan = 5;
+    td.textContent = "Nenhuma marcacao registrada ainda.";
+    tr.appendChild(td);
+    tbody.appendChild(tr);
   }
-
-  html += "</tbody></table>";
-  marksSummary.innerHTML = html;
+  table.appendChild(tbody);
+  marksSummary.appendChild(table);
 }
 
 function renderHistoryFallback(rec) {
   if (!historyEl) return;
-  historyEl.innerHTML = "";
+  clearNodeChildren(historyEl);
 
   getEventsSorted(rec).forEach(function (ev) {
     const div = document.createElement("div");
     div.className = "event";
 
     const who = (ev.actor_role || "-") + " | " + (ev.actor_user || "-");
-    let right = "";
+    const rightParts = [];
     if (ev.type === "OFFICIAL_STATUS") {
-      right = "<b>LEGADO</b> " + "<b>" + escapeHtml(ev.from || "") + "</b> -> <b>" + escapeHtml(ev.to || "") + "</b>";
+      rightParts.push({ type: "bold", value: "LEGADO" });
+      rightParts.push({ type: "text", value: " " });
+      rightParts.push({ type: "bold", value: String(ev.from || "") });
+      rightParts.push({ type: "text", value: " -> " });
+      rightParts.push({ type: "bold", value: String(ev.to || "") });
     } else if (ev.type === "MARK_STATUS") {
-      right = "<b>" + escapeHtml(ev.to || "") + "</b>";
+      rightParts.push({ type: "bold", value: String(ev.to || "") });
     } else if (ev.type === "EDIT_FIELD") {
-      right = "<b>" + escapeHtml(ev.field || "") + "</b>: " + escapeHtml(String(ev.from || "")) + " -> " + escapeHtml(String(ev.to || ""));
+      rightParts.push({ type: "bold", value: String(ev.field || "") });
+      rightParts.push({ type: "text", value: ": " + String(ev.from == null ? "" : ev.from) + " -> " + String(ev.to == null ? "" : ev.to) });
     }
 
-    div.innerHTML = ""
-      + "<div class=\"top\">"
-      + "<div class=\"meta\"><b>" + escapeHtml(who) + "</b> | " + fmtDateTime(ev.at) + " | <span class=\"muted\">" + escapeHtml(ev.type) + "</span></div>"
-      + "<div class=\"meta\">" + right + "</div>"
-      + "</div>"
-      + "<div class=\"desc\">" + escapeHtml(ev.note || "") + "</div>";
+    const topRow = document.createElement("div");
+    topRow.className = "top";
+
+    const metaLeft = document.createElement("div");
+    metaLeft.className = "meta";
+    const whoEl = document.createElement("b");
+    whoEl.textContent = who;
+    metaLeft.appendChild(whoEl);
+    metaLeft.appendChild(document.createTextNode(" | " + fmtDateTime(ev.at) + " | "));
+    const typeSpan = document.createElement("span");
+    typeSpan.className = "muted";
+    typeSpan.textContent = String(ev.type || "");
+    metaLeft.appendChild(typeSpan);
+    topRow.appendChild(metaLeft);
+
+    const metaRight = document.createElement("div");
+    metaRight.className = "meta";
+    if (!rightParts.length) {
+      metaRight.textContent = "";
+    } else {
+      rightParts.forEach(function (part) {
+        if (part.type === "bold") {
+          const b = document.createElement("b");
+          b.textContent = part.value;
+          metaRight.appendChild(b);
+          return;
+        }
+        metaRight.appendChild(document.createTextNode(String(part.value)));
+      });
+    }
+    topRow.appendChild(metaRight);
+
+    const desc = document.createElement("div");
+    desc.className = "desc";
+    desc.textContent = String(ev.note || "");
+
+    div.appendChild(topRow);
+    div.appendChild(desc);
     historyEl.appendChild(div);
   });
 }
@@ -2453,7 +2597,7 @@ function setupAuthUi() {
 // Carrega papeis permitidos no cadastro publico do auth-gate.
 function syncRegisterRoles() {
   if (!authRegisterRole) return;
-  authRegisterRole.innerHTML = "";
+  clearNodeChildren(authRegisterRole);
   PUBLIC_SELF_REGISTER_ROLE_OPTIONS.forEach(function (role) {
     const opt = document.createElement("option");
     opt.value = role;
@@ -5646,6 +5790,13 @@ function text(v) {
     return formatUtils.text(v);
   }
   return asText(v);
+}
+
+function clearNodeChildren(node) {
+  if (!node) return;
+  while (node.firstChild) {
+    node.removeChild(node.firstChild);
+  }
 }
 
 function escapeHtml(str) {
