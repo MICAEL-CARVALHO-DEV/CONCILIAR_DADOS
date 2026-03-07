@@ -107,7 +107,7 @@
       "<div class=\"import-dashboard-grid\"><section class=\"import-dashboard-left\">" + left + "</section><section class=\"import-dashboard-right\">" + right + "</section></div>";
 
     if (latestImportReport && typeof wireImportReportTabsFn === "function") {
-      wireImportReportTabsFn("planilha1", importReportEl);
+      wireImportReportTabsFn(importReportEl, "planilha1");
     }
   }
 
@@ -317,9 +317,18 @@
   }
 
   function wireImportReportTabs(importReportEl, defaultTab) {
-    if (!importReportEl) return;
-    var tabButtons = Array.from(importReportEl.querySelectorAll("[data-import-tab]"));
-    var tabPanels = Array.from(importReportEl.querySelectorAll("[data-import-panel]") );
+    var targetEl = importReportEl;
+    var targetTab = defaultTab;
+
+    // Backward-compatible parsing while app.js transitions to the normalized signature.
+    if (typeof importReportEl === "string" && defaultTab && defaultTab.querySelectorAll) {
+      targetEl = defaultTab;
+      targetTab = importReportEl;
+    }
+
+    if (!targetEl) return;
+    var tabButtons = Array.from(targetEl.querySelectorAll("[data-import-tab]"));
+    var tabPanels = Array.from(targetEl.querySelectorAll("[data-import-panel]"));
     if (!tabButtons.length || !tabPanels.length) return;
 
     function activateTab(tabName) {
@@ -346,7 +355,7 @@
       });
     });
 
-    var first = defaultTab || (tabButtons[0] && tabButtons[0].getAttribute("data-import-tab"));
+    var first = targetTab || (tabButtons[0] && tabButtons[0].getAttribute("data-import-tab"));
     if (first) activateTab(first);
   }
 

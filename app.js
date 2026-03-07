@@ -4657,14 +4657,17 @@ function showImportReport(report) {
   renderImportDashboard();
 }
 
-function wireImportReportTabs(defaultTab) {
+function wireImportReportTabs(targetOrTab, maybeDefaultTab) {
+  const target = targetOrTab && typeof targetOrTab.querySelectorAll === "function" ? targetOrTab : importReport;
+  const defaultTab = target === targetOrTab ? maybeDefaultTab : targetOrTab;
+
   if (typeof importReportUtils !== "undefined" && importReportUtils && typeof importReportUtils.wireImportReportTabs === "function") {
-    importReportUtils.wireImportReportTabs(importReport, defaultTab);
+    importReportUtils.wireImportReportTabs(target, defaultTab);
     return;
   }
-  if (!importReport) return;
-  const tabButtons = Array.from(importReport.querySelectorAll("[data-import-tab]"));
-  const tabPanels = Array.from(importReport.querySelectorAll("[data-import-panel]"));
+  if (!target) return;
+  const tabButtons = Array.from(target.querySelectorAll("[data-import-tab]"));
+  const tabPanels = Array.from(target.querySelectorAll("[data-import-panel]"));
   if (!tabButtons.length || !tabPanels.length) return;
 
   function activateTab(tabName) {

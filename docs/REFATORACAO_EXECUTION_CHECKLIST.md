@@ -28,6 +28,7 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Delegar leitura/gravação/limpeza de token do `app.js` para `storageUtils` (com fallback preservado).
 - [DONE] Ler `API shared key` via `storageUtils.readStorageValue` na configuração do `apiClient`.
 - [DONE] Usar `storageUtils.readStorageValue` ao montar headers da API para `X-API-Key`.
+- [DONE] Normalizar a assinatura de `wireImportReportTabs` entre `app.js` e `frontend/js/ui/importReport.js`, mantendo compatibilidade retroativa.
 
-Active: ID-FE-24
+Active: ID-FE-25
 Risks: validar comportamento em dispositivos com storage bloqueado.
