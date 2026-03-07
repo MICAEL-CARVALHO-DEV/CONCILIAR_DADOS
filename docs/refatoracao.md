@@ -17,9 +17,11 @@ Sair de um projeto "funciona, mas esta pesado" para um projeto:
 - [DONE] Mapear `app.js` em `frontend/js/MAPA_APP.md`
 - [DONE] Mapear backend em `backend/MAPA_MAIN.md`
 - [DONE] Criar base de `utils`, `auth` e `api client` no frontend
+- [DONE] [ID-FE-04] Extrair utilitarios base para `frontend/js/utils/format.js`
+- [DONE] [ID-FE-05] Extrair utilitarios de normalizacao e clones para `frontend/js/utils/normalize.js`
 - [TODO] Continuar migracao do `app.js` para os modulos novos
 
-Active: continuar a migracao do frontend por blocos pequenos
+Active: ID-FE-06 — continuidade da migracao do frontend por blocos pequenos
 Risks: arquivo `app.js` grande, backend ainda concentrado, regressao em auth/import/export e lock
 
 ## Fase 0 - Preparacao
@@ -532,3 +534,7 @@ Blocked:
 Resume from:
 
 - migrar o proximo bloco do `app.js` para os modulos novos sem alterar comportamento
+Concluido neste ciclo:
+
+- [ID-FE-04] utilitarios base de texto, numero e formatacao no arquivo `frontend/js/utils/format.js`
+- [ID-FE-05] utilitarios de normalizacao e clones no arquivo `frontend/js/utils/normalize.js`

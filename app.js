@@ -1,4 +1,4 @@
-/***********************
+﻿/***********************
  * Prototipo SEC Emendas - v3
  * - Status oficial controlado por usuarios operacionais (supervisao monitora)
  * - Marcacao por usuario e timeline completa
@@ -63,6 +63,8 @@ const SEC_FRONTEND = (typeof window !== "undefined" && window.SECFrontend && typ
 const storageUtils = SEC_FRONTEND.storageUtils || null;
 const domUtils = SEC_FRONTEND.domUtils || null;
 const escapeUtils = SEC_FRONTEND.escapeUtils || null;
+const formatUtils = SEC_FRONTEND.formatUtils || null;
+const normalizeUtils = SEC_FRONTEND.normalizeUtils || null;
 const authStore = SEC_FRONTEND.authStore || null;
 const authGuard = SEC_FRONTEND.authGuard || null;
 const apiClient = SEC_FRONTEND.apiClient || null;
@@ -4079,10 +4081,16 @@ function buildReferenceKey(record) {
 }
 
 function normalizeReferencePart(value) {
+  if (normalizeUtils && typeof normalizeUtils.normalizeReferencePart === "function") {
+    return normalizeUtils.normalizeReferencePart(value);
+  }
   return normalizeLooseText(value).replace(/\s+/g, " ").trim();
 }
 
 function normalizeLooseText(value) {
+  if (normalizeUtils && typeof normalizeUtils.normalizeLooseText === "function") {
+    return normalizeUtils.normalizeLooseText(value);
+  }
   return String(value == null ? "" : value)
     .normalize("NFD")
     .replace(/[\u0300-\u036f]/g, "")
@@ -4091,6 +4099,9 @@ function normalizeLooseText(value) {
 }
 
 function normalizeRowKeys(row) {
+  if (normalizeUtils && typeof normalizeUtils.normalizeRowKeys === "function") {
+    return normalizeUtils.normalizeRowKeys(row);
+  }
   const out = {};
   Object.keys(row || {}).forEach(function (k) {
     const nk = normalizeHeader(k);
@@ -4101,10 +4112,16 @@ function normalizeRowKeys(row) {
 }
 
 function normalizeHeader(key) {
+  if (normalizeUtils && typeof normalizeUtils.normalizeHeader === "function") {
+    return normalizeUtils.normalizeHeader(key);
+  }
   return normalizeLooseText(key).replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
 }
 
 function pickValue(normalizedRow, aliases) {
+  if (normalizeUtils && typeof normalizeUtils.pickValue === "function") {
+    return normalizeUtils.pickValue(normalizedRow, aliases);
+  }
   if (!normalizedRow) return "";
   for (let i = 0; i < aliases.length; i += 1) {
     const nk = normalizeHeader(aliases[i]);
@@ -4117,6 +4134,9 @@ function pickValue(normalizedRow, aliases) {
 }
 
 function shallowCloneObj(obj) {
+  if (normalizeUtils && typeof normalizeUtils.shallowCloneObj === "function") {
+    return normalizeUtils.shallowCloneObj(obj);
+  }
   const out = {};
   Object.keys(obj || {}).forEach(function (k) {
     out[k] = obj[k];
@@ -5280,11 +5300,17 @@ function buildPlanilha1Aoa(records) {
 }
 
 function fmtMoney(n) {
+  if (formatUtils && typeof formatUtils.fmtMoney === "function") {
+    return formatUtils.fmtMoney(n);
+  }
   const x = toNumber(n);
   return x.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function fmtDateTime(iso) {
+  if (formatUtils && typeof formatUtils.fmtDateTime === "function") {
+    return formatUtils.fmtDateTime(iso);
+  }
   try {
     const d = new Date(iso);
     return d.toLocaleString("pt-BR");
@@ -5294,10 +5320,16 @@ function fmtDateTime(iso) {
 }
 
 function isoNow() {
+  if (formatUtils && typeof formatUtils.isoNow === "function") {
+    return formatUtils.isoNow();
+  }
   return new Date().toISOString();
 }
 
 function dateStamp() {
+  if (formatUtils && typeof formatUtils.dateStamp === "function") {
+    return formatUtils.dateStamp();
+  }
   const d = new Date();
   const yyyy = d.getFullYear();
   const mm = String(d.getMonth() + 1).padStart(2, "0");
@@ -5308,15 +5340,24 @@ function dateStamp() {
 }
 
 function currentYear() {
+  if (formatUtils && typeof formatUtils.currentYear === "function") {
+    return formatUtils.currentYear();
+  }
   return new Date().getFullYear();
 }
 
 function toInt(v) {
+  if (formatUtils && typeof formatUtils.toInt === "function") {
+    return formatUtils.toInt(v);
+  }
   const n = parseInt(v, 10);
   return Number.isFinite(n) ? n : 0;
 }
 
 function toNumber(v) {
+  if (formatUtils && typeof formatUtils.toNumber === "function") {
+    return formatUtils.toNumber(v);
+  }
   if (typeof v === "number") return Number.isFinite(v) ? v : 0;
   const s = String(v == null ? "" : v).trim().replace(/\s/g, "").replace(/\.(?=\d{3}(\D|$))/g, "").replace(/,/g, ".").replace(/[^\d.-]/g, "");
   const n = Number(s);
@@ -5324,6 +5365,9 @@ function toNumber(v) {
 }
 
 function toNumberOrNull(v) {
+  if (formatUtils && typeof formatUtils.toNumberOrNull === "function") {
+    return formatUtils.toNumberOrNull(v);
+  }
   if (v == null) return null;
   const txt = String(v).trim();
   if (txt === "") return null;
@@ -5333,11 +5377,17 @@ function toNumberOrNull(v) {
 }
 
 function asText(v) {
+  if (formatUtils && typeof formatUtils.asText === "function") {
+    return formatUtils.asText(v);
+  }
   if (v == null) return "";
   return String(v).trim();
 }
 
 function text(v) {
+  if (formatUtils && typeof formatUtils.text === "function") {
+    return formatUtils.text(v);
+  }
   return asText(v);
 }
 
@@ -5349,6 +5399,9 @@ function escapeHtml(str) {
 }
 
 function debounce(fn, ms) {
+  if (normalizeUtils && typeof normalizeUtils.debounce === "function") {
+    return normalizeUtils.debounce(fn, ms);
+  }
   let t = null;
   return function () {
     const args = arguments;
@@ -5360,6 +5413,9 @@ function debounce(fn, ms) {
 }
 
 function deepClone(obj) {
+  if (normalizeUtils && typeof normalizeUtils.deepClone === "function") {
+    return normalizeUtils.deepClone(obj);
+  }
   return JSON.parse(JSON.stringify(obj));
 }
 
@@ -5476,3 +5532,4 @@ function configureFrontendModules() {
     }
   });
 }
+
