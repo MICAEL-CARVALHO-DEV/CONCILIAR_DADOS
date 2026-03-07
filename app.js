@@ -74,6 +74,7 @@ const progressUtils = SEC_FRONTEND.progressUtils || null;
 const filterUtils = SEC_FRONTEND.filterUtils || null;
 const exportUtils = SEC_FRONTEND.exportUtils || null;
 const exportTemplateUtils = SEC_FRONTEND.exportTemplateUtils || null;
+const exportTemplateWriterUtils = SEC_FRONTEND.exportTemplateWriterUtils || null;
 const exportDataUtils = SEC_FRONTEND.exportDataUtils || null;
 const importReportUtils = SEC_FRONTEND.importReportUtils || null;
 const authStore = SEC_FRONTEND.authStore || null;
@@ -460,6 +461,12 @@ function getExportUtil(methodName) {
 function getExportTemplateUtil(methodName) {
   if (!exportTemplateUtils) return null;
   const method = exportTemplateUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getExportTemplateWriterUtil(methodName) {
+  if (!exportTemplateWriterUtils) return null;
+  const method = exportTemplateWriterUtils[methodName];
   return typeof method === "function" ? method : null;
 }
 
@@ -5779,6 +5786,27 @@ function exportRecordsToXlsx(records, filename, options) {
 
 // Exportador em modo template: preserva estrutura do XLSX original.
 function exportRecordsToTemplateXlsx(records, filename, options, xlsxApi) {
+  const exportRecordsToTemplateXlsxUtil = getExportTemplateWriterUtil("exportRecordsToTemplateXlsx");
+  if (exportRecordsToTemplateXlsxUtil) {
+    return exportRecordsToTemplateXlsxUtil(records, filename, options, {
+      templateSnapshot: lastImportedWorkbookTemplate,
+      xlsxApi: xlsxApi,
+      resolveTemplateTargetSheets: resolveTemplateTargetSheets,
+      detectHeaderRow: detectHeaderRow,
+      buildCanonicalColumnMap: buildCanonicalColumnMap,
+      templateCanonicalKeys: TEMPLATE_CANONICAL_KEYS,
+      getRecordValueForTemplate: getRecordValueForTemplate,
+      setWorksheetCellValue: setWorksheetCellValue,
+      runTemplateRoundTripCheck: runTemplateRoundTripCheck,
+      countAuditEvents: countAuditEvents,
+      dateStamp: dateStamp,
+      notify: alert,
+      log: function (message) {
+        console.log(message);
+      }
+    });
+  }
+
   const opts = options || {};
   const template = lastImportedWorkbookTemplate;
   if (!template || !template.buffer) {
@@ -5881,6 +5909,11 @@ function exportRecordsToTemplateXlsx(records, filename, options, xlsxApi) {
 }
 
 function resolveTemplateTargetSheets(workbook, records) {
+  const resolveTemplateTargetSheetsUtil = getExportTemplateWriterUtil("resolveTemplateTargetSheets");
+  if (resolveTemplateTargetSheetsUtil) {
+    return resolveTemplateTargetSheetsUtil(workbook, records);
+  }
+
   const preferred = "Controle de EPI";
   if (workbook.SheetNames.includes(preferred)) return [preferred];
 
