@@ -5933,6 +5933,10 @@ function text(v) {
 
 function clearNodeChildren(node) {
   if (!node) return;
+  if (domUtils && typeof domUtils.clearChildren === "function") {
+    domUtils.clearChildren(node);
+    return;
+  }
   while (node.firstChild) {
     node.removeChild(node.firstChild);
   }
@@ -5940,6 +5944,11 @@ function clearNodeChildren(node) {
 
 function appendRenderedMarkup(container, rendered) {
   if (!container) return;
+  if (domUtils && typeof domUtils.appendRenderedMarkup === "function") {
+    domUtils.appendRenderedMarkup(container, rendered);
+    return;
+  }
+
   if (!rendered && rendered !== 0) return;
 
   if (typeof Node !== "undefined" && rendered instanceof Node) {

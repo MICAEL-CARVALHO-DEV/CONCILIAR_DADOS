@@ -1,5 +1,6 @@
 (function (win) {
   var SECFrontend = (win && win.SECFrontend && typeof win.SECFrontend === "object") ? win.SECFrontend : (win.SECFrontend = {});
+  var domUtils = SECFrontend.domUtils || null;
 
   function fallbackDateTime(value) {
     return String(value || "");
@@ -35,6 +36,10 @@
 
   function appendRenderedMarkup(container, rendered) {
     if (!container || rendered == null) return;
+    if (domUtils && typeof domUtils.appendRenderedMarkup === "function") {
+      domUtils.appendRenderedMarkup(container, rendered);
+      return;
+    }
 
     var isNode = (typeof Node !== "undefined" && rendered instanceof Node)
       || (typeof DocumentFragment !== "undefined" && rendered instanceof DocumentFragment);
