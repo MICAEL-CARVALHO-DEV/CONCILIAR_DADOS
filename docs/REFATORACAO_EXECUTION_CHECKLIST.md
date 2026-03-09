@@ -94,6 +94,7 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Extrair o modelo de registro da emenda para `frontend/js/utils/recordModel.js`, deixando `app.js` com wrappers curtos para evento, normalizacao e deteccao de demo.
 - [DONE] Remover fallbacks inline de auth e estado local do `app.js`, promovendo `authUi/authSession/authFlow/appLifecycle/localState` a modulos obrigatorios e reduzindo o arquivo principal.
 - [DONE] Extrair regras de acesso/perfil (`isSupervisorUser`, `getReadOnlyRoleMeta`, `canMutateRecords`, `canUseSupportApi`) para `frontend/js/auth/roleAccess.js`, deixando `app.js` com wrappers e contexto.
+- [DONE] Consolidar `getImportControlsContext()` em uma unica definicao no `app.js`, removendo override oculto e reduzindo duplicacao de contexto.
 
-Active: ID-FE-90
+Active: ID-FE-91
 Risks: validar comportamento em dispositivos com storage bloqueado.

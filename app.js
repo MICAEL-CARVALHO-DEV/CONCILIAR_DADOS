@@ -4618,50 +4618,6 @@ function getModalShellContext() {
   };
 }
 
-function getImportControlsContext() {
-  return {
-    getState: function () {
-      return state;
-    },
-    setState: function (nextState) {
-      state = nextState;
-    },
-    setIdCountersByYear: function (nextValue) {
-      idCountersByYear = nextValue;
-    },
-    getIdCountersByYear: function () {
-      return idCountersByYear;
-    },
-    DEMO: DEMO,
-    DEMO_MULTI_USERS: DEMO_MULTI_USERS,
-    DEMO_NOTES: DEMO_NOTES,
-    STATUS: STATUS,
-    deepClone: deepClone,
-    normalizeRecordShape: normalizeRecordShape,
-    buildIdCounters: buildIdCounters,
-    assignMissingIds: assignMissingIds,
-    syncReferenceKeys: syncReferenceKeys,
-    saveState: saveState,
-    syncYearFilter: syncYearFilter,
-    render: render,
-    closeModal: closeModal,
-    hideImportReport: hideImportReport,
-    setLastImportedPlanilha1Aoa: function (nextValue) {
-      lastImportedPlanilha1Aoa = nextValue;
-    },
-    canMutateRecords: canMutateRecords,
-    parseInputFile: parseInputFile,
-    purgeDemoBeforeOfficialImport: purgeDemoBeforeOfficialImport,
-    processImportedRows: processImportedRows,
-    showImportReport: showImportReport,
-    syncImportBatchToApi: syncImportBatchToApi,
-    syncImportLinesToApi: syncImportLinesToApi,
-    mkEvent: mkEvent,
-    isoNow: isoNow,
-    syncCanonicalToAllFields: syncCanonicalToAllFields
-  };
-}
-
 function getAuthUiContext() {
   return {
     authGate: authGate,
