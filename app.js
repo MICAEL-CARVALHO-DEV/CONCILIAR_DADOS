@@ -93,6 +93,7 @@ const betaSupportUtils = SEC_FRONTEND.betaSupportUtils || null;
 const betaSyncUtils = SEC_FRONTEND.betaSyncUtils || null;
 const betaWorkspaceUtils = SEC_FRONTEND.betaWorkspaceUtils || null;
 const authStore = SEC_FRONTEND.authStore || null;
+const authUiUtils = SEC_FRONTEND.authUiUtils || null;
 const authGuard = SEC_FRONTEND.authGuard || null;
 const apiClient = SEC_FRONTEND.apiClient || null;
 const apiStateSyncUtils = SEC_FRONTEND.apiStateSyncUtils || null;
@@ -699,6 +700,12 @@ function getModalShellUtil(methodName) {
 function getImportControlsUtil(methodName) {
   if (!importControlsUtils) return null;
   const method = importControlsUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getAuthUiUtil(methodName) {
+  if (!authUiUtils) return null;
+  const method = authUiUtils[methodName];
   return typeof method === "function" ? method : null;
 }
 
@@ -3232,82 +3239,19 @@ function generateRandomMultiUserDemo() {
 
 // Configura eventos de login/cadastro do auth-gate interno da pagina principal.
 function setupAuthUi() {
+  const moduleFn = getAuthUiUtil("setupAuthUi");
+  if (moduleFn) {
+    return moduleFn(getAuthUiContext());
+  }
   if (!authGate) return;
-
-  syncRegisterRoles();
-  switchAuthMode("login");
-
-  if (authTabLogin) {
-    authTabLogin.addEventListener("click", function () {
-      switchAuthMode("login");
-    });
-  }
-
-  if (authTabRegister) {
-    authTabRegister.addEventListener("click", function () {
-      switchAuthMode("register");
-    });
-  }
-
-  if (authLoginForm) {
-    authLoginForm.addEventListener("submit", async function (e) {
-      e.preventDefault();
-      const nome = String(authLoginName && authLoginName.value || "").trim();
-      const senha = String(authLoginPassword && authLoginPassword.value || "").trim();
-      if (!nome || !senha) {
-        setAuthMessage("Informe nome e senha.", true);
-        return;
-      }
-
-      setAuthMessage("Autenticando...");
-      try {
-        const resp = await apiRequestPublic("POST", "/auth/login", { nome: nome, senha: senha });
-        onAuthSuccess(resp);
-      } catch (err) {
-        setAuthMessage(extractApiError(err, "Falha no login."), true);
-      }
-    });
-  }
-
-  if (authRegisterForm) {
-    authRegisterForm.addEventListener("submit", async function (e) {
-      e.preventDefault();
-      const nome = String(authRegisterName && authRegisterName.value || "").trim();
-      const perfil = normalizeUserRole(authRegisterRole && authRegisterRole.value || "");
-      const senha1 = String(authRegisterPassword && authRegisterPassword.value || "").trim();
-      const senha2 = String(authRegisterPassword2 && authRegisterPassword2.value || "").trim();
-
-      if (!nome || !senha1 || !senha2) {
-        setAuthMessage("Preencha todos os campos do cadastro.", true);
-        return;
-      }
-      if (senha1 !== senha2) {
-        setAuthMessage("As senhas nao conferem.", true);
-        return;
-      }
-
-      setAuthMessage("Cadastrando...");
-      try {
-        const resp = await apiRequestPublic("POST", "/auth/register", {
-          nome: nome,
-          perfil: perfil,
-          senha: senha1
-        });
-        if (resp && resp.pending_approval) {
-          setAuthMessage("Cadastro enviado. Aguarde aprovacao do PROGRAMADOR.");
-          switchAuthMode("login");
-          return;
-        }
-        onAuthSuccess(resp);
-      } catch (err) {
-        setAuthMessage(extractApiError(err, "Falha no cadastro."), true);
-      }
-    });
-  }
 }
 
 // Carrega papeis permitidos no cadastro publico do auth-gate.
 function syncRegisterRoles() {
+  const moduleFn = getAuthUiUtil("syncRegisterRoles");
+  if (moduleFn) {
+    return moduleFn(getAuthUiContext());
+  }
   if (!authRegisterRole) return;
   clearNodeChildren(authRegisterRole);
   PUBLIC_SELF_REGISTER_ROLE_OPTIONS.forEach(function (role) {
@@ -3320,6 +3264,10 @@ function syncRegisterRoles() {
 
 // Alterna entre formularios de login e cadastro no auth-gate.
 function switchAuthMode(mode) {
+  const moduleFn = getAuthUiUtil("switchAuthMode");
+  if (moduleFn) {
+    return moduleFn(mode, getAuthUiContext());
+  }
   if (!authLoginForm || !authRegisterForm || !authTabLogin || !authTabRegister) return;
   const register = mode === "register";
   authLoginForm.classList.toggle("hidden", register);
@@ -4934,6 +4882,29 @@ function getImportControlsContext() {
     mkEvent: mkEvent,
     isoNow: isoNow,
     syncCanonicalToAllFields: syncCanonicalToAllFields
+  };
+}
+
+function getAuthUiContext() {
+  return {
+    authGate: authGate,
+    authTabLogin: authTabLogin,
+    authTabRegister: authTabRegister,
+    authLoginForm: authLoginForm,
+    authRegisterForm: authRegisterForm,
+    authLoginName: authLoginName,
+    authLoginPassword: authLoginPassword,
+    authRegisterName: authRegisterName,
+    authRegisterRole: authRegisterRole,
+    authRegisterPassword: authRegisterPassword,
+    authRegisterPassword2: authRegisterPassword2,
+    PUBLIC_SELF_REGISTER_ROLE_OPTIONS: PUBLIC_SELF_REGISTER_ROLE_OPTIONS,
+    clearNodeChildren: clearNodeChildren,
+    setAuthMessage: setAuthMessage,
+    apiRequestPublic: apiRequestPublic,
+    onAuthSuccess: onAuthSuccess,
+    extractApiError: extractApiError,
+    normalizeUserRole: normalizeUserRole
   };
 }
 
