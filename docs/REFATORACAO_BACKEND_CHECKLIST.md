@@ -13,6 +13,7 @@ Success: `main.py` vira arquivo de composicao e os helpers de auth/seguranca fic
 - [DONE] Extrair auditoria e suporte para `backend/app/services/audit_service.py` e `backend/app/services/support_service.py`, reduzindo o bloco operacional do `main.py`.
 - [DONE] Separar websocket/presenca em `backend/app/services/realtime_service.py` e manter a rota `/ws` como wrapper fino.
 - [DONE] Revalidar localmente com `py_compile`, `smoke_e2e.ps1` e chamada real das rotas de suporte apos extrair operacao/auditoria/realtime.
+- [DONE] Extrair utilitarios de plataforma e rotas sistemicas/AI para `backend/app/services/platform_service.py` e `backend/app/api/platform.py`, deixando `main.py` mais composicional.
 
-Active: ID-BE-10
-Risks: manter compatibilidade total com JWT, fallback legado e auditoria de auth.
+Active: ID-BE-11
+Risks: revalidar smoke local com API ligada e depois modularizar rotas de auth/emendas em `api/routers`.

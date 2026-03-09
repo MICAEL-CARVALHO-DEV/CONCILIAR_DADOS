@@ -1,24 +1,18 @@
-import asyncio
-from datetime import datetime
-import re
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response, WebSocket, status
+from fastapi import Depends, FastAPI, Header, Query, Request, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
+from .api.platform import create_platform_router
 from .core.dependencies import _actor_from_headers, _actor_optional_from_headers, _require_manager, _require_monitor, _require_owner
 from .core.security import (
     _actor_from_bearer_token,
     _actor_from_legacy_session,
     _mask_history_pair,
-    _try_decode_jwt,
     _validate_runtime_security_settings,
 )
-from .ai_schemas import AIProviderStatusResponse, AIWorkflowRequest, AIWorkflowResponse
 from .db import Base, SessionLocal, engine, get_db
-from .models import Emenda
 from .schemas import (
     AuthGoogleIn,
     AuthAuditLogOut,
@@ -50,8 +44,8 @@ from .schemas import (
     UserOut,
     UserStatusUpdate,
 )
-from .services import audit_service, auth_service, emenda_service, import_export_service, realtime_service, support_service
-from .services.ai_orchestrator import AIOrchestrator, OrchestrationError
+from .services import audit_service, auth_service, emenda_service, import_export_service, platform_service, realtime_service, support_service
+from .services.ai_orchestrator import AIOrchestrator
 from .settings import settings
 
 app = FastAPI(title="API Emendas", version="0.5.0")
@@ -66,259 +60,33 @@ app.add_middleware(
 )
 ai_orchestrator = AIOrchestrator(settings)
 
-VERSIONED_ID_RE = re.compile(r"^(?P<base>.+)-v(?P<num>\d+)$", re.IGNORECASE)
-def _utcnow() -> datetime:
-    return datetime.utcnow()
-
 ws_broker = realtime_service.WsConnectionBroker()
-presence_broker = realtime_service.PresenceBroker(_utcnow)
+presence_broker = realtime_service.PresenceBroker(platform_service.utcnow)
+
+
+def _utcnow():
+    return platform_service.utcnow()
 
 
 def _resolve_event_origin(origin_raw: str | None, actor: dict | None = None, fallback: str = "API") -> str:
-    candidate = (origin_raw or "").strip().upper()
-    if candidate in EVENT_ORIGINS:
-        return candidate
+    return platform_service.resolve_event_origin(origin_raw, EVENT_ORIGINS, actor, fallback)
 
-    if actor and actor.get("auth_type") == "disabled":
-        return "API"
-
-    fb = (fallback or "API").strip().upper()
-    return fb if fb in EVENT_ORIGINS else "API"
-
-
-def _ensure_legacy_schema() -> None:
-    # Compatibilidade com bancos legados (principalmente SQLite local):
-    # adiciona colunas/ÃƒÂ­ndices ausentes quando necessÃƒÂ¡rio.
-    insp = inspect(engine)
-    tables = set(insp.get_table_names())
-
-    if "usuarios" in tables:
-        cols = {c["name"] for c in insp.get_columns("usuarios")}
-        statements = []
-        if "email" not in cols:
-            statements.append("ALTER TABLE usuarios ADD COLUMN email VARCHAR(255)")
-        if "google_sub" not in cols:
-            statements.append("ALTER TABLE usuarios ADD COLUMN google_sub VARCHAR(255)")
-        if "senha_salt" not in cols:
-            statements.append("ALTER TABLE usuarios ADD COLUMN senha_salt VARCHAR(255) NOT NULL DEFAULT ''")
-        if "senha_hash" not in cols:
-            statements.append("ALTER TABLE usuarios ADD COLUMN senha_hash VARCHAR(255) NOT NULL DEFAULT ''")
-        if "ativo" not in cols:
-            statements.append("ALTER TABLE usuarios ADD COLUMN ativo BOOLEAN NOT NULL DEFAULT TRUE")
-        if "status_cadastro" not in cols:
-            statements.append("ALTER TABLE usuarios ADD COLUMN status_cadastro VARCHAR(20) NOT NULL DEFAULT 'APROVADO'")
-        if "ultimo_login" not in cols:
-            statements.append("ALTER TABLE usuarios ADD COLUMN ultimo_login TIMESTAMP")
-
-        if statements:
-            with engine.begin() as conn:
-                for st in statements:
-                    conn.execute(text(st))
-                conn.execute(
-                    text(
-                        "UPDATE usuarios "
-                        "SET status_cadastro = CASE "
-                        "WHEN ativo = TRUE THEN 'APROVADO' "
-                        "ELSE 'EM_ANALISE' END "
-                        "WHERE status_cadastro IS NULL OR TRIM(status_cadastro) = ''"
-                    )
-                )
-
-    if "emendas" in tables:
-        cols = {c["name"] for c in insp.get_columns("emendas")}
-        statements = []
-        if "parent_id" not in cols:
-            statements.append("ALTER TABLE emendas ADD COLUMN parent_id INTEGER")
-        if "version" not in cols:
-            statements.append("ALTER TABLE emendas ADD COLUMN version INTEGER NOT NULL DEFAULT 1")
-        if "row_version" not in cols:
-            statements.append("ALTER TABLE emendas ADD COLUMN row_version INTEGER NOT NULL DEFAULT 1")
-        if "is_current" not in cols:
-            statements.append("ALTER TABLE emendas ADD COLUMN is_current BOOLEAN NOT NULL DEFAULT TRUE")
-        if "plan_a" not in cols:
-            statements.append("ALTER TABLE emendas ADD COLUMN plan_a TEXT NOT NULL DEFAULT ''")
-        if "plan_b" not in cols:
-            statements.append("ALTER TABLE emendas ADD COLUMN plan_b TEXT NOT NULL DEFAULT ''")
-
-        with engine.begin() as conn:
-            for st in statements:
-                conn.execute(text(st))
-            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_emendas_parent_id ON emendas(parent_id)"))
-            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_emendas_status_oficial ON emendas(status_oficial)"))
-            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_emendas_updated_at ON emendas(updated_at)"))
-            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_emendas_is_current ON emendas(is_current)"))
-            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_emendas_row_version ON emendas(row_version)"))
-
-    if "historico" in tables:
-        cols = {c["name"] for c in insp.get_columns("historico")}
-        statements = []
-        if "origem_evento" not in cols:
-            statements.append("ALTER TABLE historico ADD COLUMN origem_evento VARCHAR(20) NOT NULL DEFAULT 'API'")
-
-        with engine.begin() as conn:
-            for st in statements:
-                conn.execute(text(st))
-            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_historico_data_hora ON historico(data_hora)"))
-
-    with engine.begin() as conn:
-        conn.execute(
-            text(
-                "CREATE TABLE IF NOT EXISTS emenda_locks ("
-                "emenda_id INTEGER PRIMARY KEY, "
-                "usuario_id INTEGER NULL, "
-                "usuario_nome VARCHAR(120) NOT NULL DEFAULT '', "
-                "setor VARCHAR(40) NOT NULL DEFAULT '', "
-                "acquired_at TIMESTAMP NOT NULL, "
-                "heartbeat_at TIMESTAMP NOT NULL, "
-                "expires_at TIMESTAMP NOT NULL"
-                ")"
-            )
-        )
-        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_emenda_locks_expires_at ON emenda_locks(expires_at)"))
-        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_emenda_locks_usuario_id ON emenda_locks(usuario_id)"))
-
-    if "import_linhas" in tables:
-        with engine.begin() as conn:
-            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_import_linhas_id_interno ON import_linhas(id_interno)"))
-            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_import_linhas_ref_key ON import_linhas(ref_key)"))
-
-    if "export_logs" in tables:
-        cols = {c["name"] for c in insp.get_columns("export_logs")}
-        statements = []
-        if "escopo_exportacao" not in cols:
-            statements.append("ALTER TABLE export_logs ADD COLUMN escopo_exportacao VARCHAR(20) NOT NULL DEFAULT 'ATUAIS'")
-
-        with engine.begin() as conn:
-            for st in statements:
-                conn.execute(text(st))
-            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_export_logs_created_at ON export_logs(created_at)"))
-
-    with engine.begin() as conn:
-        conn.execute(
-            text(
-                "CREATE TABLE IF NOT EXISTS support_threads ("
-                "id INTEGER PRIMARY KEY, "
-                "subject VARCHAR(160) NOT NULL, "
-                "categoria VARCHAR(40) NOT NULL DEFAULT 'OUTRO', "
-                "status VARCHAR(20) NOT NULL DEFAULT 'ABERTO', "
-                "emenda_id INTEGER NULL, "
-                "usuario_id INTEGER NULL, "
-                "usuario_nome VARCHAR(120) NOT NULL DEFAULT '', "
-                "setor VARCHAR(40) NOT NULL DEFAULT '', "
-                "last_actor_nome VARCHAR(120) NOT NULL DEFAULT '', "
-                "last_actor_role VARCHAR(40) NOT NULL DEFAULT '', "
-                "last_message_preview TEXT NOT NULL DEFAULT '', "
-                "created_at TIMESTAMP NOT NULL, "
-                "updated_at TIMESTAMP NOT NULL, "
-                "last_message_at TIMESTAMP NOT NULL"
-                ")"
-            )
-        )
-        conn.execute(
-            text(
-                "CREATE TABLE IF NOT EXISTS support_messages ("
-                "id INTEGER PRIMARY KEY, "
-                "thread_id INTEGER NOT NULL, "
-                "usuario_id INTEGER NULL, "
-                "usuario_nome VARCHAR(120) NOT NULL DEFAULT '', "
-                "setor VARCHAR(40) NOT NULL DEFAULT '', "
-                "origem VARCHAR(20) NOT NULL DEFAULT 'USUARIO', "
-                "mensagem TEXT NOT NULL DEFAULT '', "
-                "created_at TIMESTAMP NOT NULL"
-                ")"
-            )
-        )
-        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_support_threads_status ON support_threads(status)"))
-        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_support_threads_usuario_id ON support_threads(usuario_id)"))
-        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_support_threads_last_message_at ON support_threads(last_message_at)"))
-        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_support_messages_thread_id ON support_messages(thread_id)"))
-        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_support_messages_created_at ON support_messages(created_at)"))
 
 def _versioned_id_interno(base_id: str, version_num: int, db: Session) -> str:
-    raw_base = (base_id or "").strip() or "EMENDA"
-    m = VERSIONED_ID_RE.match(raw_base)
-    base = m.group("base") if m else raw_base
-    version = max(int(version_num or 1), 1)
-
-    while True:
-        candidate = f"{base}-v{version:03d}"
-        exists = db.query(Emenda).filter(Emenda.id_interno == candidate).first()
-        if not exists:
-            return candidate
-        version += 1
-
-async def _broadcast_update_async(entity: str, entity_id: int | None) -> None:
-    await ws_broker.broadcast(realtime_service.build_update_payload(entity, entity_id, _utcnow))
+    return platform_service.versioned_id_interno(base_id, version_num, db)
 
 
 def _broadcast_update(entity: str, entity_id: int | None) -> None:
-    payload_coro = _broadcast_update_async(entity, entity_id)
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        asyncio.run(payload_coro)
-        return
-
-    loop.create_task(payload_coro)
+    return platform_service.broadcast_update(entity, entity_id, ws_broker, platform_service.utcnow)
 
 @app.on_event("startup")
 def startup() -> None:
     _validate_runtime_security_settings()
     Base.metadata.create_all(bind=engine)
-    _ensure_legacy_schema()
+    platform_service.ensure_legacy_schema(engine)
 
 
-@app.get("/health")
-def health() -> dict:
-    return {
-        "ok": True,
-        "auth_enabled": settings.API_AUTH_ENABLED,
-        "auth_mode": "jwt_bearer_with_legacy_fallback",
-        "shared_key_enabled": settings.shared_key_auth_enabled,
-        "app_env": settings.app_env_normalized,
-        "roles": ROLES,
-        "ai_orchestrator_enabled": settings.AI_ORCHESTRATOR_ENABLED,
-        "ai_configured_providers": ai_orchestrator.configured_count(),
-    }
-
-
-@app.get("/", include_in_schema=False)
-def root() -> dict:
-    return {
-        "ok": True,
-        "service": "sec-emendas-api",
-        "health": "/health",
-        "docs": "/docs",
-    }
-
-
-@app.get("/favicon.ico", include_in_schema=False)
-def favicon() -> Response:
-    return Response(status_code=204)
-
-
-@app.get("/roles")
-def roles() -> dict:
-    return {"roles": ROLES}
-
-
-@app.get("/ai/providers/status", response_model=AIProviderStatusResponse)
-def ai_provider_status(_actor: dict = Depends(_require_owner)) -> AIProviderStatusResponse:
-    return AIProviderStatusResponse(
-        orchestrator_enabled=settings.AI_ORCHESTRATOR_ENABLED,
-        providers=ai_orchestrator.provider_status(),
-    )
-
-
-@app.post("/ai/workflows/review-loop", response_model=AIWorkflowResponse)
-def ai_workflow_review_loop(
-    payload: AIWorkflowRequest,
-    actor: dict = Depends(_require_owner),
-) -> AIWorkflowResponse:
-    try:
-        return ai_orchestrator.run_review_loop(payload=payload, actor=actor)
-    except OrchestrationError as exc:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+app.include_router(create_platform_router(settings, ai_orchestrator, ROLES))
 
 
 @app.post("/auth/google-intake")
