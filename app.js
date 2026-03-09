@@ -84,6 +84,7 @@ const importReportUtils = SEC_FRONTEND.importReportUtils || null;
 const modalSectionsUtils = SEC_FRONTEND.modalSectionsUtils || null;
 const modalDraftStateUtils = SEC_FRONTEND.modalDraftStateUtils || null;
 const modalShellUtils = SEC_FRONTEND.modalShellUtils || null;
+const importControlsUtils = SEC_FRONTEND.importControlsUtils || null;
 const appBindingsUtils = SEC_FRONTEND.appBindingsUtils || null;
 const pendingUsersUtils = SEC_FRONTEND.pendingUsersUtils || null;
 const betaHistoryUtils = SEC_FRONTEND.betaHistoryUtils || null;
@@ -695,6 +696,12 @@ function getModalShellUtil(methodName) {
   return typeof method === "function" ? method : null;
 }
 
+function getImportControlsUtil(methodName) {
+  if (!importControlsUtils) return null;
+  const method = importControlsUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
 function getAppBindingsUtil(methodName) {
   if (!appBindingsUtils) return null;
   const method = appBindingsUtils[methodName];
@@ -1049,67 +1056,52 @@ if (bindUiShellEventsUtil) {
   });
 }
 
-btnReset.addEventListener("click", function () {
-  if (!canMutateRecords()) {
-    alert("Perfil SUPERVISAO nao pode resetar dados.");
-    return;
-  }
-  if (!confirm("Resetar para dados DEMO? Isso apaga alteracoes locais.")) return;
-  state = { records: deepClone(DEMO).map(normalizeRecordShape) };
-  idCountersByYear = buildIdCounters(state.records);
-  assignMissingIds(state.records, idCountersByYear);
-  syncReferenceKeys(state.records);
-  saveState();
-  syncYearFilter();
-  render();
-  closeModal();
-  hideImportReport();
-  lastImportedPlanilha1Aoa = null;
-});
-
-fileCsv.addEventListener("change", async function () {
-  if (!canMutateRecords()) {
-    alert("Perfil SUPERVISAO nao pode importar planilhas.");
-    fileCsv.value = "";
-    return;
-  }
-  const file = fileCsv.files && fileCsv.files[0];
-  if (!file) return;
-
-  try {
-    const sourceRows = await parseInputFile(file);
-    if (!sourceRows.length) {
-      alert("Nenhuma linha valida encontrada no arquivo.");
-      hideImportReport();
-      return;
-    }
-
-    const removedDemo = purgeDemoBeforeOfficialImport();
-    if (removedDemo > 0) {
-      idCountersByYear = buildIdCounters(state.records || []);
-    }
-
-    const report = processImportedRows(sourceRows, file.name);
-    saveState();
-    syncYearFilter();
-    render();
-    showImportReport(report);
-    const loteId = await syncImportBatchToApi(file, report);
-    if (loteId) {
-      await syncImportLinesToApi(loteId, report.rowDetails || []);
-    }
-
-    const extraDemoInfo = removedDemo > 0 ? (" | Demos removidos: " + String(removedDemo)) : "";
-    alert("Importacao concluida. Criados: " + report.created + " | Atualizados: " + report.updated + " | Sem alteracao: " + report.unchanged + " | Linhas lidas: " + report.totalRows + extraDemoInfo);
-  } catch (err) {
-    console.error(err);
-    const detail = err && err.message ? String(err.message) : "erro desconhecido";
-    const hint = detail.includes("Biblioteca XLSX nao carregada") ? " Dica: abra por http://127.0.0.1:5500 e confirme internet para carregar a biblioteca XLSX." : "";
-    alert("Falha ao importar arquivo. Detalhe: " + detail + hint);
-  } finally {
-    fileCsv.value = "";
-  }
-});
+const bindImportControlsUtil = getImportControlsUtil("bindImportControls");
+if (bindImportControlsUtil) {
+  bindImportControlsUtil({
+    btnReset: btnReset,
+    fileCsv: fileCsv,
+    canMutateRecords: canMutateRecords,
+    getState: function () {
+      return state;
+    },
+    setState: function (nextState) {
+      state = nextState;
+    },
+    setIdCountersByYear: function (nextValue) {
+      idCountersByYear = nextValue;
+    },
+    getIdCountersByYear: function () {
+      return idCountersByYear;
+    },
+    DEMO: DEMO,
+    DEMO_MULTI_USERS: DEMO_MULTI_USERS,
+    DEMO_NOTES: DEMO_NOTES,
+    STATUS: STATUS,
+    deepClone: deepClone,
+    normalizeRecordShape: normalizeRecordShape,
+    buildIdCounters: buildIdCounters,
+    assignMissingIds: assignMissingIds,
+    syncReferenceKeys: syncReferenceKeys,
+    saveState: saveState,
+    syncYearFilter: syncYearFilter,
+    render: render,
+    closeModal: closeModal,
+    hideImportReport: hideImportReport,
+    setLastImportedPlanilha1Aoa: function (nextValue) {
+      lastImportedPlanilha1Aoa = nextValue;
+    },
+    parseInputFile: parseInputFile,
+    purgeDemoBeforeOfficialImport: purgeDemoBeforeOfficialImport,
+    processImportedRows: processImportedRows,
+    showImportReport: showImportReport,
+    syncImportBatchToApi: syncImportBatchToApi,
+    syncImportLinesToApi: syncImportLinesToApi,
+    mkEvent: mkEvent,
+    isoNow: isoNow,
+    syncCanonicalToAllFields: syncCanonicalToAllFields
+  });
+}
 
 function getModalFieldType(fieldKey) {
   const def = TRACKED_FIELD_BY_KEY[fieldKey];
@@ -3205,6 +3197,10 @@ function normalizeStatus(input) {
 
 
 function generateRandomMultiUserDemo() {
+  const moduleFn = getImportControlsUtil("generateRandomMultiUserDemo");
+  if (moduleFn) {
+    return moduleFn(getImportControlsContext());
+  }
   if (!Array.isArray(state.records) || state.records.length === 0) {
     state = { records: deepClone(DEMO).map(normalizeRecordShape) };
   }
@@ -3215,8 +3211,8 @@ function generateRandomMultiUserDemo() {
   targets.forEach(function (rec, idx) {
     for (let i = 0; i < DEMO_MULTI_USERS.length; i += 1) {
       const u = DEMO_MULTI_USERS[i];
-      const st = pickRandom(STATUS);
-      const note = pickRandom(DEMO_NOTES) + " [demo #" + String(idx + 1) + "]";
+      const st = STATUS[Math.floor(Math.random() * STATUS.length)] || "";
+      const note = (DEMO_NOTES[Math.floor(Math.random() * DEMO_NOTES.length)] || "") + " [demo #" + String(idx + 1) + "]";
       rec.eventos.unshift(mkEvent("MARK_STATUS", {
         to: st,
         note: note,
@@ -3232,12 +3228,6 @@ function generateRandomMultiUserDemo() {
   syncYearFilter();
   render();
   alert("Demo aplicada: 4 usuarios com eventos aleatorios em " + String(sampleSize) + " emendas.");
-}
-
-function pickRandom(arr) {
-  if (!arr || !arr.length) return "";
-  const i = Math.floor(Math.random() * arr.length);
-  return arr[i];
 }
 
 // Configura eventos de login/cadastro do auth-gate interno da pagina principal.
@@ -4900,6 +4890,50 @@ function getModalShellContext() {
     showModalSaveFeedback: showModalSaveFeedback,
     focusIfPossible: focusIfPossible,
     updateModalDraftUi: updateModalDraftUi
+  };
+}
+
+function getImportControlsContext() {
+  return {
+    getState: function () {
+      return state;
+    },
+    setState: function (nextState) {
+      state = nextState;
+    },
+    setIdCountersByYear: function (nextValue) {
+      idCountersByYear = nextValue;
+    },
+    getIdCountersByYear: function () {
+      return idCountersByYear;
+    },
+    DEMO: DEMO,
+    DEMO_MULTI_USERS: DEMO_MULTI_USERS,
+    DEMO_NOTES: DEMO_NOTES,
+    STATUS: STATUS,
+    deepClone: deepClone,
+    normalizeRecordShape: normalizeRecordShape,
+    buildIdCounters: buildIdCounters,
+    assignMissingIds: assignMissingIds,
+    syncReferenceKeys: syncReferenceKeys,
+    saveState: saveState,
+    syncYearFilter: syncYearFilter,
+    render: render,
+    closeModal: closeModal,
+    hideImportReport: hideImportReport,
+    setLastImportedPlanilha1Aoa: function (nextValue) {
+      lastImportedPlanilha1Aoa = nextValue;
+    },
+    canMutateRecords: canMutateRecords,
+    parseInputFile: parseInputFile,
+    purgeDemoBeforeOfficialImport: purgeDemoBeforeOfficialImport,
+    processImportedRows: processImportedRows,
+    showImportReport: showImportReport,
+    syncImportBatchToApi: syncImportBatchToApi,
+    syncImportLinesToApi: syncImportLinesToApi,
+    mkEvent: mkEvent,
+    isoNow: isoNow,
+    syncCanonicalToAllFields: syncCanonicalToAllFields
   };
 }
 
