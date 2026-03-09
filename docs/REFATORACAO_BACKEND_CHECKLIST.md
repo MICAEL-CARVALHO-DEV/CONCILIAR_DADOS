@@ -15,6 +15,7 @@ Success: `main.py` vira arquivo de composicao e os helpers de auth/seguranca fic
 - [DONE] Revalidar localmente com `py_compile`, `smoke_e2e.ps1` e chamada real das rotas de suporte apos extrair operacao/auditoria/realtime.
 - [DONE] Extrair utilitarios de plataforma e rotas sistemicas/AI para `backend/app/services/platform_service.py` e `backend/app/api/platform.py`, deixando `main.py` mais composicional.
 - [DONE] Extrair rotas de `auth/users`, `emendas/locks` e `imports/exports/audit/support` para `backend/app/api/*.py`, deixando o `main.py` como composicao + websocket.
+- [DONE] Extrair o bootstrap final para `backend/app/app_factory.py` e a rota `/ws` para `backend/app/api/realtime.py`, reduzindo `main.py` a `app = create_app()`.
 
-Active: ID-BE-12
-Risks: revalidar `smoke_e2e.ps1` com a API local efetivamente ligada e depois seguir para a limpeza final do `main.py`.
+Active: ID-BE-13
+Risks: revalidar `smoke_e2e.ps1` com a API local efetivamente ligada para fechar o veredito estrutural do backend.
