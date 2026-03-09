@@ -69,6 +69,8 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Extrair o painel beta de suporte para `frontend/js/ui/betaSupport.js`, deixando `app.js` como bridge de estado e callbacks.
 - [DONE] Extrair o painel beta de historico para `frontend/js/ui/betaHistory.js`, deixando `app.js` com bridge de estado, filtros e refresh.
 - [DONE] Extrair o painel beta Power BI para `frontend/js/ui/betaPowerBi.js`, deixando `app.js` com estado, exportacao e metricas do dashboard.
+- [DONE] Extrair a casca da `Central beta operacional` para `frontend/js/ui/betaWorkspace.js`, deixando `app.js` com tab ativa e roteamento dos painéis.
+- [DONE] Extrair os builders do relatorio executivo para `frontend/js/utils/exportExecutive.js`, deixando `app.js` com orquestracao do export.
 
-Active: ID-FE-65
+Active: ID-FE-67
 Risks: validar comportamento em dispositivos com storage bloqueado.

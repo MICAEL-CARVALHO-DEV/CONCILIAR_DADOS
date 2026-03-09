@@ -78,10 +78,12 @@ const exportWorkbookWriterUtils = SEC_FRONTEND.exportWorkbookWriterUtils || null
 const exportTemplateUtils = SEC_FRONTEND.exportTemplateUtils || null;
 const exportTemplateWriterUtils = SEC_FRONTEND.exportTemplateWriterUtils || null;
 const exportDataUtils = SEC_FRONTEND.exportDataUtils || null;
+const exportExecutiveUtils = SEC_FRONTEND.exportExecutiveUtils || null;
 const importReportUtils = SEC_FRONTEND.importReportUtils || null;
 const betaHistoryUtils = SEC_FRONTEND.betaHistoryUtils || null;
 const betaPowerBiUtils = SEC_FRONTEND.betaPowerBiUtils || null;
 const betaSupportUtils = SEC_FRONTEND.betaSupportUtils || null;
+const betaWorkspaceUtils = SEC_FRONTEND.betaWorkspaceUtils || null;
 const authStore = SEC_FRONTEND.authStore || null;
 const authGuard = SEC_FRONTEND.authGuard || null;
 const apiClient = SEC_FRONTEND.apiClient || null;
@@ -634,6 +636,18 @@ function getBetaHistoryUtil(methodName) {
 function getBetaPowerBiUtil(methodName) {
   if (!betaPowerBiUtils) return null;
   const method = betaPowerBiUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getBetaWorkspaceUtil(methodName) {
+  if (!betaWorkspaceUtils) return null;
+  const method = betaWorkspaceUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getExportExecutiveUtil(methodName) {
+  if (!exportExecutiveUtils) return null;
+  const method = exportExecutiveUtils[methodName];
   return typeof method === "function" ? method : null;
 }
 
@@ -4614,6 +4628,28 @@ function getBetaPowerBiContext() {
   };
 }
 
+function getBetaWorkspaceContext() {
+  return {
+    activeTab: getActiveBetaWorkspaceTab(),
+    clearNodeChildren: clearNodeChildren,
+    canViewGlobalAuditApi: canViewGlobalAuditApi,
+    setTab: setBetaWorkspaceTab,
+    renderHistory: renderBetaHistoryPanel,
+    renderPowerBi: renderBetaPowerBiPanel,
+    renderSupport: renderBetaSupportPanel
+  };
+}
+
+function getExecutiveExportContext() {
+  return {
+    fmtDateTime: fmtDateTime,
+    isoNow: isoNow,
+    currentRole: CURRENT_ROLE,
+    currentUser: CURRENT_USER,
+    filters: betaPowerBiFilters
+  };
+}
+
 function renderBetaSupportPanel(target, filteredRows) {
   const moduleFn = getBetaSupportUtil("renderBetaSupportPanel");
   if (moduleFn) {
@@ -4833,84 +4869,27 @@ function buildPowerBiDashboardData(filteredRows) {
 }
 
 function buildExecutiveSummaryAoa(model) {
-  const summary = model && model.summary ? model.summary : {};
-  const statusRows = Object.keys(model && model.byStatus ? model.byStatus : {}).map(function (key) {
-    return [key, model.byStatus[key] || 0];
-  }).sort(function (a, b) { return b[1] - a[1]; });
-
-  return [
-    ["Relatorio executivo - Visao Power BI"],
-    ["Gerado em", isoNow()],
-    ["Perfil gerador", CURRENT_ROLE],
-    ["Usuario gerador", CURRENT_USER],
-    ["Filtro deputado", betaPowerBiFilters.deputado || "Todos"],
-    ["Filtro municipio", betaPowerBiFilters.municipio || "Todos"],
-    ["Filtro status", betaPowerBiFilters.status || "Todos"],
-    ["Busca", betaPowerBiFilters.q || "-"],
-    [],
-    ["Indicador", "Valor"],
-    ["Emendas no dashboard", Number(summary.total || 0)],
-    ["Valor atual total", Number(summary.valorTotal || 0)],
-    ["Deputados monitorados", summary.deputados ? summary.deputados.size : 0],
-    ["Municipios cobertos", summary.municipios ? summary.municipios.size : 0],
-    ["Concluidas", Number(summary.done || 0)],
-    ["Em atencao", Number(summary.attention || 0)],
-    ["Ultima atualizacao", summary.latestUpdate ? fmtDateTime(summary.latestUpdate) : "-"],
-    [],
-    ["Status atual", "Quantidade"]
-  ].concat(statusRows);
+  const moduleFn = getExportExecutiveUtil("buildExecutiveSummaryAoa");
+  if (moduleFn) return moduleFn(model, getExecutiveExportContext());
+  return [["Relatorio executivo indisponivel"]];
 }
 
 function buildExecutiveDeputadosAoa(model) {
-  const deputados = Object.keys(model && model.byDeputado ? model.byDeputado : {}).map(function (key) {
-    return model.byDeputado[key];
-  }).sort(function (a, b) {
-    if (b.total !== a.total) return b.total - a.total;
-    return b.valor - a.valor;
-  });
-  const rows = deputados.map(function (item) {
-    const dominantStatus = Object.keys(item.statusMap || {}).sort(function (a, b) {
-      return (item.statusMap[b] || 0) - (item.statusMap[a] || 0);
-    })[0] || "-";
-    return [
-      item.label,
-      item.total,
-      item.municipios ? item.municipios.size : 0,
-      Number(item.valor || 0),
-      item.done || 0,
-      item.attention || 0,
-      item.auditEvents || 0,
-      dominantStatus,
-      item.latestUpdate ? fmtDateTime(item.latestUpdate) : "-",
-      item.latestAction ? fmtDateTime(item.latestAction) : "-",
-      item.latestActor || "-"
-    ];
-  });
-  return [["Deputado", "Emendas", "Municipios", "Valor Atual", "Concluidas", "Em atencao", "Eventos", "Status dominante", "Ultima atualizacao", "Ultima acao", "Ultimo ator"]].concat(rows);
+  const moduleFn = getExportExecutiveUtil("buildExecutiveDeputadosAoa");
+  if (moduleFn) return moduleFn(model, getExecutiveExportContext());
+  return [["Deputado", "Emendas", "Municipios", "Valor Atual", "Concluidas", "Em atencao", "Eventos", "Status dominante", "Ultima atualizacao", "Ultima acao", "Ultimo ator"]];
 }
 
 function buildExecutiveMunicipiosAoa(model) {
-  const municipios = Object.keys(model && model.byMunicipio ? model.byMunicipio : {}).map(function (key) {
-    return model.byMunicipio[key];
-  }).sort(function (a, b) {
-    if (b.total !== a.total) return b.total - a.total;
-    return b.valor - a.valor;
-  });
-  return [["Municipio", "Emendas", "Valor Atual", "Em atencao"]].concat(municipios.map(function (item) {
-    return [item.label, item.total || 0, Number(item.valor || 0), item.attention || 0];
-  }));
+  const moduleFn = getExportExecutiveUtil("buildExecutiveMunicipiosAoa");
+  if (moduleFn) return moduleFn(model, getExecutiveExportContext());
+  return [["Municipio", "Emendas", "Valor Atual", "Em atencao"]];
 }
 
 function buildExecutiveUsersAoa(model) {
-  const users = Object.keys(model && model.byUser ? model.byUser : {}).map(function (key) {
-    return model.byUser[key];
-  }).sort(function (a, b) {
-    if (b.total !== a.total) return b.total - a.total;
-    return String(b.lastAt || "").localeCompare(String(a.lastAt || ""));
-  });
-  return [["Usuario", "Perfil", "Eventos", "Ultima acao", "Tipo ultimo evento"]].concat(users.map(function (item) {
-    return [item.label, item.perfil || "-", item.total || 0, item.lastAt ? fmtDateTime(item.lastAt) : "-", item.lastEvent || "-"];
-  }));
+  const moduleFn = getExportExecutiveUtil("buildExecutiveUsersAoa");
+  if (moduleFn) return moduleFn(model, getExecutiveExportContext());
+  return [["Usuario", "Perfil", "Eventos", "Ultima acao", "Tipo ultimo evento"]];
 }
 
 async function exportExecutiveDashboardReport(filteredRows) {
@@ -4991,60 +4970,16 @@ function renderBetaPowerBiPanel(target, filteredRows) {
 
 function renderBetaWorkspace(filteredRows) {
   if (!betaWorkspace) return;
-  clearNodeChildren(betaWorkspace);
-
-  const activeTab = getActiveBetaWorkspaceTab();
-  const head = document.createElement("div");
-  head.className = "beta-head";
-
-  const intro = document.createElement("div");
-  const title = document.createElement("h3");
-  title.textContent = "Central beta operacional";
-  const subtitle = document.createElement("p");
-  subtitle.className = "muted small";
-  subtitle.textContent = "Historico recente, visao consolidada e suporte operacional para homologacao da empresa.";
-  intro.appendChild(title);
-  intro.appendChild(subtitle);
-  head.appendChild(intro);
-
-  const headActions = document.createElement("div");
-  headActions.className = "beta-head-actions";
-  const mode = document.createElement("span");
-  mode.className = "beta-source-badge";
-  mode.textContent = canViewGlobalAuditApi() ? "API ligada para historico" : "Historico em fallback local";
-  headActions.appendChild(mode);
-  head.appendChild(headActions);
-  betaWorkspace.appendChild(head);
-
-  const tabs = document.createElement("div");
-  tabs.className = "beta-tabs";
-  [
-    { key: "history", label: "Historico operacional" },
-    { key: "powerbi", label: "Visao Power BI" },
-    { key: "support", label: "Ajuda e suporte" }
-  ].forEach(function (tab) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "beta-tab-btn" + (activeTab === tab.key ? " active" : "");
-    btn.textContent = tab.label;
-    btn.addEventListener("click", function () {
-      setBetaWorkspaceTab(tab.key);
-    });
-    tabs.appendChild(btn);
-  });
-  betaWorkspace.appendChild(tabs);
-
-  const panel = document.createElement("div");
-  panel.className = "beta-tab-panel";
-  betaWorkspace.appendChild(panel);
-
-  if (activeTab === "powerbi") {
-    renderBetaPowerBiPanel(panel, filteredRows);
-  } else if (activeTab === "support") {
-    renderBetaSupportPanel(panel, filteredRows);
-  } else {
-    renderBetaHistoryPanel(panel, filteredRows);
+  const moduleFn = getBetaWorkspaceUtil("renderBetaWorkspace");
+  if (moduleFn) {
+    return moduleFn(betaWorkspace, filteredRows, getBetaWorkspaceContext());
   }
+
+  clearNodeChildren(betaWorkspace);
+  const empty = document.createElement("p");
+  empty.className = "beta-empty";
+  empty.textContent = "Central beta indisponivel nesta compilacao.";
+  betaWorkspace.appendChild(empty);
 }
 
 function renderSupervisorQuickPanel(prefilteredRows) {
