@@ -91,6 +91,7 @@ const appBindingsUtils = SEC_FRONTEND.appBindingsUtils || null;
 const appLifecycleUtils = SEC_FRONTEND.appLifecycleUtils || null;
 const pendingUsersUtils = SEC_FRONTEND.pendingUsersUtils || null;
 const betaHistoryUtils = SEC_FRONTEND.betaHistoryUtils || null;
+const powerBiDataUtils = SEC_FRONTEND.powerBiDataUtils || null;
 const betaPowerBiUtils = SEC_FRONTEND.betaPowerBiUtils || null;
 const betaSupportUtils = SEC_FRONTEND.betaSupportUtils || null;
 const betaDataUtils = SEC_FRONTEND.betaDataUtils || null;
@@ -681,6 +682,12 @@ function getBetaDataUtil(methodName) {
 function getBetaHistoryUtil(methodName) {
   if (!betaHistoryUtils) return null;
   const method = betaHistoryUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getPowerBiDataUtil(methodName) {
+  if (!powerBiDataUtils) return null;
+  const method = powerBiDataUtils[methodName];
   return typeof method === "function" ? method : null;
 }
 
@@ -5306,6 +5313,21 @@ function getBetaPowerBiContext() {
   };
 }
 
+function getPowerBiDataContext() {
+  return {
+    filters: betaPowerBiFilters,
+    currentRole: CURRENT_ROLE,
+    betaAuditRows: betaAuditRows,
+    text: text,
+    normalizeLooseText: normalizeLooseText,
+    getRecordCurrentStatus: getRecordCurrentStatus,
+    getBackendIdForRecord: getBackendIdForRecord,
+    getActiveUsersWithLastMark: getActiveUsersWithLastMark,
+    getGlobalProgressState: getGlobalProgressState,
+    toNumber: toNumber
+  };
+}
+
 function getBetaWorkspaceContext() {
   return {
     activeTab: getActiveBetaWorkspaceTab(),
@@ -5427,6 +5449,10 @@ function renderBetaHistoryPanel(target, filteredRows) {
 }
 
 function buildPowerBiFilterOptions(rows) {
+  const moduleFn = getPowerBiDataUtil("buildPowerBiFilterOptions");
+  if (moduleFn) {
+    return moduleFn(rows, getPowerBiDataContext());
+  }
   const source = Array.isArray(rows) ? rows : [];
   const deputados = Array.from(new Set(source.map(function (rec) { return text(rec && rec.deputado) || "-"; }).filter(Boolean))).sort();
   const municipios = Array.from(new Set(source.map(function (rec) { return text(rec && rec.municipio) || "-"; }).filter(Boolean))).sort();
@@ -5439,6 +5465,10 @@ function buildPowerBiFilterOptions(rows) {
 }
 
 function applyPowerBiDashboardFilters(rows) {
+  const moduleFn = getPowerBiDataUtil("applyPowerBiDashboardFilters");
+  if (moduleFn) {
+    return moduleFn(rows, getPowerBiDataContext());
+  }
   const source = Array.isArray(rows) ? rows : [];
   return source.filter(function (rec) {
     const deputado = text(rec && rec.deputado) || "-";
@@ -5466,6 +5496,10 @@ function applyPowerBiDashboardFilters(rows) {
 }
 
 function getDeputadoAvatarLetters(name) {
+  const moduleFn = getPowerBiDataUtil("getDeputadoAvatarLetters");
+  if (moduleFn) {
+    return moduleFn(name, getPowerBiDataContext());
+  }
   const src = text(name || "").trim();
   if (!src) return "DP";
   const parts = src.split(/\s+/).filter(Boolean);
@@ -5474,6 +5508,10 @@ function getDeputadoAvatarLetters(name) {
 }
 
 function getDeputadoPhotoUrl(record) {
+  const moduleFn = getPowerBiDataUtil("getDeputadoPhotoUrl");
+  if (moduleFn) {
+    return moduleFn(record, getPowerBiDataContext());
+  }
   if (!record || typeof record !== "object") return "";
   const allFields = record.all_fields && typeof record.all_fields === "object" ? record.all_fields : {};
   const candidates = [
@@ -5494,6 +5532,10 @@ function getDeputadoPhotoUrl(record) {
 }
 
 function getScopedAuditRowsForRecords(rows) {
+  const moduleFn = getPowerBiDataUtil("getScopedAuditRowsForRecords");
+  if (moduleFn) {
+    return moduleFn(rows, getPowerBiDataContext());
+  }
   if (!Array.isArray(betaAuditRows) || !betaAuditRows.length) return [];
   const ids = {};
   (Array.isArray(rows) ? rows : []).forEach(function (rec) {
@@ -5506,6 +5548,10 @@ function getScopedAuditRowsForRecords(rows) {
 }
 
 function buildPowerBiDashboardData(filteredRows) {
+  const moduleFn = getPowerBiDataUtil("buildPowerBiDashboardData");
+  if (moduleFn) {
+    return moduleFn(filteredRows, getPowerBiDataContext());
+  }
   const sourceRows = Array.isArray(filteredRows) ? filteredRows : [];
   const filterOptions = buildPowerBiFilterOptions(sourceRows);
   const rows = applyPowerBiDashboardFilters(sourceRows);

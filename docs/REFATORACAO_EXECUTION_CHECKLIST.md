@@ -87,6 +87,7 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Extrair a camada de sessao/UI do auth para `frontend/js/auth/authSession.js`, deixando `app.js` com wrappers para mensagem, gate, redirecionamento e token.
 - [DONE] Extrair os helpers de dados do historico/suporte beta para `frontend/js/ui/betaData.js`, deixando `app.js` com wrappers e contexto de filtros/lookup.
 - [DONE] Extrair o save/autosave e o feedback visual do modal para `frontend/js/ui/modalSave.js`, deixando `app.js` com wrappers finos e contexto de persistencia oficial.
+- [DONE] Extrair o calculo de filtros e agregacao do dashboard executivo para `frontend/js/ui/powerBiData.js`, deixando `app.js` com wrappers e contexto do Power BI.
 
-Active: ID-FE-83
+Active: ID-FE-84
 Risks: validar comportamento em dispositivos com storage bloqueado.
