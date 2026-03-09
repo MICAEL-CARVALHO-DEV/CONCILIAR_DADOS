@@ -105,6 +105,7 @@ const authFlowUtils = SEC_FRONTEND.authFlowUtils || null;
 const authGuard = SEC_FRONTEND.authGuard || null;
 const apiClient = SEC_FRONTEND.apiClient || null;
 const apiStateSyncUtils = SEC_FRONTEND.apiStateSyncUtils || null;
+const apiSyncOpsUtils = SEC_FRONTEND.apiSyncOpsUtils || null;
 const concurrencyService = SEC_FRONTEND.concurrencyService || null;
 const uiRender = SEC_FRONTEND.uiRender || null;
 const AUTH_KEYS = Object.freeze({
@@ -653,6 +654,12 @@ function getApiClientUtil(methodName) {
 function getApiStateSyncUtil(methodName) {
   if (!apiStateSyncUtils) return null;
   const method = apiStateSyncUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getApiSyncOpsUtil(methodName) {
+  if (!apiSyncOpsUtils) return null;
+  const method = apiSyncOpsUtils[methodName];
   return typeof method === "function" ? method : null;
 }
 
@@ -5220,6 +5227,45 @@ function getApiStateSyncContext() {
   };
 }
 
+function getApiSyncOpsContext() {
+  return {
+    isApiEnabled: isApiEnabled,
+    apiRequest: apiRequest,
+    text: text,
+    toInt: toInt,
+    toNumber: toNumber,
+    currentYear: currentYear,
+    deriveStatusForBackend: deriveStatusForBackend,
+    quickHashString: quickHashString,
+    exportScopeAtuais: EXPORT_SCOPE.ATUAIS,
+    getApiEmendaIdByInterno: function (idInterno) {
+      return apiEmendaIdByInterno[idInterno];
+    },
+    setApiEmendaIdByInterno: function (idInterno, backendId) {
+      apiEmendaIdByInterno[idInterno] = backendId;
+    },
+    setApiOnline: function (nextOnline) {
+      apiOnline = !!nextOnline;
+    },
+    setApiLastError: function (message) {
+      apiLastError = String(message || "");
+    },
+    applyAccessProfile: applyAccessProfile,
+    refreshBetaAuditFromApi: refreshBetaAuditFromApi,
+    saveState: saveState,
+    render: render,
+    getSelectedId: function () {
+      return selectedId;
+    },
+    openModal: openModal,
+    isApiConflictError: isApiConflictError,
+    refreshRecordConcurrencyFromApi: refreshRecordConcurrencyFromApi,
+    conflictMessageFromError: conflictMessageFromError,
+    showModalSaveFeedback: showModalSaveFeedback,
+    restoreRecordFromSnapshot: restoreRecordFromSnapshot
+  };
+}
+
 function resetApiLinkedState(options) {
   const moduleFn = getApiStateSyncUtil("resetApiLinkedState");
   if (moduleFn) {
@@ -6146,6 +6192,10 @@ function mergeRemoteEmendas(remoteList) {
 }
 
 function applySyncResponseToRecord(rec, responsePayload) {
+  const moduleFn = getApiSyncOpsUtil("applySyncResponseToRecord");
+  if (moduleFn) {
+    return moduleFn(rec, responsePayload, getApiSyncOpsContext());
+  }
   if (!rec || !responsePayload || typeof responsePayload !== "object") return;
   const nextRowVersion = toInt(responsePayload.row_version);
   if (nextRowVersion > 0) rec.row_version = nextRowVersion;
@@ -6154,87 +6204,27 @@ function applySyncResponseToRecord(rec, responsePayload) {
 
 // Envia alteracao de status oficial da emenda para backend.
 async function syncOfficialStatusToApi(rec, nextStatus, motivo) {
-  if (!isApiEnabled()) return;
-  const backendId = await ensureBackendEmenda(rec);
-  const resp = await apiRequest("POST", "/emendas/" + String(backendId) + "/status", {
-    novo_status: nextStatus,
-    motivo: motivo,
-    expected_row_version: toInt(rec.row_version) > 0 ? toInt(rec.row_version) : 1
-  }, "UI");
-  applySyncResponseToRecord(rec, resp);
-  apiOnline = true;
-  apiLastError = "";
-  applyAccessProfile();
-  refreshBetaAuditFromApi(false).catch(function () { /* no-op */ });
+  const moduleFn = getApiSyncOpsUtil("syncOfficialStatusToApi");
+  if (moduleFn) {
+    return await moduleFn(rec, nextStatus, motivo, getApiSyncOpsContext());
+  }
 }
 
 // Envia evento generico (nota, marcacao, edicao) para backend.
 async function syncGenericEventToApi(rec, payload) {
-  if (!isApiEnabled()) return;
-  const backendId = await ensureBackendEmenda(rec);
-  const body = Object.assign({}, payload || {}, {
-    expected_row_version: toInt(rec.row_version) > 0 ? toInt(rec.row_version) : 1
-  });
-  const resp = await apiRequest("POST", "/emendas/" + String(backendId) + "/eventos", body, payload && payload.origem_evento ? payload.origem_evento : "UI");
-  applySyncResponseToRecord(rec, resp);
-  apiOnline = true;
-  apiLastError = "";
-  applyAccessProfile();
-  refreshBetaAuditFromApi(false).catch(function () { /* no-op */ });
+  const moduleFn = getApiSyncOpsUtil("syncGenericEventToApi");
+  if (moduleFn) {
+    return await moduleFn(rec, payload, getApiSyncOpsContext());
+  }
 }
 
 // Garante que o registro local tenha ID correspondente no backend.
 async function ensureBackendEmenda(rec, options) {
-  const requestOpts = options && typeof options === "object" ? options : {};
-  const handleAuthFailure = Object.prototype.hasOwnProperty.call(requestOpts, "handleAuthFailure")
-    ? !!requestOpts.handleAuthFailure
-    : true;
-  if (rec.backend_id) return rec.backend_id;
-
-  const known = apiEmendaIdByInterno[rec.id];
-  if (known) {
-    rec.backend_id = Number(known);
-    return rec.backend_id;
+  const moduleFn = getApiSyncOpsUtil("ensureBackendEmenda");
+  if (moduleFn) {
+    return await moduleFn(rec, options, getApiSyncOpsContext());
   }
-
-  const remoteList = await apiRequest("GET", "/emendas", undefined, "API", { handleAuthFailure: handleAuthFailure });
-  const found = (Array.isArray(remoteList) ? remoteList : []).find(function (x) {
-    return text(x.id_interno) === rec.id;
-  });
-
-  if (found) {
-    rec.backend_id = Number(found.id);
-    apiEmendaIdByInterno[rec.id] = rec.backend_id;
-    if (toInt(found.row_version) > 0) rec.row_version = toInt(found.row_version);
-    if (found.updated_at) rec.updated_at = String(found.updated_at);
-    return rec.backend_id;
-  }
-
-  const created = await apiRequest("POST", "/emendas", {
-    id_interno: rec.id,
-    ano: toInt(rec.ano) || currentYear(),
-    identificacao: rec.identificacao || "-",
-    cod_subfonte: rec.cod_subfonte || "",
-    deputado: rec.deputado || "",
-    cod_uo: rec.cod_uo || "",
-    sigla_uo: rec.sigla_uo || "",
-    cod_orgao: rec.cod_orgao || "",
-    cod_acao: rec.cod_acao || "",
-    descricao_acao: rec.descricao_acao || "",
-    plan_a: rec.plan_a || "",
-    plan_b: rec.plan_b || "",
-    municipio: rec.municipio || "",
-    valor_inicial: toNumber(rec.valor_inicial || 0),
-    valor_atual: toNumber(rec.valor_atual || 0),
-    processo_sei: rec.processo_sei || "",
-    status_oficial: deriveStatusForBackend(rec)
-  }, "IMPORT", { handleAuthFailure: handleAuthFailure });
-
-  rec.backend_id = created && created.id != null ? Number(created.id) : null;
-  if (rec.backend_id) apiEmendaIdByInterno[rec.id] = rec.backend_id;
-  if (created && toInt(created.row_version) > 0) rec.row_version = toInt(created.row_version);
-  if (created && created.updated_at) rec.updated_at = String(created.updated_at);
-  return rec.backend_id;
+  return null;
 }
 
 
@@ -6661,27 +6651,17 @@ function restoreRecordFromSnapshot(rec, snapshot) {
 }
 
 async function rollbackSaveAndReport(err, rec, snapshot, actionName) {
-  restoreRecordFromSnapshot(rec, snapshot);
-  saveState(true);
-  render();
-  if (selectedId === rec.id) openModal(rec.id, true);
-
-  if (isApiConflictError(err)) {
-    await refreshRecordConcurrencyFromApi(rec);
-    showModalSaveFeedback(conflictMessageFromError(err), true);
-    return;
+  const moduleFn = getApiSyncOpsUtil("rollbackSaveAndReport");
+  if (moduleFn) {
+    return await moduleFn(err, rec, snapshot, actionName, getApiSyncOpsContext());
   }
-
-  handleApiSyncError(err, actionName);
 }
 
 function handleApiSyncError(err, actionName) {
-  const msg = err && err.message ? String(err.message) : "falha desconhecida";
-  const status = Number(err && err.status ? err.status : 0);
-  apiOnline = !!status && status < 500;
-  apiLastError = msg;
-  applyAccessProfile();
-  console.warn("Falha ao sincronizar " + actionName + " com API:", msg);
+  const moduleFn = getApiSyncOpsUtil("handleApiSyncError");
+  if (moduleFn) {
+    return moduleFn(err, actionName, getApiSyncOpsContext());
+  }
 }
 
 function normalizeUserRole(roleInput) {
@@ -8129,97 +8109,26 @@ async function runExportByScope(scope, options) {
 }
 // Registra lote de importacao no backend para rastreabilidade.
 async function syncImportBatchToApi(file, report) {
-  if (!isApiEnabled()) return null;
-  const payload = {
-    arquivo_nome: file && file.name ? file.name : (report.fileName || "importacao"),
-    arquivo_hash: quickHashString((file && file.name ? file.name : "") + "|" + (file && file.size ? file.size : 0) + "|" + (file && file.lastModified ? file.lastModified : 0) + "|" + (report.totalRows || 0) + "|" + (report.created || 0) + "|" + (report.updated || 0)),
-    linhas_lidas: report.totalRows || 0,
-    linhas_validas: report.consideredRows || 0,
-    linhas_ignoradas: report.skippedRows || 0,
-    registros_criados: report.created || 0,
-    registros_atualizados: report.updated || 0,
-    sem_alteracao: report.unchanged || 0,
-    duplicidade_id: report.duplicateById || 0,
-    duplicidade_ref: report.duplicateByRef || 0,
-    duplicidade_arquivo: report.duplicateInFile || 0,
-    conflito_id_ref: report.conflictIdVsRef || 0,
-    abas_lidas: report.sheetNames || [],
-    observacao: "Importacao via interface web",
-    origem_evento: "IMPORT"
-  };
-
-  try {
-    const resp = await apiRequest("POST", "/imports/lotes", payload, "IMPORT");
-    apiOnline = true;
-    apiLastError = "";
-    applyAccessProfile();
-    return resp && resp.id != null ? Number(resp.id) : null;
-  } catch (err) {
-    handleApiSyncError(err, "lote de importacao");
-    return null;
+  const moduleFn = getApiSyncOpsUtil("syncImportBatchToApi");
+  if (moduleFn) {
+    return await moduleFn(file, report, getApiSyncOpsContext());
   }
+  return null;
 }
 
 // Envia linhas detalhadas da importacao em blocos para evitar payload gigante.
 async function syncImportLinesToApi(loteId, rowDetails) {
-  if (!isApiEnabled()) return;
-  if (!loteId) return;
-  const lines = Array.isArray(rowDetails) ? rowDetails : [];
-  if (!lines.length) return;
-
-  const chunkSize = 300;
-  for (let i = 0; i < lines.length; i += chunkSize) {
-    const chunk = lines.slice(i, i + chunkSize).map(function (ln, idx) {
-      return {
-        ordem: ln && ln.ordem != null ? Number(ln.ordem) : (i + idx + 1),
-        sheet_name: ln && ln.sheet_name ? String(ln.sheet_name) : "",
-        row_number: ln && ln.row_number != null ? Number(ln.row_number) : 0,
-        status_linha: (ln && ln.status_linha ? String(ln.status_linha) : "UNCHANGED").toUpperCase(),
-        id_interno: ln && ln.id_interno ? String(ln.id_interno) : "",
-        ref_key: ln && ln.ref_key ? String(ln.ref_key) : "",
-        mensagem: ln && ln.mensagem ? String(ln.mensagem) : ""
-      };
-    });
-
-    try {
-      await apiRequest("POST", "/imports/linhas/bulk", {
-        lote_id: Number(loteId),
-        linhas: chunk
-      }, "IMPORT");
-      apiOnline = true;
-      apiLastError = "";
-    } catch (err) {
-      handleApiSyncError(err, "linhas de importacao");
-      return;
-    }
+  const moduleFn = getApiSyncOpsUtil("syncImportLinesToApi");
+  if (moduleFn) {
+    return await moduleFn(loteId, rowDetails, getApiSyncOpsContext());
   }
-
-  applyAccessProfile();
 }
 
 // Grava log de exportacao no backend (auditoria operacional).
 async function syncExportLogToApi(meta) {
-  if (!isApiEnabled()) return;
-  const payload = {
-    formato: String(meta && meta.formato ? meta.formato : "XLSX").toUpperCase(),
-    arquivo_nome: meta && meta.arquivoNome ? meta.arquivoNome : "exportacao",
-    quantidade_registros: meta && Number.isFinite(Number(meta.quantidadeRegistros)) ? Number(meta.quantidadeRegistros) : 0,
-    quantidade_eventos: meta && Number.isFinite(Number(meta.quantidadeEventos)) ? Number(meta.quantidadeEventos) : 0,
-    filtros_json: JSON.stringify(meta && meta.filtros ? meta.filtros : {}),
-    modo_headers: meta && meta.modoHeaders ? meta.modoHeaders : "normalizados",
-    escopo_exportacao: meta && meta.escopoExportacao ? String(meta.escopoExportacao) : EXPORT_SCOPE.ATUAIS,
-    round_trip_ok: meta && Object.prototype.hasOwnProperty.call(meta, "roundTripOk") ? meta.roundTripOk : null,
-    round_trip_issues: meta && Array.isArray(meta.roundTripIssues) ? meta.roundTripIssues : [],
-    origem_evento: "EXPORT"
-  };
-
-  try {
-    await apiRequest("POST", "/exports/logs", payload, "EXPORT");
-    apiOnline = true;
-    apiLastError = "";
-    applyAccessProfile();
-  } catch (err) {
-    handleApiSyncError(err, "log de exportacao");
+  const moduleFn = getApiSyncOpsUtil("syncExportLogToApi");
+  if (moduleFn) {
+    return await moduleFn(meta, getApiSyncOpsContext());
   }
 }
 
