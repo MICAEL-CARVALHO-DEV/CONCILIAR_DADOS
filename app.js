@@ -82,6 +82,7 @@ const exportExecutiveUtils = SEC_FRONTEND.exportExecutiveUtils || null;
 const auxModalsUtils = SEC_FRONTEND.auxModalsUtils || null;
 const importReportUtils = SEC_FRONTEND.importReportUtils || null;
 const modalSectionsUtils = SEC_FRONTEND.modalSectionsUtils || null;
+const modalDraftStateUtils = SEC_FRONTEND.modalDraftStateUtils || null;
 const appBindingsUtils = SEC_FRONTEND.appBindingsUtils || null;
 const pendingUsersUtils = SEC_FRONTEND.pendingUsersUtils || null;
 const betaHistoryUtils = SEC_FRONTEND.betaHistoryUtils || null;
@@ -681,6 +682,12 @@ function getModalSectionsUtil(methodName) {
   return typeof method === "function" ? method : null;
 }
 
+function getModalDraftStateUtil(methodName) {
+  if (!modalDraftStateUtils) return null;
+  const method = modalDraftStateUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
 function getAppBindingsUtil(methodName) {
   if (!appBindingsUtils) return null;
   const method = appBindingsUtils[methodName];
@@ -1139,46 +1146,45 @@ function parseDraftFieldValue(raw, type) {
 }
 
 function initModalDraftForRecord(rec) {
-  const draft = {};
-  const original = {};
-
-  MODAL_FIELD_ORDER.forEach(function (field) {
-    if (!field.editable) return;
-    const type = getModalFieldType(field.key);
-    const normalized = normalizeDraftFieldValue(rec[field.key], type);
-    draft[field.key] = normalized;
-    original[field.key] = normalized;
-  });
-
-  modalDraftState = {
-    recordId: rec.id,
-    draft: draft,
-    original: original,
-    dirty: {}
-  };
-
-  const restored = restorePersistedModalDraft(rec);
-
-  updateModalDraftUi();
-  return restored;
+  const moduleFn = getModalDraftStateUtil("initModalDraftForRecord");
+  if (moduleFn) {
+    return moduleFn(rec, getModalDraftStateContext());
+  }
+  return false;
 }
 
 function isModalDraftDirty() {
+  const moduleFn = getModalDraftStateUtil("isModalDraftDirty");
+  if (moduleFn) {
+    return moduleFn(getModalDraftStateContext());
+  }
   if (!modalDraftState || !modalDraftState.dirty) return false;
   return Object.keys(modalDraftState.dirty).length > 0;
 }
 
 function hasPendingModalAction() {
+  const moduleFn = getModalDraftStateUtil("hasPendingModalAction");
+  if (moduleFn) {
+    return moduleFn(getModalDraftStateContext());
+  }
   return !!(modalDraftState && modalDraftState.pendingAction && modalDraftState.pendingAction.type);
 }
 
 function hasModalMarkDraft() {
+  const moduleFn = getModalDraftStateUtil("hasModalMarkDraft");
+  if (moduleFn) {
+    return moduleFn(getModalDraftStateContext());
+  }
   const selectedStatus = markStatus ? (markStatus.value || "").trim() : "";
   const reason = (markReason ? (markReason.value || "") : "").trim();
   return selectedStatus.length > 0 || reason.length > 0;
 }
 
 function canSaveDraftNow() {
+  const moduleFn = getModalDraftStateUtil("canSaveDraftNow");
+  if (moduleFn) {
+    return moduleFn(getModalDraftStateContext());
+  }
   if (!canMutateRecords()) return false;
   if (isEmendaLockReadOnly()) return false;
   if (hasPendingModalAction()) return true;
@@ -1191,6 +1197,10 @@ function canSaveDraftNow() {
 }
 
 function getDraftSaveBlockReason() {
+  const moduleFn = getModalDraftStateUtil("getDraftSaveBlockReason");
+  if (moduleFn) {
+    return moduleFn(getModalDraftStateContext());
+  }
   if (!canMutateRecords()) {
     return getReadOnlyRoleMessage() || "Perfil em leitura: sem alteracao de dados.";
   }
@@ -1234,10 +1244,18 @@ function clearModalAutosaveTimer() {
 }
 
 function hasPendingModalDraft() {
+  const moduleFn = getModalDraftStateUtil("hasPendingModalDraft");
+  if (moduleFn) {
+    return moduleFn(getModalDraftStateContext());
+  }
   return isModalDraftDirty() || hasPendingModalAction() || hasModalMarkDraft();
 }
 
 function normalizeDraftStoragePart(value) {
+  const moduleFn = getModalDraftStateUtil("normalizeDraftStoragePart");
+  if (moduleFn) {
+    return moduleFn(value, getModalDraftStateContext());
+  }
   return String(value == null ? "" : value)
     .trim()
     .toLowerCase()
@@ -1245,6 +1263,10 @@ function normalizeDraftStoragePart(value) {
 }
 
 function getModalDraftStorageKey(recordId) {
+  const moduleFn = getModalDraftStateUtil("getModalDraftStorageKey");
+  if (moduleFn) {
+    return moduleFn(recordId, getModalDraftStateContext());
+  }
   return [
     MODAL_DRAFT_STORAGE_PREFIX,
     normalizeDraftStoragePart(CURRENT_USER || "anon"),
@@ -1254,6 +1276,10 @@ function getModalDraftStorageKey(recordId) {
 }
 
 function readPersistedModalDraft(recordId) {
+  const moduleFn = getModalDraftStateUtil("readPersistedModalDraft");
+  if (moduleFn) {
+    return moduleFn(recordId, getModalDraftStateContext());
+  }
   const key = getModalDraftStorageKey(recordId);
   const raw = readStorageValue(localStorage, key);
   if (!raw) return null;
@@ -1269,6 +1295,10 @@ function readPersistedModalDraft(recordId) {
 }
 
 function clearPersistedModalDraft(recordId) {
+  const moduleFn = getModalDraftStateUtil("clearPersistedModalDraft");
+  if (moduleFn) {
+    return moduleFn(recordId, getModalDraftStateContext());
+  }
   removeStorageValue(localStorage, getModalDraftStorageKey(recordId));
   if (modalDraftState && modalDraftState.recordId === recordId) {
     delete modalDraftState.lastDraftSavedAt;
@@ -1276,11 +1306,19 @@ function clearPersistedModalDraft(recordId) {
 }
 
 function clearModalStatusDraftInputs() {
+  const moduleFn = getModalDraftStateUtil("clearModalStatusDraftInputs");
+  if (moduleFn) {
+    return moduleFn(getModalDraftStateContext());
+  }
   if (markStatus) markStatus.value = "";
   if (markReason) markReason.value = "";
 }
 
 function persistModalDraftSnapshot(reason) {
+  const moduleFn = getModalDraftStateUtil("persistModalDraftSnapshot");
+  if (moduleFn) {
+    return moduleFn(reason, getModalDraftStateContext());
+  }
   if (!modalDraftState || !modalDraftState.recordId) return false;
   const recordId = modalDraftState.recordId;
   if (!hasPendingModalDraft()) {
@@ -1306,6 +1344,10 @@ function persistModalDraftSnapshot(reason) {
 }
 
 function restorePersistedModalDraft(rec) {
+  const moduleFn = getModalDraftStateUtil("restorePersistedModalDraft");
+  if (moduleFn) {
+    return moduleFn(rec, getModalDraftStateContext());
+  }
   if (!rec || !modalDraftState) return false;
   const snapshot = readPersistedModalDraft(rec.id);
   if (!snapshot) return false;
@@ -1485,6 +1527,10 @@ function applyModalAccessProfile() {
 }
 
 function onModalFieldInput(e) {
+  const moduleFn = getModalDraftStateUtil("onModalFieldInput");
+  if (moduleFn) {
+    return moduleFn(e, getModalDraftStateContext());
+  }
   if (!modalDraftState) return;
   if (!canMutateRecords()) return;
   clearModalSaveFeedback();
@@ -1596,6 +1642,10 @@ function refreshOpenModalAfterRemoteSync() {
 }
 
 function rebaseModalDraftAfterSave(rec) {
+  const moduleFn = getModalDraftStateUtil("rebaseModalDraftAfterSave");
+  if (moduleFn) {
+    return moduleFn(rec, getModalDraftStateContext());
+  }
   if (!rec || !modalDraftState || modalDraftState.recordId !== rec.id) return;
   const nextDraft = {};
   const nextOriginal = {};
@@ -4720,6 +4770,40 @@ function getModalSectionsContext() {
     applyModalAccessProfile: applyModalAccessProfile,
     renderProgressBar: renderProgressBar,
     renderMemberChips: renderMemberChips
+  };
+}
+
+function getModalDraftStateContext() {
+  return {
+    MODAL_FIELD_ORDER: MODAL_FIELD_ORDER,
+    MODAL_DRAFT_STORAGE_PREFIX: MODAL_DRAFT_STORAGE_PREFIX,
+    CURRENT_USER: CURRENT_USER,
+    CURRENT_ROLE: CURRENT_ROLE,
+    markStatus: markStatus,
+    markReason: markReason,
+    getModalDraftState: function () {
+      return modalDraftState;
+    },
+    setModalDraftState: function (nextState) {
+      modalDraftState = nextState;
+    },
+    getModalFieldType: getModalFieldType,
+    normalizeDraftFieldValue: normalizeDraftFieldValue,
+    parseDraftFieldValue: parseDraftFieldValue,
+    updateModalDraftUi: updateModalDraftUi,
+    canMutateRecords: canMutateRecords,
+    isEmendaLockReadOnly: isEmendaLockReadOnly,
+    getReadOnlyRoleMessage: getReadOnlyRoleMessage,
+    hasFieldChanged: hasFieldChanged,
+    normalizeStatus: normalizeStatus,
+    readStorageValue: readStorageValue,
+    writeStorageValue: writeStorageValue,
+    removeStorageValue: removeStorageValue,
+    shallowCloneObj: shallowCloneObj,
+    deepClone: deepClone,
+    isoNow: isoNow,
+    clearModalSaveFeedback: clearModalSaveFeedback,
+    scheduleModalAutosave: scheduleModalAutosave
   };
 }
 
