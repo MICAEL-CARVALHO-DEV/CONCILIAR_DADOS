@@ -82,6 +82,7 @@ const exportExecutiveUtils = SEC_FRONTEND.exportExecutiveUtils || null;
 const auxModalsUtils = SEC_FRONTEND.auxModalsUtils || null;
 const importReportUtils = SEC_FRONTEND.importReportUtils || null;
 const modalSectionsUtils = SEC_FRONTEND.modalSectionsUtils || null;
+const appBindingsUtils = SEC_FRONTEND.appBindingsUtils || null;
 const pendingUsersUtils = SEC_FRONTEND.pendingUsersUtils || null;
 const betaHistoryUtils = SEC_FRONTEND.betaHistoryUtils || null;
 const betaPowerBiUtils = SEC_FRONTEND.betaPowerBiUtils || null;
@@ -680,6 +681,12 @@ function getModalSectionsUtil(methodName) {
   return typeof method === "function" ? method : null;
 }
 
+function getAppBindingsUtil(methodName) {
+  if (!appBindingsUtils) return null;
+  const method = appBindingsUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
 function getPendingUsersUtil(methodName) {
   if (!pendingUsersUtils) return null;
   const method = pendingUsersUtils[methodName];
@@ -890,46 +897,6 @@ function getFiltered() {
   });
 }
 
-statusFilter.addEventListener("change", render);
-yearFilter.addEventListener("change", render);
-searchInput.addEventListener("input", debounce(render, 120));
-if (btnProfile) {
-  btnProfile.addEventListener("click", function () {
-    openProfileModal();
-  });
-}
-if (btnLogout) {
-  btnLogout.addEventListener("click", async function () {
-    await logoutCurrentUser();
-    redirectToAuth(AUTH_LOGIN_PAGE, "logout=1");
-  });
-}
-if (btnDemo4Users) {
-  btnDemo4Users.addEventListener("click", function () {
-    generateRandomMultiUserDemo();
-  });
-}
-
-modalClose.addEventListener("click", function () { requestCloseModal(); });
-modalClose2.addEventListener("click", function () { requestCloseModal(); });
-modal.addEventListener("click", function (e) {
-  if (e.target === modal) requestCloseModal();
-});
-if (btnKvSave) {
-  btnKvSave.addEventListener("click", async function (e) { if (e) { e.preventDefault(); e.stopPropagation(); }
-    clearModalAutosaveTimer();
-    clearModalAutoCloseTimer();
-    const ok = await saveModalDraftChanges(false);
-    if (ok) {
-      modalAutoCloseTimer = setTimeout(function () {
-        forceCloseModal();
-      }, 1100);
-    }
-  });
-}
-if (markStatus) markStatus.addEventListener("change", function () { clearModalAutoCloseTimer(); updateModalDraftUi(); scheduleModalAutosave("status"); });
-if (markReason) markReason.addEventListener("input", function () { clearModalAutoCloseTimer(); updateModalDraftUi(); scheduleModalAutosave("reason"); });
-
 function isUnsafeReloadShortcut(e) {
   if (!e) return false;
   var key = String(e.key || "").toLowerCase();
@@ -937,211 +904,134 @@ function isUnsafeReloadShortcut(e) {
   var accel = !!(e.ctrlKey || e.metaKey);
   return accel && key === "r";
 }
+const bindUiShellEventsUtil = getAppBindingsUtil("bindUiShellEvents");
+if (bindUiShellEventsUtil) {
+  bindUiShellEventsUtil({
+    render: render,
+    debounce: debounce,
+    statusFilter: statusFilter,
+    yearFilter: yearFilter,
+    searchInput: searchInput,
+    btnProfile: btnProfile,
+    openProfileModal: openProfileModal,
+    btnLogout: btnLogout,
+    logoutCurrentUser: logoutCurrentUser,
+    redirectToAuth: redirectToAuth,
+    authLoginPage: AUTH_LOGIN_PAGE,
+    btnDemo4Users: btnDemo4Users,
+    generateRandomMultiUserDemo: generateRandomMultiUserDemo,
+    modalClose: modalClose,
+    modalClose2: modalClose2,
+    modal: modal,
+    requestCloseModal: requestCloseModal,
+    btnKvSave: btnKvSave,
+    clearModalAutosaveTimer: clearModalAutosaveTimer,
+    clearModalAutoCloseTimer: clearModalAutoCloseTimer,
+    saveModalDraftChanges: saveModalDraftChanges,
+    setModalAutoCloseTimer: function (nextTimer) {
+      modalAutoCloseTimer = nextTimer;
+    },
+    forceCloseModal: forceCloseModal,
+    markStatus: markStatus,
+    markReason: markReason,
+    updateModalDraftUi: updateModalDraftUi,
+    scheduleModalAutosave: scheduleModalAutosave,
+    isUnsafeReloadShortcut: isUnsafeReloadShortcut,
+    hasPendingModalDraft: hasPendingModalDraft,
+    showModalSaveFeedback: showModalSaveFeedback,
+    focusIfPossible: focusIfPossible,
+    flushModalAutosave: flushModalAutosave,
+    btnMarkStatus: btnMarkStatus,
+    getSelected: getSelected,
+    getModalDraftState: function () {
+      return modalDraftState;
+    },
+    canMutateRecords: canMutateRecords,
+    getReadOnlyRoleMessage: getReadOnlyRoleMessage,
+    normalizeStatus: normalizeStatus,
+    btnExportOne: btnExportOne,
+    exportOne: async function () {
+      const rec = getSelected();
+      if (!rec) return;
 
-document.addEventListener("keydown", function (e) {
-  if (modal.classList.contains("show") && hasPendingModalDraft() && isUnsafeReloadShortcut(e)) {
-    e.preventDefault();
-    e.stopPropagation();
-    showModalSaveFeedback("ATENCAO: salve as edicoes antes de recarregar a pagina.", true);
-    focusIfPossible(btnKvSave);
-    return;
-  }
+      const templateReady = !!(lastImportedWorkbookTemplate && lastImportedWorkbookTemplate.buffer);
+      const templateMode = templateReady
+        ? confirm("Exportar este registro em modo TEMPLATE (mesma estrutura do XLSX original)?")
+        : false;
+      const roundTripCheck = confirm("Executar round-trip check apos exportar? (pode ser mais lento)");
+      const filename = "emenda_" + rec.id + "_" + dateStamp() + ".xlsx";
 
-  if (e.key !== "Escape") return;
-  if (modal.classList.contains("show")) {
-    requestCloseModal();
-    return;
-  }
-  if (exportCustomModal && exportCustomModal.classList.contains("show")) {
-    closeExportCustomModal();
-    return;
-  }
-  if (profileModal && profileModal.classList.contains("show")) {
-    closeProfileModal();
-    return;
-  }
-  if (pendingUsersModal && pendingUsersModal.classList.contains("show")) {
-    closePendingUsersModal();
-  }
-});
-window.addEventListener("beforeunload", function (e) {
-  if (!modal.classList.contains("show")) return;
-  if (!hasPendingModalDraft()) return;
-  flushModalAutosave({ reason: "beforeunload" });
-  e.preventDefault();
-  e.returnValue = "";
-});
-window.addEventListener("pagehide", function () {
-  flushModalAutosave({ reason: "pagehide" });
-});
-document.addEventListener("visibilitychange", function () {
-  if (document.visibilityState !== "hidden") return;
-  flushModalAutosave({ reason: "visibilitychange" });
-});
+      const exportMeta = exportRecordsToXlsx([rec], filename, {
+        useOriginalHeaders: true,
+        roundTripCheck: roundTripCheck,
+        templateMode: templateMode,
+        exportScope: EXPORT_SCOPE.ATUAIS,
+        exportFilters: { single_id: rec.id }
+      });
+      if (!exportMeta) return;
 
-btnMarkStatus.addEventListener("click", function (e) { if (e) { e.preventDefault(); e.stopPropagation(); }
-  clearModalAutoCloseTimer();
-  const rec = getSelected();
-  if (!rec || !modalDraftState) return;
-  if (!canMutateRecords()) {
-    showModalSaveFeedback(getReadOnlyRoleMessage() || "Perfil em leitura. Edicao bloqueada.", true);
-    return;
-  }
+      latestExportReport = {
+        escopo: EXPORT_SCOPE.ATUAIS,
+        arquivoNome: filename,
+        quantidadeRegistros: 1,
+        filtros: { single_id: rec.id },
+        geradoEm: isoNow()
+      };
+      renderImportDashboard();
 
-  const selectedStatus = markStatus ? (markStatus.value || "").trim() : "";
-  if (!selectedStatus) {
-    showModalSaveFeedback("ATENCAO: selecione um status para preparar a marcacao.", true);
-    if (markStatus) markStatus.focus();
-    updateModalDraftUi();
-    return;
-  }
-
-  const next = normalizeStatus(selectedStatus);
-  const why = (markReason.value || "").trim();
-  if (!why) {
-    showModalSaveFeedback("ATENCAO: informe motivo/observacao para preparar a marcacao.", true);
-    return;
-  }
-
-  modalDraftState.pendingAction = {
-    type: "MARK_STATUS",
-    status: next,
-    reason: why
-  };
-  updateModalDraftUi();
-  scheduleModalAutosave("mark-status");
-  showModalSaveFeedback("Marcacao preparada. O rascunho local sera salvo automaticamente; clique em Salvar edicoes para gravar oficialmente.", false);
-});
-
-if (btnExportOne) {
-  btnExportOne.addEventListener("click", async function () {
-    const rec = getSelected();
-    if (!rec) return;
-
-    const templateReady = !!(lastImportedWorkbookTemplate && lastImportedWorkbookTemplate.buffer);
-    const templateMode = templateReady
-      ? confirm("Exportar este registro em modo TEMPLATE (mesma estrutura do XLSX original)?")
-      : false;
-    const roundTripCheck = confirm("Executar round-trip check apos exportar? (pode ser mais lento)");
-    const filename = "emenda_" + rec.id + "_" + dateStamp() + ".xlsx";
-
-    const exportMeta = exportRecordsToXlsx([rec], filename, {
-      useOriginalHeaders: true,
-      roundTripCheck: roundTripCheck,
-      templateMode: templateMode,
-      exportScope: EXPORT_SCOPE.ATUAIS,
-      exportFilters: { single_id: rec.id }
-    });
-    if (!exportMeta) return;
-
-    latestExportReport = {
-      escopo: EXPORT_SCOPE.ATUAIS,
-      arquivoNome: filename,
-      quantidadeRegistros: 1,
-      filtros: { single_id: rec.id },
-      geradoEm: isoNow()
-    };
-    renderImportDashboard();
-
-    await syncExportLogToApi({
-      formato: "XLSX",
-      arquivoNome: filename,
-      quantidadeRegistros: 1,
-      quantidadeEventos: countAuditEvents([rec]),
-      filtros: { single_id: rec.id },
-      modoHeaders: templateMode ? "template_original" : "originais",
-      escopoExportacao: EXPORT_SCOPE.ATUAIS,
-      roundTripOk: exportMeta && exportMeta.roundTrip ? exportMeta.roundTrip.ok : null,
-      roundTripIssues: exportMeta && exportMeta.roundTrip ? (exportMeta.roundTrip.issues || []) : []
-    });
-  });
-}
-if (btnExportAtuais) {
-  btnExportAtuais.addEventListener("click", async function () {
-    await runExportByScope(EXPORT_SCOPE.ATUAIS);
-  });
-}
-
-if (btnExportHistorico) {
-  btnExportHistorico.addEventListener("click", async function () {
-    await runExportByScope(EXPORT_SCOPE.HISTORICO);
-  });
-}
-
-if (btnExportCustom) {
-  btnExportCustom.addEventListener("click", function () {
-    openExportCustomModal();
-  });
-}
-
-if (btnExportCustomApply) {
-  btnExportCustomApply.addEventListener("click", async function () {
-    const filters = {
-      ano: exportCustomYear ? exportCustomYear.value : "",
-      status: exportCustomStatus ? exportCustomStatus.value : "",
-      deputado: exportCustomDeputado ? (exportCustomDeputado.value || "").trim() : "",
-      municipio: exportCustomMunicipio ? (exportCustomMunicipio.value || "").trim() : "",
-      include_old: !!(exportCustomIncludeOld && exportCustomIncludeOld.checked)
-    };
-
-    const ok = await runExportByScope(EXPORT_SCOPE.PERSONALIZADO, { customFilters: filters });
-    if (ok) closeExportCustomModal();
-  });
-}
-
-if (btnExportCustomClose) {
-  btnExportCustomClose.addEventListener("click", closeExportCustomModal);
-}
-if (btnExportCustomCancel) {
-  btnExportCustomCancel.addEventListener("click", closeExportCustomModal);
-}
-if (exportCustomModal) {
-  exportCustomModal.addEventListener("click", function (e) {
-    if (e.target === exportCustomModal) closeExportCustomModal();
-  });
-}
-if (exportCustomYear) exportCustomYear.addEventListener("change", refreshCustomExportSummary);
-if (exportCustomStatus) exportCustomStatus.addEventListener("change", refreshCustomExportSummary);
-if (exportCustomDeputado) exportCustomDeputado.addEventListener("input", debounce(refreshCustomExportSummary, 120));
-if (exportCustomMunicipio) exportCustomMunicipio.addEventListener("input", debounce(refreshCustomExportSummary, 120));
-if (exportCustomIncludeOld) exportCustomIncludeOld.addEventListener("change", refreshCustomExportSummary);
-if (btnProfileClose) btnProfileClose.addEventListener("click", closeProfileModal);
-if (btnProfileCloseX) btnProfileCloseX.addEventListener("click", closeProfileModal);
-if (profileModal) {
-  profileModal.addEventListener("click", function (e) {
-    if (e.target === profileModal) closeProfileModal();
-  });
-}
-if (btnPendingApprovals) {
-  btnPendingApprovals.addEventListener("click", function () {
-    openPendingUsersModal();
-  });
-}
-if (btnPendingUsersClose) btnPendingUsersClose.addEventListener("click", closePendingUsersModal);
-if (btnPendingUsersCloseX) btnPendingUsersCloseX.addEventListener("click", closePendingUsersModal);
-if (btnPendingUsersRefresh) {
-  btnPendingUsersRefresh.addEventListener("click", function () {
-    refreshPendingUsersModal();
-  });
-}
-if (pendingUsersModal) {
-  pendingUsersModal.addEventListener("click", function (e) {
-    if (e.target === pendingUsersModal) closePendingUsersModal();
-  });
-}
-if (pendingUsersTableWrap) {
-  pendingUsersTableWrap.addEventListener("click", function (e) {
-    const btn = e.target && e.target.closest ? e.target.closest("button[data-pending-action]") : null;
-    if (!btn) return;
-    const userId = Number(btn.getAttribute("data-user-id") || 0);
-    if (!userId) return;
-    const action = String(btn.getAttribute("data-pending-action") || "").toLowerCase();
-    const runner = action === "reject" ? rejectPendingUser : approvePendingUser;
-    const fallbackMessage = action === "reject" ? "Falha ao recusar cadastro." : "Falha ao aprovar cadastro.";
-    runner(userId).catch(function (err) {
-      const msg = extractApiError(err, fallbackMessage);
-      setPendingUsersFeedback(msg, true);
-    });
+      await syncExportLogToApi({
+        formato: "XLSX",
+        arquivoNome: filename,
+        quantidadeRegistros: 1,
+        quantidadeEventos: countAuditEvents([rec]),
+        filtros: { single_id: rec.id },
+        modoHeaders: templateMode ? "template_original" : "originais",
+        escopoExportacao: EXPORT_SCOPE.ATUAIS,
+        roundTripOk: exportMeta && exportMeta.roundTrip ? exportMeta.roundTrip.ok : null,
+        roundTripIssues: exportMeta && exportMeta.roundTrip ? (exportMeta.roundTrip.issues || []) : []
+      });
+    },
+    btnExportAtuais: btnExportAtuais,
+    runExportAtuais: async function () {
+      await runExportByScope(EXPORT_SCOPE.ATUAIS);
+    },
+    btnExportHistorico: btnExportHistorico,
+    runExportHistorico: async function () {
+      await runExportByScope(EXPORT_SCOPE.HISTORICO);
+    },
+    btnExportCustom: btnExportCustom,
+    openExportCustomModal: openExportCustomModal,
+    btnExportCustomApply: btnExportCustomApply,
+    runCustomExport: async function (filters) {
+      return runExportByScope(EXPORT_SCOPE.PERSONALIZADO, { customFilters: filters });
+    },
+    btnExportCustomClose: btnExportCustomClose,
+    btnExportCustomCancel: btnExportCustomCancel,
+    closeExportCustomModal: closeExportCustomModal,
+    exportCustomModal: exportCustomModal,
+    refreshCustomExportSummary: refreshCustomExportSummary,
+    exportCustomYear: exportCustomYear,
+    exportCustomStatus: exportCustomStatus,
+    exportCustomDeputado: exportCustomDeputado,
+    exportCustomMunicipio: exportCustomMunicipio,
+    exportCustomIncludeOld: exportCustomIncludeOld,
+    btnProfileClose: btnProfileClose,
+    btnProfileCloseX: btnProfileCloseX,
+    closeProfileModal: closeProfileModal,
+    profileModal: profileModal,
+    btnPendingApprovals: btnPendingApprovals,
+    openPendingUsersModal: openPendingUsersModal,
+    btnPendingUsersClose: btnPendingUsersClose,
+    btnPendingUsersCloseX: btnPendingUsersCloseX,
+    closePendingUsersModal: closePendingUsersModal,
+    btnPendingUsersRefresh: btnPendingUsersRefresh,
+    refreshPendingUsersModal: refreshPendingUsersModal,
+    pendingUsersModal: pendingUsersModal,
+    pendingUsersTableWrap: pendingUsersTableWrap,
+    approvePendingUser: approvePendingUser,
+    rejectPendingUser: rejectPendingUser,
+    extractApiError: extractApiError,
+    setPendingUsersFeedback: setPendingUsersFeedback
   });
 }
 
