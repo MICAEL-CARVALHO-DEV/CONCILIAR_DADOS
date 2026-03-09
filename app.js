@@ -79,6 +79,7 @@ const exportTemplateUtils = SEC_FRONTEND.exportTemplateUtils || null;
 const exportTemplateWriterUtils = SEC_FRONTEND.exportTemplateWriterUtils || null;
 const exportDataUtils = SEC_FRONTEND.exportDataUtils || null;
 const importReportUtils = SEC_FRONTEND.importReportUtils || null;
+const betaSupportUtils = SEC_FRONTEND.betaSupportUtils || null;
 const authStore = SEC_FRONTEND.authStore || null;
 const authGuard = SEC_FRONTEND.authGuard || null;
 const apiClient = SEC_FRONTEND.apiClient || null;
@@ -613,6 +614,12 @@ function getDomUtil(methodName) {
 function getEscapeUtil(methodName) {
   if (!escapeUtils) return null;
   const method = escapeUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getBetaSupportUtil(methodName) {
+  if (!betaSupportUtils) return null;
+  const method = betaSupportUtils[methodName];
   return typeof method === "function" ? method : null;
 }
 
@@ -4407,6 +4414,8 @@ function getSupportThreadEmendaLabel(thread) {
 }
 
 function buildSupportUserOptions(threads) {
+  const moduleFn = getBetaSupportUtil("buildSupportUserOptions");
+  if (moduleFn) return moduleFn(threads, text);
   return Array.from(new Set((Array.isArray(threads) ? threads : []).map(function (item) {
     return text(item && item.usuario_nome);
   }).filter(Boolean))).sort();
@@ -4485,476 +4494,62 @@ async function refreshBetaSupportFromApi(forceRender) {
   }
 }
 
+function getBetaSupportContext() {
+  return {
+    threads: betaSupportThreads,
+    loading: betaSupportLoading,
+    filters: betaSupportFilters,
+    lastSyncAt: betaSupportLastSyncAt,
+    error: betaSupportError,
+    selectedThreadId: betaSupportSelectedThreadId,
+    messages: betaSupportMessages,
+    messagesError: betaSupportMessagesError,
+    messagesLoading: betaSupportMessagesLoading,
+    clearNodeChildren: clearNodeChildren,
+    isSupportManagerUser: isSupportManagerUser,
+    canUseSupportApi: canUseSupportApi,
+    isApiEnabled: isApiEnabled,
+    getSupportScopeValue: getSupportScopeValue,
+    refreshSupportFromApi: refreshBetaSupportFromApi,
+    refreshSupportMessagesFromApi: refreshBetaSupportMessagesFromApi,
+    setSelectOptions: setSelectOptions,
+    supportCategories: SUPPORT_CATEGORIES,
+    supportThreadStatus: SUPPORT_THREAD_STATUS,
+    supportFilterDefaults: BETA_SUPPORT_FILTER_DEFAULTS,
+    getBackendIdForRecord: getBackendIdForRecord,
+    text: text,
+    fmtDateTime: fmtDateTime,
+    normalizeLooseText: normalizeLooseText,
+    toInt: toInt,
+    apiRequest: apiRequest,
+    extractApiError: extractApiError,
+    getSupportThreadEmendaLabel: getSupportThreadEmendaLabel,
+    rerender: function () {
+      renderBetaWorkspace(getFiltered());
+    },
+    setSupportFilters: function (nextFilters) {
+      betaSupportFilters = nextFilters;
+    },
+    setSelectedThreadId: function (threadId) {
+      betaSupportSelectedThreadId = Number(threadId || 0);
+    },
+    setMessagesError: function (message) {
+      betaSupportMessagesError = String(message || "");
+    }
+  };
+}
+
 function renderBetaSupportPanel(target, filteredRows) {
+  const moduleFn = getBetaSupportUtil("renderBetaSupportPanel");
+  if (moduleFn) {
+    return moduleFn(target, filteredRows, getBetaSupportContext());
+  }
+
   clearNodeChildren(target);
-
-  const intro = document.createElement("div");
-  intro.className = "beta-panel-card";
-  const title = document.createElement("h4");
-  title.textContent = "Ajuda e suporte";
-  const note = document.createElement("p");
-  note.className = "muted small";
-  note.textContent = isSupportManagerUser()
-    ? "Inbox central de suporte. Voce pode acompanhar todos os chamados, responder e fechar quando a orientacao estiver resolvida."
-    : "Abra um chamado com contexto da operacao. O historico do atendimento fica vinculado ao seu usuario.";
-  intro.appendChild(title);
-  intro.appendChild(note);
-  target.appendChild(intro);
-
-  if (!canUseSupportApi()) {
-    const empty = document.createElement("p");
-    empty.className = "beta-empty";
-    empty.textContent = isApiEnabled() ? "Faca login para usar o suporte." : "Suporte exige API ativa.";
-    target.appendChild(empty);
-    return;
-  }
-
-  const toolbar = document.createElement("div");
-  toolbar.className = "beta-head-actions";
-  const badge = document.createElement("span");
-  badge.className = "beta-source-badge";
-  badge.textContent = "Chamados: " + String(betaSupportThreads.length) + " | Escopo: " + (getSupportScopeValue() === "all" ? "todos" : "meus");
-  toolbar.appendChild(badge);
-  const refreshBtn = document.createElement("button");
-  refreshBtn.className = "btn";
-  refreshBtn.type = "button";
-  refreshBtn.textContent = betaSupportLoading ? "Atualizando..." : "Atualizar suporte";
-  refreshBtn.disabled = betaSupportLoading;
-  refreshBtn.addEventListener("click", function () {
-    refreshBetaSupportFromApi(true).catch(function () { /* no-op */ });
-  });
-  toolbar.appendChild(refreshBtn);
-  target.appendChild(toolbar);
-
-  const composer = document.createElement("div");
-  composer.className = "beta-panel-card";
-  const composerTitle = document.createElement("h4");
-  composerTitle.textContent = "Abrir chamado";
-  composer.appendChild(composerTitle);
-
-  const composerGrid = document.createElement("div");
-  composerGrid.className = "filters beta-support-compose-grid";
-
-  function addField(labelText, control, grow) {
-    const field = document.createElement("div");
-    field.className = "field" + (grow ? " grow" : "");
-    const label = document.createElement("label");
-    label.textContent = labelText;
-    field.appendChild(label);
-    field.appendChild(control);
-    composerGrid.appendChild(field);
-    return control;
-  }
-
-  const subjectInput = addField("Assunto", document.createElement("input"), true);
-  subjectInput.type = "text";
-  subjectInput.placeholder = "Ex.: duvida no status da emenda";
-
-  const categorySelect = addField("Categoria", document.createElement("select"));
-  setSelectOptions(categorySelect, SUPPORT_CATEGORIES.map(function (value) {
-    return { label: value, value: value };
-  }), "OPERACAO");
-
-  const emendaSelect = addField("Emenda relacionada", document.createElement("select"));
-  const emendaOptions = [{ label: "Nenhuma", value: "" }].concat((Array.isArray(filteredRows) ? filteredRows : []).slice(0, 120).map(function (rec) {
-    const backendId = getBackendIdForRecord(rec);
-    return {
-      label: String(rec.id || "-") + " | " + text(rec.identificacao || "-"),
-      value: backendId ? String(backendId) : ""
-    };
-  }).filter(function (item) { return !!item.value; }));
-  setSelectOptions(emendaSelect, emendaOptions, "");
-
-  const bodyField = document.createElement("div");
-  bodyField.className = "field grow beta-support-message-field";
-  const bodyLabel = document.createElement("label");
-  bodyLabel.textContent = "Mensagem";
-  const bodyInput = document.createElement("textarea");
-  bodyInput.className = "kv-textarea";
-  bodyInput.placeholder = "Descreva o problema, o contexto e o que voce esperava que acontecesse.";
-  bodyField.appendChild(bodyLabel);
-  bodyField.appendChild(bodyInput);
-  composerGrid.appendChild(bodyField);
-
-  const composerActions = document.createElement("div");
-  composerActions.className = "beta-history-filter-actions";
-  const openBtn = document.createElement("button");
-  openBtn.className = "btn primary";
-  openBtn.type = "button";
-  openBtn.textContent = "Enviar chamado";
-  const clearComposerBtn = document.createElement("button");
-  clearComposerBtn.className = "btn";
-  clearComposerBtn.type = "button";
-  clearComposerBtn.textContent = "Limpar";
-  composerActions.appendChild(openBtn);
-  composerActions.appendChild(clearComposerBtn);
-  bodyField.appendChild(composerActions);
-
-  const composerFeedback = document.createElement("p");
-  composerFeedback.className = "muted small";
-  composerFeedback.style.marginTop = "8px";
-  composer.appendChild(composerGrid);
-  composer.appendChild(composerFeedback);
-  target.appendChild(composer);
-
-  clearComposerBtn.addEventListener("click", function () {
-    subjectInput.value = "";
-    categorySelect.value = "OPERACAO";
-    emendaSelect.value = "";
-    bodyInput.value = "";
-    composerFeedback.textContent = "";
-  });
-
-  openBtn.addEventListener("click", async function () {
-    const payload = {
-      subject: String(subjectInput.value || "").trim(),
-      categoria: String(categorySelect.value || "OUTRO"),
-      emenda_id: toInt(emendaSelect.value) || undefined,
-      mensagem: String(bodyInput.value || "").trim()
-    };
-    if (!payload.subject || !payload.mensagem) {
-      composerFeedback.style.color = "#b4233d";
-      composerFeedback.textContent = "Informe assunto e mensagem para abrir o chamado.";
-      return;
-    }
-    composerFeedback.style.color = "";
-    composerFeedback.textContent = "Enviando chamado...";
-    try {
-      const created = await apiRequest("POST", "/support/threads", payload, "UI");
-      betaSupportSelectedThreadId = Number(created && created.id ? created.id : 0);
-      subjectInput.value = "";
-      categorySelect.value = "OPERACAO";
-      emendaSelect.value = "";
-      bodyInput.value = "";
-      composerFeedback.textContent = "Chamado enviado com sucesso.";
-      await refreshBetaSupportFromApi(true);
-    } catch (err) {
-      composerFeedback.style.color = "#b4233d";
-      composerFeedback.textContent = extractApiError(err, "Falha ao abrir chamado.");
-    }
-  });
-
-  const filterWrap = document.createElement("div");
-  filterWrap.className = "filters beta-support-filter-grid";
-  const statusSelect = document.createElement("select");
-  const categoryFilterSelect = document.createElement("select");
-  const userSelect = document.createElement("select");
-  const scopeSelect = document.createElement("select");
-  const searchInput = document.createElement("input");
-  searchInput.type = "text";
-  searchInput.placeholder = "assunto, usuario, ultima mensagem...";
-  searchInput.value = betaSupportFilters.q || "";
-
-  function appendFilterField(parent, labelText, control, grow) {
-    const field = document.createElement("div");
-    field.className = "field" + (grow ? " grow" : "");
-    const label = document.createElement("label");
-    label.textContent = labelText;
-    field.appendChild(label);
-    field.appendChild(control);
-    parent.appendChild(field);
-    return control;
-  }
-
-  setSelectOptions(statusSelect, [{ label: "Todos", value: "" }].concat(SUPPORT_THREAD_STATUS.map(function (value) {
-    return { label: value, value: value };
-  })), betaSupportFilters.status || "");
-  setSelectOptions(categoryFilterSelect, [{ label: "Todas", value: "" }].concat(SUPPORT_CATEGORIES.map(function (value) {
-    return { label: value, value: value };
-  })), betaSupportFilters.categoria || "");
-  setSelectOptions(userSelect, [{ label: "Todos", value: "" }].concat(buildSupportUserOptions(betaSupportThreads).map(function (value) {
-    return { label: value, value: value };
-  })), betaSupportFilters.usuario || "");
-  setSelectOptions(scopeSelect, [
-    { label: "Meus chamados", value: "mine" },
-    { label: "Todos os chamados", value: "all" }
-  ], getSupportScopeValue());
-
-  appendFilterField(filterWrap, "Status", statusSelect);
-  appendFilterField(filterWrap, "Categoria", categoryFilterSelect);
-  if (isSupportManagerUser()) appendFilterField(filterWrap, "Escopo", scopeSelect);
-  if (isSupportManagerUser()) appendFilterField(filterWrap, "Usuario", userSelect);
-  appendFilterField(filterWrap, "Busca", searchInput, true);
-  const filterActions = document.createElement("div");
-  filterActions.className = "field";
-  const filterActionsLabel = document.createElement("label");
-  filterActionsLabel.textContent = "Acoes";
-  const filterActionsWrap = document.createElement("div");
-  filterActionsWrap.className = "beta-history-filter-actions";
-  const applyFilterBtn = document.createElement("button");
-  applyFilterBtn.className = "btn primary";
-  applyFilterBtn.type = "button";
-  applyFilterBtn.textContent = "Aplicar";
-  const clearFilterBtn = document.createElement("button");
-  clearFilterBtn.className = "btn";
-  clearFilterBtn.type = "button";
-  clearFilterBtn.textContent = "Limpar";
-  filterActionsWrap.appendChild(applyFilterBtn);
-  filterActionsWrap.appendChild(clearFilterBtn);
-  filterActions.appendChild(filterActionsLabel);
-  filterActions.appendChild(filterActionsWrap);
-  filterWrap.appendChild(filterActions);
-  target.appendChild(filterWrap);
-
-  applyFilterBtn.addEventListener("click", function () {
-    betaSupportFilters = {
-      status: String(statusSelect.value || ""),
-      categoria: String(categoryFilterSelect.value || ""),
-      usuario: String(userSelect.value || ""),
-      q: String(searchInput.value || "").trim(),
-      scope: isSupportManagerUser() ? String(scopeSelect.value || "mine") : "mine"
-    };
-    refreshBetaSupportFromApi(true).catch(function () { /* no-op */ });
-  });
-
-  clearFilterBtn.addEventListener("click", function () {
-    betaSupportFilters = Object.assign({}, BETA_SUPPORT_FILTER_DEFAULTS, {
-      scope: isSupportManagerUser() ? "all" : "mine"
-    });
-    refreshBetaSupportFromApi(true).catch(function () { /* no-op */ });
-  });
-
-  searchInput.addEventListener("keydown", function (event) {
-    if (event.key !== "Enter") return;
-    event.preventDefault();
-    applyFilterBtn.click();
-  });
-
-  const layout = document.createElement("div");
-  layout.className = "beta-support-layout";
-  const listCard = document.createElement("div");
-  listCard.className = "beta-panel-card beta-support-list-card";
-  const detailCard = document.createElement("div");
-  detailCard.className = "beta-panel-card beta-support-detail-card";
-  layout.appendChild(listCard);
-  layout.appendChild(detailCard);
-  target.appendChild(layout);
-
-  const listTitle = document.createElement("h4");
-  listTitle.textContent = "Chamados";
-  listCard.appendChild(listTitle);
-
-  const listInfo = document.createElement("p");
-  listInfo.className = "muted small";
-  listInfo.textContent = "Ultima leitura: " + (betaSupportLastSyncAt ? fmtDateTime(betaSupportLastSyncAt) : "-");
-  listCard.appendChild(listInfo);
-  if (betaSupportError) {
-    const err = document.createElement("p");
-    err.className = "muted small";
-    err.style.color = "#b4233d";
-    err.textContent = betaSupportError;
-    listCard.appendChild(err);
-  }
-
-  const threadList = document.createElement("div");
-  threadList.className = "beta-support-thread-list";
-  listCard.appendChild(threadList);
-
-  if (betaSupportLoading && !betaSupportThreads.length) {
-    const loading = document.createElement("p");
-    loading.className = "beta-empty";
-    loading.textContent = "Carregando chamados...";
-    threadList.appendChild(loading);
-  } else if (!betaSupportThreads.length) {
-    const empty = document.createElement("p");
-    empty.className = "beta-empty";
-    empty.textContent = "Nenhum chamado encontrado para o filtro atual.";
-    threadList.appendChild(empty);
-  } else {
-    betaSupportThreads.forEach(function (thread) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "beta-support-thread-item" + (Number(thread.id || 0) === Number(betaSupportSelectedThreadId || 0) ? " active" : "");
-      const head = document.createElement("div");
-      head.className = "beta-support-thread-head";
-      const subject = document.createElement("strong");
-      subject.textContent = text(thread.subject || "Chamado sem titulo");
-      const statusBadge = document.createElement("span");
-      statusBadge.className = "beta-support-status beta-support-status-" + normalizeLooseText(thread.status || "ABERTO").replace(/\s+/g, "-");
-      statusBadge.textContent = text(thread.status || "ABERTO");
-      head.appendChild(subject);
-      head.appendChild(statusBadge);
-      button.appendChild(head);
-
-      const meta = document.createElement("div");
-      meta.className = "beta-history-meta";
-      meta.textContent = text(thread.usuario_nome || "-") + " | " + text(thread.setor || "-") + " | " + text(thread.categoria || "OUTRO");
-      button.appendChild(meta);
-
-      const preview = document.createElement("div");
-      preview.className = "beta-support-thread-preview";
-      preview.textContent = text(thread.last_message_preview || "-");
-      button.appendChild(preview);
-
-      const extra = document.createElement("div");
-      extra.className = "muted small";
-      const emendaLabel = getSupportThreadEmendaLabel(thread);
-      extra.textContent = (emendaLabel ? (emendaLabel + " | ") : "") + fmtDateTime(thread.last_message_at || thread.updated_at || thread.created_at);
-      button.appendChild(extra);
-
-      button.addEventListener("click", function () {
-        betaSupportSelectedThreadId = Number(thread.id || 0);
-        refreshBetaSupportMessagesFromApi(true, betaSupportSelectedThreadId).catch(function () { /* no-op */ });
-      });
-
-      threadList.appendChild(button);
-    });
-  }
-
-  const selectedThread = betaSupportThreads.find(function (item) {
-    return Number(item && item.id ? item.id : 0) === Number(betaSupportSelectedThreadId || 0);
-  }) || null;
-
-  const detailTitle = document.createElement("h4");
-  detailTitle.textContent = selectedThread ? ("Chamado #" + String(selectedThread.id)) : "Detalhe do chamado";
-  detailCard.appendChild(detailTitle);
-
-  if (!selectedThread) {
-    const emptyDetail = document.createElement("p");
-    emptyDetail.className = "beta-empty";
-    emptyDetail.textContent = "Selecione um chamado para acompanhar a conversa.";
-    detailCard.appendChild(emptyDetail);
-    return;
-  }
-
-  const detailMeta = document.createElement("div");
-  detailMeta.className = "beta-metric-stack";
-  [
-    "Assunto: " + text(selectedThread.subject || "-"),
-    "Solicitante: " + text(selectedThread.usuario_nome || "-") + " | " + text(selectedThread.setor || "-"),
-    "Categoria: " + text(selectedThread.categoria || "-"),
-    "Status: " + text(selectedThread.status || "-"),
-    "Emenda relacionada: " + (getSupportThreadEmendaLabel(selectedThread) || "Nao vinculada")
-  ].forEach(function (line) {
-    const item = document.createElement("div");
-    item.className = "beta-metric-line";
-    item.textContent = line;
-    detailMeta.appendChild(item);
-  });
-  detailCard.appendChild(detailMeta);
-
-  if (isSupportManagerUser()) {
-    const statusBar = document.createElement("div");
-    statusBar.className = "beta-history-filter-actions";
-    statusBar.style.marginTop = "10px";
-    const statusUpdateSelect = document.createElement("select");
-    setSelectOptions(statusUpdateSelect, SUPPORT_THREAD_STATUS.map(function (value) {
-      return { label: value, value: value };
-    }), text(selectedThread.status || "ABERTO"));
-    const statusUpdateBtn = document.createElement("button");
-    statusUpdateBtn.className = "btn";
-    statusUpdateBtn.type = "button";
-    statusUpdateBtn.textContent = "Atualizar status";
-    statusUpdateBtn.addEventListener("click", async function () {
-      try {
-        await apiRequest("PATCH", "/support/threads/" + String(selectedThread.id) + "/status", {
-          status: String(statusUpdateSelect.value || "ABERTO")
-        }, "UI");
-        await refreshBetaSupportFromApi(true);
-      } catch (err) {
-        betaSupportMessagesError = extractApiError(err, "Falha ao atualizar status do chamado.");
-        renderBetaWorkspace(getFiltered());
-      }
-    });
-    statusBar.appendChild(statusUpdateSelect);
-    statusBar.appendChild(statusUpdateBtn);
-    detailCard.appendChild(statusBar);
-  }
-
-  if (betaSupportMessagesError) {
-    const err = document.createElement("p");
-    err.className = "muted small";
-    err.style.color = "#b4233d";
-    err.style.marginTop = "8px";
-    err.textContent = betaSupportMessagesError;
-    detailCard.appendChild(err);
-  }
-
-  const messageWrap = document.createElement("div");
-  messageWrap.className = "beta-support-message-list";
-  if (betaSupportMessagesLoading && !betaSupportMessages.length) {
-    const loading = document.createElement("p");
-    loading.className = "beta-empty";
-    loading.textContent = "Carregando conversa...";
-    messageWrap.appendChild(loading);
-  } else if (!betaSupportMessages.length) {
-    const empty = document.createElement("p");
-    empty.className = "beta-empty";
-    empty.textContent = "Sem mensagens neste chamado.";
-    messageWrap.appendChild(empty);
-  } else {
-    betaSupportMessages.forEach(function (message) {
-      const bubble = document.createElement("div");
-      const isSupportBubble = text(message && message.origem) === "SUPORTE";
-      bubble.className = "beta-support-message" + (isSupportBubble ? " support" : " user");
-      const top = document.createElement("div");
-      top.className = "beta-support-message-top";
-      top.textContent = text(message.usuario_nome || "-") + " | " + text(message.setor || "-") + " | " + fmtDateTime(message.created_at);
-      const body = document.createElement("div");
-      body.className = "beta-support-message-body";
-      body.textContent = text(message.mensagem || "");
-      bubble.appendChild(top);
-      bubble.appendChild(body);
-      messageWrap.appendChild(bubble);
-    });
-  }
-  detailCard.appendChild(messageWrap);
-
-  const replyField = document.createElement("div");
-  replyField.className = "field beta-support-reply-field";
-  const replyLabel = document.createElement("label");
-  replyLabel.textContent = "Responder";
-  const replyInput = document.createElement("textarea");
-  replyInput.className = "kv-textarea";
-  replyInput.placeholder = isSupportManagerUser()
-    ? "Resposta de suporte / orientacao operacional..."
-    : "Complementar contexto, anexo logico, retorno do teste...";
-  const replyActions = document.createElement("div");
-  replyActions.className = "beta-history-filter-actions";
-  const replyBtn = document.createElement("button");
-  replyBtn.className = "btn primary";
-  replyBtn.type = "button";
-  replyBtn.textContent = isSupportManagerUser() ? "Enviar resposta" : "Enviar complemento";
-  const reloadMessagesBtn = document.createElement("button");
-  reloadMessagesBtn.className = "btn";
-  reloadMessagesBtn.type = "button";
-  reloadMessagesBtn.textContent = "Atualizar conversa";
-  replyActions.appendChild(replyBtn);
-  replyActions.appendChild(reloadMessagesBtn);
-  replyField.appendChild(replyLabel);
-  replyField.appendChild(replyInput);
-  replyField.appendChild(replyActions);
-  detailCard.appendChild(replyField);
-
-  const replyFeedback = document.createElement("p");
-  replyFeedback.className = "muted small";
-  detailCard.appendChild(replyFeedback);
-
-  reloadMessagesBtn.addEventListener("click", function () {
-    refreshBetaSupportMessagesFromApi(true, selectedThread.id).catch(function () { /* no-op */ });
-  });
-
-  replyBtn.addEventListener("click", async function () {
-    const message = String(replyInput.value || "").trim();
-    if (!message) {
-      replyFeedback.style.color = "#b4233d";
-      replyFeedback.textContent = "Informe a mensagem antes de enviar.";
-      return;
-    }
-    replyFeedback.style.color = "";
-    replyFeedback.textContent = "Enviando resposta...";
-    try {
-      await apiRequest("POST", "/support/threads/" + String(selectedThread.id) + "/messages", {
-        mensagem: message
-      }, "UI");
-      replyInput.value = "";
-      replyFeedback.textContent = "Mensagem enviada.";
-      await refreshBetaSupportFromApi(true);
-    } catch (err) {
-      replyFeedback.style.color = "#b4233d";
-      replyFeedback.textContent = extractApiError(err, "Falha ao enviar mensagem.");
-    }
-  });
+  const empty = document.createElement("p");
+  empty.className = "beta-empty";
+  empty.textContent = "Painel de suporte indisponivel nesta compilacao.";
+  target.appendChild(empty);
 }
 
 function renderBetaHistoryPanel(target, filteredRows) {
