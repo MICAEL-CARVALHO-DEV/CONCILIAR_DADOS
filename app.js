@@ -57,7 +57,15 @@ const STORAGE_MODE_LOCAL = "local";
 const STORAGE_MODE_SESSION = "session";
 const DEFAULT_API_BASE_URL = "http://localhost:8000";
 const RUNTIME_CONFIG = (typeof window !== "undefined" && window.SEC_APP_CONFIG && typeof window.SEC_APP_CONFIG === "object") ? window.SEC_APP_CONFIG : {};
-const SEC_FRONTEND = (typeof window !== "undefined" && window.SECFrontend && typeof window.SECFrontend === "object") ? window.SECFrontend : {};
+const SEC_FRONTEND = (function () {
+  if (typeof window === "undefined") return {};
+  const registry = (window.SECFrontend && typeof window.SECFrontend === "object")
+    ? window.SECFrontend
+    : ((window.SEC_FRONTEND && typeof window.SEC_FRONTEND === "object") ? window.SEC_FRONTEND : {});
+  window.SECFrontend = registry;
+  window.SEC_FRONTEND = registry;
+  return registry;
+})();
 const storageUtils = SEC_FRONTEND.storageUtils || null;
 const domUtils = SEC_FRONTEND.domUtils || null;
 const escapeUtils = SEC_FRONTEND.escapeUtils || null;
@@ -8573,3 +8581,4 @@ if (initializeAppStartupUtil) {
     bindImportControlsUtil(getImportControlsContext());
   }
 }
+

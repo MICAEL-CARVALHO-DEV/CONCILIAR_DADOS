@@ -1,7 +1,8 @@
 (function (global) {
   "use strict";
 
-  var root = global.SEC_FRONTEND = global.SEC_FRONTEND || {};
+  var root = global.SECFrontend = global.SECFrontend || global.SEC_FRONTEND || {};
+  global.SEC_FRONTEND = root;
 
   function noop() {}
 
@@ -47,3 +48,4 @@
     initializeAppStartup: initializeAppStartup
   };
 })(window);
+

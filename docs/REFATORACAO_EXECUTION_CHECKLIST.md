@@ -96,6 +96,7 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Extrair regras de acesso/perfil (`isSupervisorUser`, `getReadOnlyRoleMeta`, `canMutateRecords`, `canUseSupportApi`) para `frontend/js/auth/roleAccess.js`, deixando `app.js` com wrappers e contexto.
 - [DONE] Consolidar `getImportControlsContext()` em uma unica definicao no `app.js`, removendo override oculto e reduzindo duplicacao de contexto.
 - [DONE] Extrair as acoes inline do `getUiShellBindingsContext()` (`exportOne`, `runExportAtuais`, `runExportHistorico`, `runCustomExport`) para `frontend/js/ui/uiShellActions.js`, deixando o context builder mais enxuto.
+- [DONE] Unificar o registry global dos modulos do frontend (`SECFrontend`/`SEC_FRONTEND`), eliminando a regressao que escondia modulos novos do `app.js`.
 
-Active: ID-FE-92
+Active: ID-FE-93
 Risks: validar comportamento em dispositivos com storage bloqueado.

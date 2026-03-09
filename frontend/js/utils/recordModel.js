@@ -1,7 +1,8 @@
 (function (globalScope) {
   "use strict";
 
-  var root = globalScope.SEC_FRONTEND = globalScope.SEC_FRONTEND || {};
+  var root = globalScope.SECFrontend = globalScope.SECFrontend || globalScope.SEC_FRONTEND || {};
+  globalScope.SEC_FRONTEND = root;
 
   function shallowCloneObj(obj) {
     if (!obj || typeof obj !== "object") return {};
@@ -164,3 +165,4 @@
     deriveStatusForBackend: deriveStatusForBackend
   };
 })(window);
+

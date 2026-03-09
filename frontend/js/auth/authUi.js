@@ -1,7 +1,8 @@
 (function (globalScope) {
   "use strict";
 
-  var root = globalScope.SEC_FRONTEND = globalScope.SEC_FRONTEND || {};
+  var root = globalScope.SECFrontend = globalScope.SECFrontend || globalScope.SEC_FRONTEND || {};
+  globalScope.SEC_FRONTEND = root;
 
   function syncRegisterRoles(ctx) {
     if (!ctx.authRegisterRole) return;
@@ -105,3 +106,4 @@
     switchAuthMode: switchAuthMode
   };
 })(typeof window !== "undefined" ? window : globalThis);
+

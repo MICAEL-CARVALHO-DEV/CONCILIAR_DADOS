@@ -1,7 +1,8 @@
 (function (globalScope) {
   "use strict";
 
-  var root = globalScope.SEC_FRONTEND = globalScope.SEC_FRONTEND || {};
+  var root = globalScope.SECFrontend = globalScope.SECFrontend || globalScope.SEC_FRONTEND || {};
+  globalScope.SEC_FRONTEND = root;
 
   function buildPowerBiFilterOptions(rows, ctx) {
     var source = Array.isArray(rows) ? rows : [];
@@ -204,3 +205,4 @@
     buildPowerBiDashboardData: buildPowerBiDashboardData
   };
 })(typeof window !== "undefined" ? window : globalThis);
+

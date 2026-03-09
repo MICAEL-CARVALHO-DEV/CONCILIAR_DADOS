@@ -1,7 +1,8 @@
 (function (globalScope) {
   "use strict";
 
-  var root = globalScope.SEC_FRONTEND = globalScope.SEC_FRONTEND || {};
+  var root = globalScope.SECFrontend = globalScope.SECFrontend || globalScope.SEC_FRONTEND || {};
+  globalScope.SEC_FRONTEND = root;
 
   function isSupervisorUser(ctx) {
     return ctx.currentRole === "SUPERVISAO";
@@ -78,3 +79,4 @@
     canMutateRecords: canMutateRecords
   };
 })(typeof window !== "undefined" ? window : globalThis);
+

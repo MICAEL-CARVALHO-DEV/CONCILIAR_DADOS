@@ -1,7 +1,8 @@
 (function (globalScope) {
   "use strict";
 
-  var root = globalScope.SEC_FRONTEND = globalScope.SEC_FRONTEND || {};
+  var root = globalScope.SECFrontend = globalScope.SECFrontend || globalScope.SEC_FRONTEND || {};
+  globalScope.SEC_FRONTEND = root;
 
   function syncActiveUsersCache(records, ctx) {
     (records || []).forEach(function (rec) {
@@ -81,3 +82,4 @@
     saveState: saveState
   };
 })(typeof window !== "undefined" ? window : globalThis);
+

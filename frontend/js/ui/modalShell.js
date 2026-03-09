@@ -1,7 +1,8 @@
 (function (globalScope) {
   "use strict";
 
-  var root = globalScope.SEC_FRONTEND = globalScope.SEC_FRONTEND || {};
+  var root = globalScope.SECFrontend = globalScope.SECFrontend || globalScope.SEC_FRONTEND || {};
+  globalScope.SEC_FRONTEND = root;
 
   function refreshOpenModalAfterSave(rec, ctx) {
     if (!rec || !ctx.modal || !ctx.modal.classList.contains("show") || ctx.getSelectedId() !== rec.id) return;
@@ -164,3 +165,4 @@
     forceCloseModal: forceCloseModal
   };
 })(typeof window !== "undefined" ? window : globalThis);
+

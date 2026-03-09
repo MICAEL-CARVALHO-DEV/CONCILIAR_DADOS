@@ -1,7 +1,8 @@
 (function (globalScope) {
   "use strict";
 
-  var root = globalScope.SEC_FRONTEND = globalScope.SEC_FRONTEND || {};
+  var root = globalScope.SECFrontend = globalScope.SECFrontend || globalScope.SEC_FRONTEND || {};
+  globalScope.SEC_FRONTEND = root;
 
   async function exportOne(ctx) {
     var rec = ctx.getSelected();
@@ -64,3 +65,4 @@
     runCustomExport: runCustomExport
   };
 })(typeof window !== "undefined" ? window : globalThis);
+

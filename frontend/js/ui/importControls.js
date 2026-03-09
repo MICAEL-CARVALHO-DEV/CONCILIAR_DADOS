@@ -1,7 +1,8 @@
 (function (globalScope) {
   "use strict";
 
-  var root = globalScope.SEC_FRONTEND = globalScope.SEC_FRONTEND || {};
+  var root = globalScope.SECFrontend = globalScope.SECFrontend || globalScope.SEC_FRONTEND || {};
+  globalScope.SEC_FRONTEND = root;
 
   function pickRandom(arr) {
     if (!arr || !arr.length) return "";
@@ -121,3 +122,4 @@
     bindImportControls: bindImportControls
   };
 })(typeof window !== "undefined" ? window : globalThis);
+
