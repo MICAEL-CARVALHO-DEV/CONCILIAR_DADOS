@@ -4637,6 +4637,90 @@ function getAuthUiContext() {
   };
 }
 
+function resetBetaWorkspaceTabsState() {
+  betaWorkspaceTabTouched = false;
+  betaWorkspaceTab = getPreferredBetaWorkspaceTab();
+}
+
+function resetBetaAuditStateLocal() {
+  betaAuditRows = [];
+  betaAuditError = "";
+  betaAuditLoading = false;
+}
+
+function resetBetaSupportStateLocal() {
+  betaSupportThreads = [];
+  betaSupportMessages = [];
+  betaSupportError = "";
+  betaSupportMessagesError = "";
+  betaSupportLoading = false;
+  betaSupportMessagesLoading = false;
+}
+
+function readAuthenticatedProfileFromStore() {
+  const fn = getAuthStoreUtil("readAuthenticatedProfile");
+  return fn ? fn(AUTH_KEYS) : null;
+}
+
+function readLegacyAuthenticatedProfileFromStore() {
+  const fn = getAuthStoreUtil("readLegacyAuthenticatedProfile");
+  return fn ? fn(AUTH_KEYS) : null;
+}
+
+function writeAuthenticatedProfileToStore(profile) {
+  const fn = getAuthStoreUtil("writeAuthenticatedProfile");
+  if (fn) {
+    fn(profile, AUTH_KEYS);
+  }
+}
+
+function clearSessionAndProfileFromStore() {
+  const fn = getAuthStoreUtil("clearSessionAndProfile");
+  if (fn) {
+    fn(AUTH_KEYS);
+    return;
+  }
+  clearStoredSessionToken();
+}
+
+function readStoredSessionTokenFromStore() {
+  const fn = getAuthStoreUtil("readStoredSessionToken");
+  return fn ? fn(AUTH_KEYS) : "";
+}
+
+function writeStoredSessionTokenToStore(token) {
+  const fn = getAuthStoreUtil("writeStoredSessionToken");
+  if (fn) {
+    fn(token, AUTH_KEYS);
+  }
+}
+
+function clearStoredSessionTokenFromStore() {
+  const fn = getAuthStoreUtil("clearStoredSessionToken");
+  if (fn) {
+    fn(AUTH_KEYS);
+  }
+}
+
+function writeApiBaseUrlToStorage(value) {
+  writeStorageValue(localStorage, API_BASE_URL_KEY, value);
+}
+
+function detectLocalFrontendRuntimeContext() {
+  const moduleFn = getAuthGuardUtil("isLocalFrontendContext");
+  if (moduleFn) {
+    return moduleFn();
+  }
+  const host = (typeof window !== "undefined" && window.location && window.location.hostname)
+    ? String(window.location.hostname)
+    : "";
+  return !host || host === "localhost" || host === "127.0.0.1";
+}
+
+function rerenderBetaWorkspaceFiltered() {
+  renderBetaWorkspace(getFiltered());
+}
+
 function getAuthSessionContext() {
   return {
     authGate: authGate,
@@ -4666,32 +4750,11 @@ function getAuthSessionContext() {
       CURRENT_ROLE = value;
     },
     normalizeUserRole: normalizeUserRole,
-    resetBetaWorkspaceTabs: function () {
-      betaWorkspaceTabTouched = false;
-      betaWorkspaceTab = getPreferredBetaWorkspaceTab();
-    },
-    writeAuthenticatedProfile: function (profile) {
-      const writeAuthenticatedProfileUtil = getAuthStoreUtil("writeAuthenticatedProfile");
-      if (writeAuthenticatedProfileUtil) {
-        writeAuthenticatedProfileUtil(profile, AUTH_KEYS);
-      }
-    },
-    authStoreReadStoredSessionToken: function () {
-      const fn = getAuthStoreUtil("readStoredSessionToken");
-      return fn ? fn(AUTH_KEYS) : "";
-    },
-    authStoreWriteStoredSessionToken: function (token) {
-      const fn = getAuthStoreUtil("writeStoredSessionToken");
-      if (fn) {
-        fn(token, AUTH_KEYS);
-      }
-    },
-    authStoreClearStoredSessionToken: function () {
-      const fn = getAuthStoreUtil("clearStoredSessionToken");
-      if (fn) {
-        fn(AUTH_KEYS);
-      }
-    }
+    resetBetaWorkspaceTabs: resetBetaWorkspaceTabsState,
+    writeAuthenticatedProfile: writeAuthenticatedProfileToStore,
+    authStoreReadStoredSessionToken: readStoredSessionTokenFromStore,
+    authStoreWriteStoredSessionToken: writeStoredSessionTokenToStore,
+    authStoreClearStoredSessionToken: clearStoredSessionTokenFromStore
   };
 }
 
@@ -4739,56 +4802,16 @@ function getAuthFlowContext() {
     closeApiSocket: closeApiSocket,
     apiRequest: apiRequest,
     redirectToAuth: redirectToAuth,
-    writeApiBaseUrl: function (value) {
-      writeStorageValue(localStorage, API_BASE_URL_KEY, value);
-    },
-    detectLocalFrontendContext: function () {
-      const isLocalFrontendContextUtil = getAuthGuardUtil("isLocalFrontendContext");
-      if (isLocalFrontendContextUtil) {
-        return isLocalFrontendContextUtil();
-      }
-      const host = (typeof window !== "undefined" && window.location && window.location.hostname)
-        ? String(window.location.hostname)
-        : "";
-      return !host || host === "localhost" || host === "127.0.0.1";
-    },
-    clearSessionAndProfile: function () {
-      const clearSessionAndProfileUtil = getAuthStoreUtil("clearSessionAndProfile");
-      if (clearSessionAndProfileUtil) {
-        clearSessionAndProfileUtil(AUTH_KEYS);
-      } else {
-        clearStoredSessionToken();
-      }
-    },
+    writeApiBaseUrl: writeApiBaseUrlToStorage,
+    detectLocalFrontendContext: detectLocalFrontendRuntimeContext,
+    clearSessionAndProfile: clearSessionAndProfileFromStore,
     clearBetaAuditPolling: clearBetaAuditPolling,
     clearBetaSupportPolling: clearBetaSupportPolling,
-    resetBetaAuditState: function () {
-      betaAuditRows = [];
-      betaAuditError = "";
-      betaAuditLoading = false;
-    },
-    resetBetaSupportState: function () {
-      betaSupportThreads = [];
-      betaSupportMessages = [];
-      betaSupportError = "";
-      betaSupportMessagesError = "";
-      betaSupportLoading = false;
-      betaSupportMessagesLoading = false;
-    },
-    readAuthenticatedProfile: function () {
-      const readAuthenticatedProfileUtil = getAuthStoreUtil("readAuthenticatedProfile");
-      return readAuthenticatedProfileUtil ? readAuthenticatedProfileUtil(AUTH_KEYS) : null;
-    },
-    readLegacyAuthenticatedProfile: function () {
-      const readLegacyAuthenticatedProfileUtil = getAuthStoreUtil("readLegacyAuthenticatedProfile");
-      return readLegacyAuthenticatedProfileUtil ? readLegacyAuthenticatedProfileUtil(AUTH_KEYS) : null;
-    },
-    writeAuthenticatedProfile: function (profile) {
-      const writeAuthenticatedProfileUtil = getAuthStoreUtil("writeAuthenticatedProfile");
-      if (writeAuthenticatedProfileUtil) {
-        writeAuthenticatedProfileUtil(profile, AUTH_KEYS);
-      }
-    },
+    resetBetaAuditState: resetBetaAuditStateLocal,
+    resetBetaSupportState: resetBetaSupportStateLocal,
+    readAuthenticatedProfile: readAuthenticatedProfileFromStore,
+    readLegacyAuthenticatedProfile: readLegacyAuthenticatedProfileFromStore,
+    writeAuthenticatedProfile: writeAuthenticatedProfileToStore,
     getCurrentUser: function () {
       return CURRENT_USER;
     },
@@ -4802,10 +4825,7 @@ function getAuthFlowContext() {
       CURRENT_ROLE = value;
     },
     normalizeUserRole: normalizeUserRole,
-    resetBetaWorkspaceTabs: function () {
-      betaWorkspaceTabTouched = false;
-      betaWorkspaceTab = getPreferredBetaWorkspaceTab();
-    },
+    resetBetaWorkspaceTabs: resetBetaWorkspaceTabsState,
     render: render
   };
 }
@@ -4916,19 +4936,8 @@ function resetApiLinkedState(options) {
       clearBetaAuditPolling: clearBetaAuditPolling,
       clearBetaSupportPolling: clearBetaSupportPolling,
       clearApiStatePolling: clearApiStatePolling,
-      resetBetaAuditState: function () {
-        betaAuditRows = [];
-        betaAuditError = "";
-        betaAuditLoading = false;
-      },
-      resetBetaSupportState: function () {
-        betaSupportThreads = [];
-        betaSupportMessages = [];
-        betaSupportError = "";
-        betaSupportMessagesError = "";
-        betaSupportLoading = false;
-        betaSupportMessagesLoading = false;
-      },
+      resetBetaAuditState: resetBetaAuditStateLocal,
+      resetBetaSupportState: resetBetaSupportStateLocal,
       setApiOnline: function (nextOnline) {
         apiOnline = !!nextOnline;
       },
@@ -4943,15 +4952,8 @@ function resetApiLinkedState(options) {
   clearBetaAuditPolling();
   clearBetaSupportPolling();
   clearApiStatePolling();
-  betaAuditRows = [];
-  betaAuditError = "";
-  betaAuditLoading = false;
-  betaSupportThreads = [];
-  betaSupportMessages = [];
-  betaSupportError = "";
-  betaSupportMessagesError = "";
-  betaSupportLoading = false;
-  betaSupportMessagesLoading = false;
+  resetBetaAuditStateLocal();
+  resetBetaSupportStateLocal();
   apiOnline = Object.prototype.hasOwnProperty.call(opts, "apiOnline") ? !!opts.apiOnline : false;
   apiLastError = Object.prototype.hasOwnProperty.call(opts, "apiLastError") ? String(opts.apiLastError || "") : "";
 }
@@ -4978,9 +4980,7 @@ function getBetaHistoryContext() {
     describeApiAuditRow: describeApiAuditRow,
     describeEventForPanel: describeEventForPanel,
     getAuditYearValue: getAuditYearValue,
-    rerender: function () {
-      renderBetaWorkspace(getFiltered());
-    },
+    rerender: rerenderBetaWorkspaceFiltered,
     setAuditFilters: function (nextFilters) {
       betaAuditFilters = nextFilters;
     }
@@ -4999,9 +4999,7 @@ function getBetaPowerBiContext() {
     fmtMoney: fmtMoney,
     fmtDateTime: fmtDateTime,
     getDeputadoAvatarLetters: getDeputadoAvatarLetters,
-    rerender: function () {
-      renderBetaWorkspace(getFiltered());
-    },
+    rerender: rerenderBetaWorkspaceFiltered,
     setPowerBiFilters: function (nextFilters) {
       betaPowerBiFilters = nextFilters;
     }
