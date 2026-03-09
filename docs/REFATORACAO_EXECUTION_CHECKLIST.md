@@ -98,6 +98,7 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Extrair as acoes inline do `getUiShellBindingsContext()` (`exportOne`, `runExportAtuais`, `runExportHistorico`, `runCustomExport`) para `frontend/js/ui/uiShellActions.js`, deixando o context builder mais enxuto.
 - [DONE] Unificar o registry global dos modulos do frontend (`SECFrontend`/`SEC_FRONTEND`), eliminando a regressao que escondia modulos novos do `app.js`.
 - [DONE] Consolidar helpers nomeados para auth/beta state no `app.js` (`resetBeta...`, auth store bridge, rerender beta), reduzindo closures repetidas nos context builders de sessao, flow e historico/Power BI.
+- [DONE] Consolidar helpers nomeados para UI shell, modais auxiliares e pendencias no `app.js`, reduzindo closures repetidas em `getUiShellBindingsContext`, `getAuxModalContext` e `getPendingUsersContext`.
 
-Active: ID-FE-94
+Active: ID-FE-95
 Risks: validar comportamento em dispositivos com storage bloqueado.
