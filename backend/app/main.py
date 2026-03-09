@@ -1,12 +1,11 @@
 import asyncio
 from datetime import datetime
-import json
 import re
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect, status
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response, WebSocket, status
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import inspect, or_, text
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
 from .core.dependencies import _actor_from_headers, _actor_optional_from_headers, _require_manager, _require_monitor, _require_owner
@@ -19,7 +18,7 @@ from .core.security import (
 )
 from .ai_schemas import AIProviderStatusResponse, AIWorkflowRequest, AIWorkflowResponse
 from .db import Base, SessionLocal, engine, get_db
-from .models import Emenda, ExportLog, Historico, ImportLinha, ImportLote, SupportMessage, SupportThread
+from .models import Emenda
 from .schemas import (
     AuthGoogleIn,
     AuthAuditLogOut,
@@ -44,8 +43,6 @@ from .schemas import (
     ROLES,
     SupportMessageCreate,
     SupportMessageOut,
-    SUPPORT_CATEGORIES,
-    SUPPORT_THREAD_STATUS,
     SupportThreadCreate,
     SupportThreadOut,
     SupportThreadStatusUpdate,
@@ -53,7 +50,7 @@ from .schemas import (
     UserOut,
     UserStatusUpdate,
 )
-from .services import auth_service, emenda_service
+from .services import audit_service, auth_service, emenda_service, import_export_service, realtime_service, support_service
 from .services.ai_orchestrator import AIOrchestrator, OrchestrationError
 from .settings import settings
 
@@ -70,131 +67,11 @@ app.add_middleware(
 ai_orchestrator = AIOrchestrator(settings)
 
 VERSIONED_ID_RE = re.compile(r"^(?P<base>.+)-v(?P<num>\d+)$", re.IGNORECASE)
-
-
-class WsConnectionBroker:
-    def __init__(self) -> None:
-        self._connections: set[WebSocket] = set()
-        self._lock = asyncio.Lock()
-
-    async def connect(self, websocket: WebSocket) -> None:
-        await websocket.accept()
-        async with self._lock:
-            self._connections.add(websocket)
-
-    async def disconnect(self, websocket: WebSocket) -> None:
-        async with self._lock:
-            self._connections.discard(websocket)
-
-    async def broadcast(self, payload: dict) -> None:
-        async with self._lock:
-            targets = list(self._connections)
-
-        dead: list[WebSocket] = []
-        for ws in targets:
-            try:
-                await ws.send_json(payload)
-            except Exception:
-                dead.append(ws)
-
-        if dead:
-            async with self._lock:
-                for ws in dead:
-                    self._connections.discard(ws)
-
-
-class PresenceBroker:
-    def __init__(self) -> None:
-        self._by_emenda: dict[int, dict[WebSocket, dict]] = {}
-        self._by_socket: dict[WebSocket, set[int]] = {}
-        self._lock = asyncio.Lock()
-
-    @staticmethod
-    def _normalize_info(actor: dict) -> dict:
-        return {
-            "usuario_nome": str(actor.get("name") or "-"),
-            "setor": str(actor.get("role") or "-"),
-            "at": _utcnow().isoformat() + "Z",
-        }
-
-    @staticmethod
-    def _snapshot_from_bucket(bucket: dict[WebSocket, dict]) -> list[dict]:
-        dedup: dict[str, dict] = {}
-        for info in bucket.values():
-            key = f"{info.get('usuario_nome', '-')}|{info.get('setor', '-')}"
-            prev = dedup.get(key)
-            if prev is None or str(info.get("at") or "") > str(prev.get("at") or ""):
-                dedup[key] = {
-                    "usuario_nome": str(info.get("usuario_nome") or "-"),
-                    "setor": str(info.get("setor") or "-"),
-                    "at": str(info.get("at") or ""),
-                }
-        return sorted(
-            list(dedup.values()),
-            key=lambda item: (str(item.get("setor") or ""), str(item.get("usuario_nome") or "")),
-        )
-
-    async def join(self, websocket: WebSocket, emenda_id: int, actor: dict) -> list[dict]:
-        if emenda_id <= 0:
-            return []
-        async with self._lock:
-            bucket = self._by_emenda.setdefault(emenda_id, {})
-            bucket[websocket] = self._normalize_info(actor)
-            self._by_socket.setdefault(websocket, set()).add(emenda_id)
-            return self._snapshot_from_bucket(bucket)
-
-    async def leave(self, websocket: WebSocket, emenda_id: int) -> list[dict]:
-        if emenda_id <= 0:
-            return []
-        async with self._lock:
-            bucket = self._by_emenda.get(emenda_id)
-            if not bucket:
-                return []
-
-            bucket.pop(websocket, None)
-            socket_emendas = self._by_socket.get(websocket)
-            if socket_emendas is not None:
-                socket_emendas.discard(emenda_id)
-                if not socket_emendas:
-                    self._by_socket.pop(websocket, None)
-
-            if not bucket:
-                self._by_emenda.pop(emenda_id, None)
-                return []
-
-            return self._snapshot_from_bucket(bucket)
-
-    async def disconnect(self, websocket: WebSocket) -> dict[int, list[dict]]:
-        changes: dict[int, list[dict]] = {}
-        async with self._lock:
-            emenda_ids = list(self._by_socket.pop(websocket, set()))
-            for emenda_id in emenda_ids:
-                bucket = self._by_emenda.get(emenda_id)
-                if not bucket:
-                    continue
-                bucket.pop(websocket, None)
-                if not bucket:
-                    self._by_emenda.pop(emenda_id, None)
-                    changes[emenda_id] = []
-                else:
-                    changes[emenda_id] = self._snapshot_from_bucket(bucket)
-        return changes
-
-
-ws_broker = WsConnectionBroker()
-presence_broker = PresenceBroker()
 def _utcnow() -> datetime:
     return datetime.utcnow()
 
-
-def _presence_payload(emenda_id: int, users: list[dict]) -> dict:
-    return {
-        "type": "presence",
-        "entity": "emenda",
-        "id": emenda_id,
-        "users": users,
-        "at": _utcnow().isoformat() + "Z",
-    }
+ws_broker = realtime_service.WsConnectionBroker()
+presence_broker = realtime_service.PresenceBroker(_utcnow)
 
 
 def _resolve_event_origin(origin_raw: str | None, actor: dict | None = None, fallback: str = "API") -> str:
@@ -370,19 +247,8 @@ def _versioned_id_interno(base_id: str, version_num: int, db: Session) -> str:
             return candidate
         version += 1
 
-
-
-def _update_payload(entity: str, entity_id: int | None) -> dict:
-    return {
-        "type": "update",
-        "entity": entity,
-        "id": entity_id,
-        "at": _utcnow().isoformat() + "Z",
-    }
-
-
 async def _broadcast_update_async(entity: str, entity_id: int | None) -> None:
-    await ws_broker.broadcast(_update_payload(entity, entity_id))
+    await ws_broker.broadcast(realtime_service.build_update_payload(entity, entity_id, _utcnow))
 
 
 def _broadcast_update(entity: str, entity_id: int | None) -> None:
@@ -658,32 +524,14 @@ def criar_lote_importacao(
     actor: dict = Depends(_require_manager),
     db: Session = Depends(get_db),
 ):
-    lote = ImportLote(
-        arquivo_nome=payload.arquivo_nome,
-        arquivo_hash=payload.arquivo_hash or "",
-        linhas_lidas=max(0, int(payload.linhas_lidas or 0)),
-        linhas_validas=max(0, int(payload.linhas_validas or 0)),
-        linhas_ignoradas=max(0, int(payload.linhas_ignoradas or 0)),
-        registros_criados=max(0, int(payload.registros_criados or 0)),
-        registros_atualizados=max(0, int(payload.registros_atualizados or 0)),
-        sem_alteracao=max(0, int(payload.sem_alteracao or 0)),
-        duplicidade_id=max(0, int(payload.duplicidade_id or 0)),
-        duplicidade_ref=max(0, int(payload.duplicidade_ref or 0)),
-        duplicidade_arquivo=max(0, int(payload.duplicidade_arquivo or 0)),
-        conflito_id_ref=max(0, int(payload.conflito_id_ref or 0)),
-        abas_lidas=" | ".join([x for x in (payload.abas_lidas or []) if str(x).strip()]),
-        observacao=payload.observacao or "",
-        origem_evento=_resolve_event_origin(payload.origem_evento, actor, fallback="IMPORT"),
-        usuario_id=actor.get("id"),
-        usuario_nome=actor.get("name") or "",
-        setor=actor.get("role") or "",
-        created_at=_utcnow(),
+    return import_export_service.create_import_lot_service(
+        payload=payload,
+        actor=actor,
+        db=db,
+        resolve_event_origin=_resolve_event_origin,
+        utcnow=_utcnow,
+        broadcast_update=_broadcast_update,
     )
-    db.add(lote)
-    db.commit()
-    db.refresh(lote)
-    _broadcast_update("import_lote", lote.id)
-    return {"ok": True, "id": lote.id}
 
 
 @app.get("/imports/lotes", response_model=list[ImportLoteOut])
@@ -692,7 +540,7 @@ def listar_lotes_importacao(
     _actor: dict = Depends(_require_manager),
     db: Session = Depends(get_db),
 ):
-    return db.query(ImportLote).order_by(ImportLote.created_at.desc(), ImportLote.id.desc()).limit(limit).all()
+    return import_export_service.list_import_lots_service(limit=limit, db=db)
 
 
 @app.post("/imports/linhas/bulk")
@@ -701,35 +549,12 @@ def criar_linhas_importacao(
     actor: dict = Depends(_require_manager),
     db: Session = Depends(get_db),
 ):
-    lote = db.get(ImportLote, payload.lote_id)
-    if not lote:
-        raise HTTPException(status_code=404, detail="lote de importacao nao encontrado")
-
-    linhas = payload.linhas or []
-    if not linhas:
-        return {"ok": True, "inserted": 0}
-
-    inserted = 0
-    now = _utcnow()
-    for ln in linhas:
-        db.add(
-            ImportLinha(
-                lote_id=lote.id,
-                ordem=max(0, int(ln.ordem or 0)),
-                sheet_name=(ln.sheet_name or "")[:120],
-                row_number=max(0, int(ln.row_number or 0)),
-                status_linha=(ln.status_linha or "UNCHANGED").upper(),
-                id_interno=(ln.id_interno or "")[:60],
-                ref_key=(ln.ref_key or "")[:255],
-                mensagem=ln.mensagem or "",
-                created_at=now,
-            )
-        )
-        inserted += 1
-
-    db.commit()
-    _broadcast_update("import_linha", lote.id)
-    return {"ok": True, "inserted": inserted}
+    return import_export_service.create_import_lines_service(
+        payload=payload,
+        db=db,
+        utcnow=_utcnow,
+        broadcast_update=_broadcast_update,
+    )
 
 
 @app.get("/imports/linhas", response_model=list[ImportLinhaOut])
@@ -739,13 +564,7 @@ def listar_linhas_importacao(
     _actor: dict = Depends(_require_manager),
     db: Session = Depends(get_db),
 ):
-    return (
-        db.query(ImportLinha)
-        .filter(ImportLinha.lote_id == lote_id)
-        .order_by(ImportLinha.ordem.asc(), ImportLinha.id.asc())
-        .limit(limit)
-        .all()
-    )
+    return import_export_service.list_import_lines_service(lote_id=lote_id, limit=limit, db=db)
 
 
 @app.post("/exports/logs")
@@ -754,27 +573,14 @@ def criar_log_exportacao(
     actor: dict = Depends(_actor_from_headers),
     db: Session = Depends(get_db),
 ):
-    log = ExportLog(
-        formato=payload.formato,
-        arquivo_nome=payload.arquivo_nome,
-        quantidade_registros=max(0, int(payload.quantidade_registros or 0)),
-        quantidade_eventos=max(0, int(payload.quantidade_eventos or 0)),
-        filtros_json=payload.filtros_json or "",
-        modo_headers=(payload.modo_headers or "normalizados")[:30],
-        escopo_exportacao=(payload.escopo_exportacao or "ATUAIS")[:20],
-        round_trip_ok=payload.round_trip_ok,
-        round_trip_issues=" | ".join([x for x in (payload.round_trip_issues or []) if str(x).strip()]),
-        origem_evento=_resolve_event_origin(payload.origem_evento, actor, fallback="EXPORT"),
-        usuario_id=actor.get("id"),
-        usuario_nome=actor.get("name") or "",
-        setor=actor.get("role") or "",
-        created_at=_utcnow(),
+    return import_export_service.create_export_log_service(
+        payload=payload,
+        actor=actor,
+        db=db,
+        resolve_event_origin=_resolve_event_origin,
+        utcnow=_utcnow,
+        broadcast_update=_broadcast_update,
     )
-    db.add(log)
-    db.commit()
-    db.refresh(log)
-    _broadcast_update("export_log", log.id)
-    return {"ok": True, "id": log.id}
 
 
 @app.get("/exports/logs", response_model=list[ExportLogOut])
@@ -783,7 +589,7 @@ def listar_logs_exportacao(
     _actor: dict = Depends(_require_manager),
     db: Session = Depends(get_db),
 ):
-    return db.query(ExportLog).order_by(ExportLog.created_at.desc(), ExportLog.id.desc()).limit(limit).all()
+    return import_export_service.list_export_logs_service(limit=limit, db=db)
 
 
 @app.get("/audit")
@@ -799,126 +605,18 @@ def audit_log(
     _actor: dict = Depends(_require_monitor),
     db: Session = Depends(get_db),
 ):
-    query = db.query(Historico, Emenda).join(Emenda, Historico.emenda_id == Emenda.id)
-
-    if ano is not None:
-        start = datetime(ano, mes or 1, 1)
-        if mes is not None:
-          end = datetime(ano + 1, 1, 1) if mes == 12 else datetime(ano, mes + 1, 1)
-        else:
-          end = datetime(ano + 1, 1, 1)
-        query = query.filter(Historico.data_hora >= start, Historico.data_hora < end)
-
-    if usuario:
-        query = query.filter(Historico.usuario_nome.ilike(f"%{usuario.strip()}%"))
-    if setor:
-        query = query.filter(Historico.setor.ilike(f"%{setor.strip()}%"))
-    if tipo_evento:
-        query = query.filter(Historico.tipo_evento.ilike(f"%{tipo_evento.strip()}%"))
-    if origem_evento:
-        query = query.filter(Historico.origem_evento.ilike(f"%{origem_evento.strip()}%"))
-    if q:
-        pattern = f"%{q.strip()}%"
-        query = query.filter(
-            or_(
-                Historico.usuario_nome.ilike(pattern),
-                Historico.setor.ilike(pattern),
-                Historico.tipo_evento.ilike(pattern),
-                Historico.origem_evento.ilike(pattern),
-                Historico.campo_alterado.ilike(pattern),
-                Historico.valor_antigo.ilike(pattern),
-                Historico.valor_novo.ilike(pattern),
-                Historico.motivo.ilike(pattern),
-                Emenda.identificacao.ilike(pattern),
-                Emenda.deputado.ilike(pattern),
-                Emenda.municipio.ilike(pattern),
-                Emenda.cod_acao.ilike(pattern),
-                Emenda.descricao_acao.ilike(pattern),
-            )
-        )
-
-    rows = query.order_by(Historico.data_hora.desc(), Historico.id.desc()).limit(limit).all()
-    response: list[dict] = []
-    for hist, emenda in rows:
-        old_value_masked, new_value_masked = _mask_history_pair(hist.campo_alterado, hist.valor_antigo, hist.valor_novo)
-        response.append(
-            {
-                "id": hist.id,
-                "emenda_id": hist.emenda_id,
-                "emenda_identificacao": emenda.identificacao,
-                "emenda_ano": emenda.ano,
-                "emenda_municipio": emenda.municipio,
-                "emenda_deputado": emenda.deputado,
-                "usuario_id": hist.usuario_id,
-                "usuario_nome": hist.usuario_nome,
-                "setor": hist.setor,
-                "tipo_evento": hist.tipo_evento,
-                "origem_evento": hist.origem_evento,
-                "campo_alterado": hist.campo_alterado,
-                "valor_antigo": old_value_masked,
-                "valor_novo": new_value_masked,
-                "motivo": hist.motivo,
-                "data_hora": hist.data_hora,
-            }
-        )
-    return response
-
-
-SUPPORT_MANAGER_ROLES = {"SUPERVISAO", "POWERBI", "PROGRAMADOR"}
-
-
-def _is_support_manager(actor: dict | None) -> bool:
-    return str((actor or {}).get("role") or "").strip().upper() in SUPPORT_MANAGER_ROLES
-
-
-def _support_actor_matches_thread(thread: SupportThread, actor: dict | None) -> bool:
-    if not thread or not actor:
-        return False
-    actor_id = actor.get("id")
-    if actor_id is not None and thread.usuario_id is not None:
-        try:
-            return int(actor_id) == int(thread.usuario_id)
-        except Exception:
-            pass
-    actor_name = str(actor.get("name") or "").strip().lower()
-    actor_role = str(actor.get("role") or "").strip().upper()
-    return actor_name == str(thread.usuario_nome or "").strip().lower() and actor_role == str(thread.setor or "").strip().upper()
-
-
-def _ensure_support_thread_access(thread: SupportThread, actor: dict) -> None:
-    if _is_support_manager(actor):
-        return
-    if _support_actor_matches_thread(thread, actor):
-        return
-    raise HTTPException(status_code=403, detail="sem acesso a este chamado")
-
-
-def _support_origin(actor: dict) -> str:
-    return "SUPORTE" if _is_support_manager(actor) else "USUARIO"
-
-
-def _support_preview(message: str, limit: int = 220) -> str:
-    clean = " ".join(str(message or "").split())
-    if len(clean) <= limit:
-        return clean
-    return clean[: max(0, limit - 3)] + "..."
-
-
-def _touch_support_thread(thread: SupportThread, actor: dict, message: str, explicit_status: str | None = None) -> None:
-    now = _utcnow()
-    thread.updated_at = now
-    thread.last_message_at = now
-    thread.last_actor_nome = str(actor.get("name") or "")
-    thread.last_actor_role = str(actor.get("role") or "")
-    thread.last_message_preview = _support_preview(message)
-    if explicit_status:
-        thread.status = explicit_status
-        return
-    if _is_support_manager(actor):
-        if thread.status != "FECHADO":
-            thread.status = "RESPONDIDO"
-    else:
-        thread.status = "ABERTO"
+    return audit_service.list_audit_log_service(
+        limit=limit,
+        ano=ano,
+        mes=mes,
+        usuario=usuario,
+        setor=setor,
+        tipo_evento=tipo_evento,
+        origem_evento=origem_evento,
+        q=q,
+        db=db,
+        mask_history_pair=_mask_history_pair,
+    )
 
 
 @app.get("/support/threads", response_model=list[SupportThreadOut])
@@ -932,45 +630,15 @@ def list_support_threads(
     actor: dict = Depends(_actor_from_headers),
     db: Session = Depends(get_db),
 ):
-    query = db.query(SupportThread)
-
-    if not _is_support_manager(actor) or mine_only:
-        actor_id = actor.get("id")
-        if actor_id is not None:
-            query = query.filter(SupportThread.usuario_id == actor_id)
-        else:
-            query = query.filter(
-                SupportThread.usuario_nome == str(actor.get("name") or ""),
-                SupportThread.setor == str(actor.get("role") or ""),
-            )
-
-    if status:
-        value = str(status).strip().upper()
-        if value not in SUPPORT_THREAD_STATUS:
-            raise HTTPException(status_code=400, detail="status invalido")
-        query = query.filter(SupportThread.status == value)
-    if categoria:
-        value = str(categoria).strip().upper()
-        if value not in SUPPORT_CATEGORIES:
-            raise HTTPException(status_code=400, detail="categoria invalida")
-        query = query.filter(SupportThread.categoria == value)
-    if usuario:
-        query = query.filter(SupportThread.usuario_nome.ilike(f"%{str(usuario).strip()}%"))
-    if q:
-        pattern = f"%{str(q).strip()}%"
-        query = query.filter(
-            or_(
-                SupportThread.subject.ilike(pattern),
-                SupportThread.last_message_preview.ilike(pattern),
-                SupportThread.usuario_nome.ilike(pattern),
-                SupportThread.setor.ilike(pattern),
-            )
-        )
-
-    return (
-        query.order_by(SupportThread.last_message_at.desc(), SupportThread.id.desc())
-        .limit(limit)
-        .all()
+    return support_service.list_support_threads_service(
+        limit=limit,
+        status=status,
+        categoria=categoria,
+        usuario=usuario,
+        q=q,
+        mine_only=mine_only,
+        actor=actor,
+        db=db,
     )
 
 
@@ -980,39 +648,13 @@ def create_support_thread(
     actor: dict = Depends(_actor_from_headers),
     db: Session = Depends(get_db),
 ):
-    now = _utcnow()
-    thread = SupportThread(
-        subject=str(payload.subject or "").strip(),
-        categoria=str(payload.categoria or "OUTRO").strip().upper(),
-        status="ABERTO",
-        emenda_id=payload.emenda_id,
-        usuario_id=actor.get("id"),
-        usuario_nome=str(actor.get("name") or ""),
-        setor=str(actor.get("role") or ""),
-        last_actor_nome=str(actor.get("name") or ""),
-        last_actor_role=str(actor.get("role") or ""),
-        last_message_preview=_support_preview(payload.mensagem),
-        created_at=now,
-        updated_at=now,
-        last_message_at=now,
+    return support_service.create_support_thread_service(
+        payload=payload,
+        actor=actor,
+        db=db,
+        utcnow=_utcnow,
+        broadcast_update=_broadcast_update,
     )
-    db.add(thread)
-    db.flush()
-
-    message = SupportMessage(
-        thread_id=thread.id,
-        usuario_id=actor.get("id"),
-        usuario_nome=str(actor.get("name") or ""),
-        setor=str(actor.get("role") or ""),
-        origem=_support_origin(actor),
-        mensagem=str(payload.mensagem or "").strip(),
-        created_at=now,
-    )
-    db.add(message)
-    db.commit()
-    db.refresh(thread)
-    _broadcast_update("support_thread", thread.id)
-    return thread
 
 
 @app.get("/support/threads/{thread_id}/messages", response_model=list[SupportMessageOut])
@@ -1021,16 +663,7 @@ def list_support_messages(
     actor: dict = Depends(_actor_from_headers),
     db: Session = Depends(get_db),
 ):
-    thread = db.get(SupportThread, thread_id)
-    if not thread:
-        raise HTTPException(status_code=404, detail="chamado nao encontrado")
-    _ensure_support_thread_access(thread, actor)
-    return (
-        db.query(SupportMessage)
-        .filter(SupportMessage.thread_id == thread_id)
-        .order_by(SupportMessage.created_at.asc(), SupportMessage.id.asc())
-        .all()
-    )
+    return support_service.list_support_messages_service(thread_id=thread_id, actor=actor, db=db)
 
 
 @app.post("/support/threads/{thread_id}/messages", response_model=SupportMessageOut)
@@ -1040,27 +673,14 @@ def create_support_message(
     actor: dict = Depends(_actor_from_headers),
     db: Session = Depends(get_db),
 ):
-    thread = db.get(SupportThread, thread_id)
-    if not thread:
-        raise HTTPException(status_code=404, detail="chamado nao encontrado")
-    _ensure_support_thread_access(thread, actor)
-
-    now = _utcnow()
-    message = SupportMessage(
-        thread_id=thread.id,
-        usuario_id=actor.get("id"),
-        usuario_nome=str(actor.get("name") or ""),
-        setor=str(actor.get("role") or ""),
-        origem=_support_origin(actor),
-        mensagem=str(payload.mensagem or "").strip(),
-        created_at=now,
+    return support_service.create_support_message_service(
+        thread_id=thread_id,
+        payload=payload,
+        actor=actor,
+        db=db,
+        utcnow=_utcnow,
+        broadcast_update=_broadcast_update,
     )
-    db.add(message)
-    _touch_support_thread(thread, actor, message.mensagem)
-    db.commit()
-    db.refresh(message)
-    _broadcast_update("support_thread", thread.id)
-    return message
 
 
 @app.patch("/support/threads/{thread_id}/status", response_model=SupportThreadOut)
@@ -1070,99 +690,28 @@ def update_support_thread_status(
     actor: dict = Depends(_actor_from_headers),
     db: Session = Depends(get_db),
 ):
-    if not _is_support_manager(actor):
-        raise HTTPException(status_code=403, detail="apenas suporte pode alterar status do chamado")
-    thread = db.get(SupportThread, thread_id)
-    if not thread:
-        raise HTTPException(status_code=404, detail="chamado nao encontrado")
-
-    _touch_support_thread(thread, actor, f"Status do chamado definido para {payload.status}.", explicit_status=payload.status)
-    db.commit()
-    db.refresh(thread)
-    _broadcast_update("support_thread", thread.id)
-    return thread
+    return support_service.update_support_thread_status_service(
+        thread_id=thread_id,
+        payload=payload,
+        actor=actor,
+        db=db,
+        utcnow=_utcnow,
+        broadcast_update=_broadcast_update,
+    )
 
 
 @app.websocket("/ws")
 async def websocket_updates(websocket: WebSocket):
-    actor = {
-        "id": None,
-        "name": (websocket.query_params.get("user_name") or "anon").strip() or "anon",
-        "role": (websocket.query_params.get("user_role") or "-").strip().upper() or "-",
-        "auth_type": "disabled",
-    }
-
-    if settings.API_AUTH_ENABLED:
-        token = (websocket.query_params.get("token") or "").strip()
-        if not token:
-            await websocket.close(code=1008)
-            return
-
-        db = SessionLocal()
-        try:
-            actor = _actor_from_bearer_token(token, db) or _actor_from_legacy_session(token, db)
-        finally:
-            db.close()
-
-        if not actor:
-            await websocket.close(code=1008)
-            return
-
-    await ws_broker.connect(websocket)
-    await websocket.send_json({
-        "type": "ready",
-        "entity": "ws",
-        "id": None,
-        "at": _utcnow().isoformat() + "Z",
-    })
-
-    try:
-        while True:
-            data = await websocket.receive_text()
-            if data and data.strip().lower() == "ping":
-                await websocket.send_json({
-                    "type": "pong",
-                    "entity": "ws",
-                    "id": None,
-                    "at": _utcnow().isoformat() + "Z",
-                })
-                continue
-
-            payload = None
-            try:
-                payload = json.loads(data or "")
-            except Exception:
-                payload = None
-
-            if not isinstance(payload, dict):
-                continue
-
-            msg_type = str(payload.get("type") or "").strip().lower()
-            if msg_type != "presence":
-                continue
-
-            action = str(payload.get("action") or "").strip().lower()
-            emenda_id = int(payload.get("emenda_id") or 0)
-            if emenda_id <= 0:
-                continue
-
-            if action == "join":
-                users = await presence_broker.join(websocket, emenda_id, actor)
-            elif action == "leave":
-                users = await presence_broker.leave(websocket, emenda_id)
-            else:
-                continue
-
-            await ws_broker.broadcast(_presence_payload(emenda_id, users))
-    except WebSocketDisconnect:
-        pass
-    except Exception:
-        pass
-    finally:
-        await ws_broker.disconnect(websocket)
-        changes = await presence_broker.disconnect(websocket)
-        for emenda_id, users in changes.items():
-            await ws_broker.broadcast(_presence_payload(emenda_id, users))
+    await realtime_service.websocket_updates_service(
+        websocket=websocket,
+        api_auth_enabled=settings.API_AUTH_ENABLED,
+        session_factory=SessionLocal,
+        actor_from_bearer_token=_actor_from_bearer_token,
+        actor_from_legacy_session=_actor_from_legacy_session,
+        utcnow=_utcnow,
+        ws_broker=ws_broker,
+        presence_broker=presence_broker,
+    )
 
 
 
