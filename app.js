@@ -80,6 +80,7 @@ const exportTemplateWriterUtils = SEC_FRONTEND.exportTemplateWriterUtils || null
 const exportDataUtils = SEC_FRONTEND.exportDataUtils || null;
 const importReportUtils = SEC_FRONTEND.importReportUtils || null;
 const betaHistoryUtils = SEC_FRONTEND.betaHistoryUtils || null;
+const betaPowerBiUtils = SEC_FRONTEND.betaPowerBiUtils || null;
 const betaSupportUtils = SEC_FRONTEND.betaSupportUtils || null;
 const authStore = SEC_FRONTEND.authStore || null;
 const authGuard = SEC_FRONTEND.authGuard || null;
@@ -627,6 +628,12 @@ function getBetaSupportUtil(methodName) {
 function getBetaHistoryUtil(methodName) {
   if (!betaHistoryUtils) return null;
   const method = betaHistoryUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getBetaPowerBiUtil(methodName) {
+  if (!betaPowerBiUtils) return null;
+  const method = betaPowerBiUtils[methodName];
   return typeof method === "function" ? method : null;
 }
 
@@ -4586,6 +4593,27 @@ function getBetaHistoryContext() {
   };
 }
 
+function getBetaPowerBiContext() {
+  return {
+    filters: betaPowerBiFilters,
+    filterDefaults: BETA_POWERBI_FILTER_DEFAULTS,
+    clearNodeChildren: clearNodeChildren,
+    buildPowerBiDashboardData: buildPowerBiDashboardData,
+    exportExecutiveDashboardReport: exportExecutiveDashboardReport,
+    extractApiError: extractApiError,
+    setSelectOptions: setSelectOptions,
+    fmtMoney: fmtMoney,
+    fmtDateTime: fmtDateTime,
+    getDeputadoAvatarLetters: getDeputadoAvatarLetters,
+    rerender: function () {
+      renderBetaWorkspace(getFiltered());
+    },
+    setPowerBiFilters: function (nextFilters) {
+      betaPowerBiFilters = nextFilters;
+    }
+  };
+}
+
 function renderBetaSupportPanel(target, filteredRows) {
   const moduleFn = getBetaSupportUtil("renderBetaSupportPanel");
   if (moduleFn) {
@@ -4949,359 +4977,16 @@ async function exportExecutiveDashboardReport(filteredRows) {
 }
 
 function renderBetaPowerBiPanel(target, filteredRows) {
+  const moduleFn = getBetaPowerBiUtil("renderBetaPowerBiPanel");
+  if (moduleFn) {
+    return moduleFn(target, filteredRows, getBetaPowerBiContext());
+  }
+
   clearNodeChildren(target);
-
-  const model = buildPowerBiDashboardData(filteredRows);
-  const sourceRows = model.sourceRows;
-  const filterOptions = model.filterOptions;
-  const rows = model.rows;
-  const scopedAuditRows = model.scopedAuditRows;
-  const isExecutiveRole = model.isExecutiveRole;
-  const summary = model.summary;
-  const byDeputado = model.byDeputado;
-  const byMunicipio = model.byMunicipio;
-  const byStatus = model.byStatus;
-  const byUser = model.byUser;
-
-  const intro = document.createElement("div");
-  intro.className = "beta-panel-card";
-  const introTitle = document.createElement("h4");
-  introTitle.textContent = "Dashboard executivo da operacao";
-  const introText = document.createElement("p");
-  introText.className = "muted small";
-  introText.textContent = isExecutiveRole
-    ? "Leitura executiva habilitada para supervisao, Power BI e dono. Acoes sensiveis continuam sob governanca do PROGRAMADOR."
-    : "Visao compartilhada em leitura. O detalhamento executivo e a governanca operacional continuam centralizados em SUPERVISAO, POWERBI e PROGRAMADOR.";
-  intro.appendChild(introTitle);
-  intro.appendChild(introText);
-  if (isExecutiveRole) {
-    const executiveActions = document.createElement("div");
-    executiveActions.className = "beta-history-filter-actions";
-    executiveActions.style.marginTop = "10px";
-    const exportBtn = document.createElement("button");
-    exportBtn.className = "btn primary";
-    exportBtn.type = "button";
-    exportBtn.textContent = "Exportar relatorio executivo";
-    exportBtn.addEventListener("click", function () {
-      exportExecutiveDashboardReport(filteredRows).catch(function (err) {
-        alert(extractApiError(err, "Falha ao exportar relatorio executivo."));
-      });
-    });
-    executiveActions.appendChild(exportBtn);
-    intro.appendChild(executiveActions);
-  }
-  target.appendChild(intro);
-
-  const filterWrap = document.createElement("div");
-  filterWrap.className = "filters beta-dashboard-filters";
-
-  function appendSelectField(labelText, items, currentValue) {
-    const field = document.createElement("div");
-    field.className = "field";
-    const label = document.createElement("label");
-    label.textContent = labelText;
-    const select = document.createElement("select");
-    setSelectOptions(select, [{ label: "Todos", value: "" }].concat(items.map(function (value) {
-      return { label: value, value: value };
-    })), currentValue || "");
-    field.appendChild(label);
-    field.appendChild(select);
-    filterWrap.appendChild(field);
-    return select;
-  }
-
-  const deputadoSelect = appendSelectField("Deputado", filterOptions.deputados, betaPowerBiFilters.deputado);
-  const municipioSelect = appendSelectField("Municipio", filterOptions.municipios, betaPowerBiFilters.municipio);
-  const statusSelect = appendSelectField("Status atual", filterOptions.statuses, betaPowerBiFilters.status);
-
-  const searchField = document.createElement("div");
-  searchField.className = "field grow";
-  const searchLabel = document.createElement("label");
-  searchLabel.textContent = "Busca no dashboard";
-  const searchInput = document.createElement("input");
-  searchInput.type = "text";
-  searchInput.placeholder = "emenda, deputado, municipio, acao, plano...";
-  searchInput.value = betaPowerBiFilters.q || "";
-  searchField.appendChild(searchLabel);
-  searchField.appendChild(searchInput);
-  filterWrap.appendChild(searchField);
-
-  const actionField = document.createElement("div");
-  actionField.className = "field";
-  const actionLabel = document.createElement("label");
-  actionLabel.textContent = "Acoes";
-  const actionWrap = document.createElement("div");
-  actionWrap.className = "beta-history-filter-actions";
-  const applyBtn = document.createElement("button");
-  applyBtn.className = "btn primary";
-  applyBtn.type = "button";
-  applyBtn.textContent = "Aplicar";
-  const clearBtn = document.createElement("button");
-  clearBtn.className = "btn";
-  clearBtn.type = "button";
-  clearBtn.textContent = "Limpar";
-  actionWrap.appendChild(applyBtn);
-  actionWrap.appendChild(clearBtn);
-  actionField.appendChild(actionLabel);
-  actionField.appendChild(actionWrap);
-  filterWrap.appendChild(actionField);
-
-  applyBtn.addEventListener("click", function () {
-    betaPowerBiFilters = {
-      deputado: String(deputadoSelect.value || ""),
-      municipio: String(municipioSelect.value || ""),
-      status: String(statusSelect.value || ""),
-      q: String(searchInput.value || "").trim()
-    };
-    renderBetaWorkspace(getFiltered());
-  });
-
-  clearBtn.addEventListener("click", function () {
-    betaPowerBiFilters = Object.assign({}, BETA_POWERBI_FILTER_DEFAULTS);
-    renderBetaWorkspace(getFiltered());
-  });
-
-  searchInput.addEventListener("keydown", function (event) {
-    if (event.key !== "Enter") return;
-    event.preventDefault();
-    applyBtn.click();
-  });
-
-  target.appendChild(filterWrap);
-
-  if (!isExecutiveRole) {
-    const sharedViewNote = document.createElement("p");
-    sharedViewNote.className = "muted small";
-    sharedViewNote.style.marginTop = "8px";
-    sharedViewNote.textContent = "Leitura compartilhada liberada. Controles executivos do dashboard ficam ativos apenas para SUPERVISAO, POWERBI e PROGRAMADOR.";
-    target.appendChild(sharedViewNote);
-  }
-
-  const kpiGrid = document.createElement("div");
-  kpiGrid.className = "beta-kpi-grid";
-
-  function addKpi(label, value) {
-    const card = document.createElement("div");
-    card.className = "beta-kpi-card";
-    const title = document.createElement("div");
-    title.className = "beta-kpi-label";
-    title.textContent = label;
-    const content = document.createElement("div");
-    content.className = "beta-kpi-value";
-    content.textContent = value;
-    card.appendChild(title);
-    card.appendChild(content);
-    kpiGrid.appendChild(card);
-  }
-
-  addKpi("Emendas no dashboard", String(summary.total));
-  addKpi("Valor atual total", "R$ " + fmtMoney(summary.valorTotal));
-  addKpi("Deputados monitorados", String(summary.deputados.size));
-  addKpi("Municipios cobertos", String(summary.municipios.size));
-  addKpi("Concluidas", String(summary.done));
-  addKpi("Em atencao", String(summary.attention));
-  target.appendChild(kpiGrid);
-
-  const controlGrid = document.createElement("div");
-  controlGrid.className = "beta-split-grid";
-
-  function appendSummaryTable(titleText, headers, items, renderRow) {
-    const card = document.createElement("div");
-    card.className = "beta-panel-card table-wrap";
-    const title = document.createElement("h4");
-    title.textContent = titleText;
-    card.appendChild(title);
-
-    if (!items.length) {
-      const empty = document.createElement("p");
-      empty.className = "beta-empty";
-      empty.textContent = "Sem dados para o filtro atual.";
-      card.appendChild(empty);
-      controlGrid.appendChild(card);
-      return;
-    }
-
-    const table = document.createElement("table");
-    table.className = "table";
-    const thead = document.createElement("thead");
-    const trH = document.createElement("tr");
-    headers.forEach(function (label) {
-      const th = document.createElement("th");
-      th.textContent = label;
-      trH.appendChild(th);
-    });
-    thead.appendChild(trH);
-    table.appendChild(thead);
-
-    const tbodyEl = document.createElement("tbody");
-    items.forEach(function (item) {
-      const tr = document.createElement("tr");
-      renderRow(tr, item);
-      tbodyEl.appendChild(tr);
-    });
-    table.appendChild(tbodyEl);
-    card.appendChild(table);
-    controlGrid.appendChild(card);
-  }
-
-  const statusRows = Object.keys(byStatus).map(function (key) {
-    return { label: key, total: byStatus[key] || 0 };
-  }).sort(function (a, b) {
-    return b.total - a.total;
-  });
-
-  const municipios = Object.keys(byMunicipio).map(function (key) { return byMunicipio[key]; }).sort(function (a, b) {
-    if (b.total !== a.total) return b.total - a.total;
-    return b.valor - a.valor;
-  }).slice(0, 10);
-
-  const users = Object.keys(byUser).map(function (key) { return byUser[key]; }).sort(function (a, b) {
-    if (b.total !== a.total) return b.total - a.total;
-    return String(b.lastAt || "").localeCompare(String(a.lastAt || ""));
-  }).slice(0, 8);
-
-  appendSummaryTable("Controle por status", ["Status", "Total"], statusRows, function (tr, item) {
-    [item.label, String(item.total)].forEach(function (value) {
-      const td = document.createElement("td");
-      td.textContent = value;
-      tr.appendChild(td);
-    });
-  });
-
-  appendSummaryTable("Controle por municipio", ["Municipio", "Emendas", "Valor atual", "Atencao"], municipios, function (tr, item) {
-    [item.label, String(item.total), "R$ " + fmtMoney(item.valor), String(item.attention)].forEach(function (value) {
-      const td = document.createElement("td");
-      td.textContent = value;
-      tr.appendChild(td);
-    });
-  });
-
-  if (users.length) {
-    appendSummaryTable("Atividade de usuarios", ["Usuario", "Perfil", "Eventos", "Ultima acao"], users, function (tr, item) {
-      [item.label, item.perfil, String(item.total), item.lastAt ? (item.lastEvent + " | " + fmtDateTime(item.lastAt)) : "-"].forEach(function (value) {
-        const td = document.createElement("td");
-        td.textContent = value;
-        tr.appendChild(td);
-      });
-    });
-  }
-
-  const controlCard = document.createElement("div");
-  controlCard.className = "beta-panel-card";
-  const controlTitle = document.createElement("h4");
-  controlTitle.textContent = "Controle da base atual";
-  const controlList = document.createElement("div");
-  controlList.className = "beta-metric-stack";
-  [
-    "Ultima atualizacao: " + (summary.latestUpdate ? fmtDateTime(summary.latestUpdate) : "-"),
-    "Filtro superior aplicado sobre " + String(sourceRows.length) + " emendas.",
-    "Filtro interno do dashboard retornou " + String(rows.length) + " emendas.",
-    "Todos podem visualizar o dashboard; a leitura executiva e a governanca continuam centralizadas em SUPERVISAO, POWERBI e PROGRAMADOR."
-  ].forEach(function (line) {
-    const item = document.createElement("div");
-    item.className = "beta-metric-line";
-    item.textContent = line;
-    controlList.appendChild(item);
-  });
-  controlCard.appendChild(controlTitle);
-  controlCard.appendChild(controlList);
-  controlGrid.appendChild(controlCard);
-
-  target.appendChild(controlGrid);
-
-  const deputyTitle = document.createElement("h4");
-  deputyTitle.style.marginTop = "14px";
-  deputyTitle.textContent = "Perfil de emendas por deputado";
-  target.appendChild(deputyTitle);
-
-  const deputyGrid = document.createElement("div");
-  deputyGrid.className = "beta-deputy-grid";
-  const deputados = Object.keys(byDeputado).map(function (key) { return byDeputado[key]; }).sort(function (a, b) {
-    if (b.total !== a.total) return b.total - a.total;
-    return b.valor - a.valor;
-  }).slice(0, betaPowerBiFilters.deputado ? 12 : 8);
-
-  if (!deputados.length) {
-    const empty = document.createElement("p");
-    empty.className = "beta-empty";
-    empty.textContent = "Sem deputados para o filtro atual.";
-    target.appendChild(empty);
-    return;
-  }
-
-  deputados.forEach(function (item) {
-    const card = document.createElement("article");
-    card.className = "beta-deputy-card";
-
-    const head = document.createElement("div");
-    head.className = "beta-deputy-head";
-
-    const avatar = document.createElement(item.photoUrl ? "img" : "div");
-    avatar.className = "beta-deputy-avatar";
-    if (item.photoUrl) {
-      avatar.src = item.photoUrl;
-      avatar.alt = "Foto de " + item.label;
-    } else {
-      avatar.textContent = getDeputadoAvatarLetters(item.label);
-      avatar.title = "Foto oficial pendente de fonte estruturada";
-    }
-    head.appendChild(avatar);
-
-    const identity = document.createElement("div");
-    const name = document.createElement("h5");
-    name.textContent = item.label;
-    const sub = document.createElement("p");
-    sub.className = "muted small";
-    sub.textContent = String(item.total) + " emendas | " + String(item.municipios.size) + " municipios";
-    identity.appendChild(name);
-    identity.appendChild(sub);
-    head.appendChild(identity);
-    card.appendChild(head);
-
-    const metricGrid = document.createElement("div");
-    metricGrid.className = "beta-deputy-metrics";
-    [
-      { label: "Valor atual", value: "R$ " + fmtMoney(item.valor) },
-      { label: "Concluidas", value: String(item.done) },
-      { label: "Em atencao", value: String(item.attention) },
-      { label: "Eventos", value: String(item.auditEvents) }
-    ].forEach(function (metric) {
-      const box = document.createElement("div");
-      box.className = "beta-deputy-metric";
-      const label = document.createElement("div");
-      label.className = "beta-kpi-label";
-      label.textContent = metric.label;
-      const value = document.createElement("div");
-      value.className = "beta-kpi-value beta-kpi-value-sm";
-      value.textContent = metric.value;
-      box.appendChild(label);
-      box.appendChild(value);
-      metricGrid.appendChild(box);
-    });
-    card.appendChild(metricGrid);
-
-    const dominantStatus = Object.keys(item.statusMap).sort(function (a, b) {
-      return (item.statusMap[b] || 0) - (item.statusMap[a] || 0);
-    })[0] || "-";
-    const diag = document.createElement("div");
-    diag.className = "beta-metric-stack";
-    [
-      "Status dominante: " + dominantStatus,
-      "Principais lugares: " + Array.from(item.municipios).slice(0, 3).join(", "),
-      "Ultima atualizacao: " + (item.latestUpdate ? fmtDateTime(item.latestUpdate) : "-"),
-      "Ultima acao registrada: " + (item.latestAction ? (fmtDateTime(item.latestAction) + " por " + (item.latestActor || "sistema")) : "-")
-    ].forEach(function (line) {
-      const row = document.createElement("div");
-      row.className = "beta-metric-line";
-      row.textContent = line;
-      diag.appendChild(row);
-    });
-    card.appendChild(diag);
-
-    deputyGrid.appendChild(card);
-  });
-
-  target.appendChild(deputyGrid);
+  const empty = document.createElement("p");
+  empty.className = "beta-empty";
+  empty.textContent = "Painel Power BI indisponivel nesta compilacao.";
+  target.appendChild(empty);
 }
 
 function renderBetaWorkspace(filteredRows) {

@@ -68,6 +68,7 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Extrair helpers de cabecalho/conflito do modal e reutilizar o helper de visibilidade nos modais principal e de exportacao customizada.
 - [DONE] Extrair o painel beta de suporte para `frontend/js/ui/betaSupport.js`, deixando `app.js` como bridge de estado e callbacks.
 - [DONE] Extrair o painel beta de historico para `frontend/js/ui/betaHistory.js`, deixando `app.js` com bridge de estado, filtros e refresh.
+- [DONE] Extrair o painel beta Power BI para `frontend/js/ui/betaPowerBi.js`, deixando `app.js` com estado, exportacao e metricas do dashboard.
 
-Active: ID-FE-64
+Active: ID-FE-65
 Risks: validar comportamento em dispositivos com storage bloqueado.
