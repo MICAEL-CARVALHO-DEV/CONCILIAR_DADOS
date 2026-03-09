@@ -103,6 +103,7 @@ const BETA_SUPPORT_LIMIT = 80;
 const BETA_SUPPORT_POLL_MS = 10000;
 const API_STATE_POLL_MS = 5000;
 const API_DEFAULT_EVENT_ORIGIN = "UI";
+const REALTIME_USER_PANEL_ENABLED = false;
 const DEMO_MULTI_USERS = [
   { name: "Miguel", role: "APG" },
   { name: "Ana", role: "CONTABIL" },
@@ -365,6 +366,7 @@ const modalSaveFeedback = document.getElementById("modalSaveFeedback");
 const historyEl = document.getElementById("history");
 const userProgressBox = document.getElementById("userProgressBox");
 const livePresenceText = document.getElementById("livePresenceText");
+const userRealtimeCard = document.getElementById("userRealtimeCard");
 
 const markStatus = document.getElementById("markStatus");
 const markReason = document.getElementById("markReason");
@@ -1575,7 +1577,7 @@ function refreshOpenModalAfterSave(rec) {
 
   renderMarksSummary(lastMarks);
   renderRawFields(rec);
-  if (userProgressBox) {
+  if (REALTIME_USER_PANEL_ENABLED && userProgressBox) {
     renderUserProgressBox(userProgressBox, progress, delays, {
       renderProgressBar: renderProgressBar,
       renderMemberChips: renderMemberChips,
@@ -1963,7 +1965,7 @@ function openModal(id, keepReasons) {
   renderMarksSummary(lastMarks);
   renderRawFields(rec);
 
-  if (userProgressBox) {
+  if (REALTIME_USER_PANEL_ENABLED && userProgressBox) {
     renderUserProgressBox(userProgressBox, progress, delays, {
       renderProgressBar: renderProgressBar,
       renderMemberChips: renderMemberChips,
@@ -2001,6 +2003,10 @@ function openModal(id, keepReasons) {
 }
 
 function renderUserProgressBox(progressContainer, progress, delays, options) {
+  if (!REALTIME_USER_PANEL_ENABLED) {
+    if (progressContainer) clearNodeChildren(progressContainer);
+    return;
+  }
   const renderUserProgressBoxUtil = getUiRenderUtil("renderUserProgressBox");
   if (renderUserProgressBoxUtil) {
     renderUserProgressBoxUtil(progressContainer, progress, delays, options);
@@ -5088,15 +5094,6 @@ function renderBetaHistoryPanel(target, filteredRows) {
   actionField.appendChild(actionWrap);
   filterWrap.appendChild(actionField);
 
-  if (!isExecutiveRole) {
-    deputadoSelect.disabled = true;
-    municipioSelect.disabled = true;
-    statusSelect.disabled = true;
-    searchInput.disabled = true;
-    applyBtn.disabled = true;
-    clearBtn.disabled = true;
-  }
-
   yearSelect.addEventListener("change", function () {
     const nextMonths = [{ label: "Todos", value: "" }].concat(buildAuditMonthOptions(optionSourceRows, yearSelect.value || ""));
     const preferredMonth = nextMonths.some(function (item) { return item.value === monthSelect.value; }) ? monthSelect.value : "";
@@ -6534,6 +6531,7 @@ function getBackendIdForRecord(rec) {
 }
 
 function announcePresenceForRecord(rec, action) {
+  if (!REALTIME_USER_PANEL_ENABLED) return;
   const announcePresenceForRecordUtil = getConcurrencyUtil("announcePresenceForRecord");
   if (announcePresenceForRecordUtil) {
     announcePresenceForRecordUtil(rec, action);
@@ -6567,6 +6565,10 @@ function getPresenceUsersForRecord(rec) {
 }
 
 function renderLivePresence(rec) {
+  if (!REALTIME_USER_PANEL_ENABLED) {
+    if (livePresenceText) livePresenceText.textContent = "";
+    return;
+  }
   const renderLivePresenceUtil = getUiRenderUtil("renderLivePresence");
   if (renderLivePresenceUtil) {
     renderLivePresenceUtil(livePresenceText, getPresenceUsersForRecord(rec), {
@@ -6590,6 +6592,7 @@ function renderLivePresence(rec) {
 }
 
 function handlePresencePayload(data) {
+  if (!REALTIME_USER_PANEL_ENABLED) return;
   const handlePresencePayloadUtil = getConcurrencyUtil("handlePresencePayload");
   if (handlePresencePayloadUtil) {
     handlePresencePayloadUtil(data);
@@ -6619,6 +6622,10 @@ function handlePresencePayload(data) {
 
 // Abre WebSocket da API para atualizar tela em tempo real.
 function connectApiSocket() {
+  if (!REALTIME_USER_PANEL_ENABLED) {
+    closeApiSocket();
+    return;
+  }
   const connectApiSocketUtil = getConcurrencyUtil("connectApiSocket");
   if (connectApiSocketUtil) {
     connectApiSocketUtil();
