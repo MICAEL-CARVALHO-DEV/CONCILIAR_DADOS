@@ -90,6 +90,7 @@ const betaWorkspaceUtils = SEC_FRONTEND.betaWorkspaceUtils || null;
 const authStore = SEC_FRONTEND.authStore || null;
 const authGuard = SEC_FRONTEND.authGuard || null;
 const apiClient = SEC_FRONTEND.apiClient || null;
+const apiStateSyncUtils = SEC_FRONTEND.apiStateSyncUtils || null;
 const concurrencyService = SEC_FRONTEND.concurrencyService || null;
 const uiRender = SEC_FRONTEND.uiRender || null;
 const AUTH_KEYS = Object.freeze({
@@ -603,6 +604,12 @@ function getAuthGuardUtil(methodName) {
 function getApiClientUtil(methodName) {
   if (!apiClient) return null;
   const method = apiClient[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getApiStateSyncUtil(methodName) {
+  if (!apiStateSyncUtils) return null;
+  const method = apiStateSyncUtils[methodName];
   return typeof method === "function" ? method : null;
 }
 
@@ -4130,12 +4137,27 @@ function clearBetaSupportPolling() {
 }
 
 function clearApiStatePolling() {
+  const moduleFn = getApiStateSyncUtil("clearPollingTimer");
+  if (moduleFn) {
+    return moduleFn({
+      getTimer: function () {
+        return apiStatePollTimer;
+      },
+      setTimer: function (nextTimer) {
+        apiStatePollTimer = nextTimer;
+      }
+    });
+  }
   if (!apiStatePollTimer) return;
   clearInterval(apiStatePollTimer);
   apiStatePollTimer = null;
 }
 
 async function refreshRemoteEmendasFromApi(forceRender) {
+  const moduleFn = getApiStateSyncUtil("refreshRemoteEmendasFromApi");
+  if (moduleFn) {
+    return moduleFn(forceRender, getApiStateSyncContext());
+  }
   if (!isApiEnabled()) return false;
   try {
     const remoteList = await apiRequest("GET", "/emendas", undefined, "API", { handleAuthFailure: false });
@@ -4161,6 +4183,25 @@ async function refreshRemoteEmendasFromApi(forceRender) {
 }
 
 function syncApiStatePolling() {
+  const moduleFn = getApiStateSyncUtil("syncApiStatePolling");
+  if (moduleFn) {
+    return moduleFn({
+      isApiEnabled: isApiEnabled,
+      isApiOnline: function () {
+        return apiOnline;
+      },
+      isWebSocketEnabled: API_WS_ENABLED,
+      getTimer: function () {
+        return apiStatePollTimer;
+      },
+      setTimer: function (nextTimer) {
+        apiStatePollTimer = nextTimer;
+      },
+      clearPolling: clearApiStatePolling,
+      refreshRemoteEmendas: refreshRemoteEmendasFromApi,
+      intervalMs: API_STATE_POLL_MS
+    });
+  }
   if (!isApiEnabled() || !apiOnline || API_WS_ENABLED) {
     clearApiStatePolling();
     return;
@@ -4750,6 +4791,73 @@ function getBetaSupportContext() {
       betaSupportMessagesError = String(message || "");
     }
   };
+}
+
+function getApiStateSyncContext() {
+  return {
+    isApiEnabled: isApiEnabled,
+    apiRequest: apiRequest,
+    mergeRemoteEmendas: mergeRemoteEmendas,
+    setApiOnline: function (nextOnline) {
+      apiOnline = !!nextOnline;
+    },
+    setApiLastError: function (message) {
+      apiLastError = String(message || "");
+    },
+    saveState: saveState,
+    syncYearFilter: syncYearFilter,
+    render: render,
+    refreshOpenModalAfterRemoteSync: refreshOpenModalAfterRemoteSync,
+    applyAccessProfile: applyAccessProfile
+  };
+}
+
+function resetApiLinkedState(options) {
+  const moduleFn = getApiStateSyncUtil("resetApiLinkedState");
+  if (moduleFn) {
+    return moduleFn(Object.assign({
+      closeApiSocket: closeApiSocket,
+      clearBetaAuditPolling: clearBetaAuditPolling,
+      clearBetaSupportPolling: clearBetaSupportPolling,
+      clearApiStatePolling: clearApiStatePolling,
+      resetBetaAuditState: function () {
+        betaAuditRows = [];
+        betaAuditError = "";
+        betaAuditLoading = false;
+      },
+      resetBetaSupportState: function () {
+        betaSupportThreads = [];
+        betaSupportMessages = [];
+        betaSupportError = "";
+        betaSupportMessagesError = "";
+        betaSupportLoading = false;
+        betaSupportMessagesLoading = false;
+      },
+      setApiOnline: function (nextOnline) {
+        apiOnline = !!nextOnline;
+      },
+      setApiLastError: function (message) {
+        apiLastError = String(message || "");
+      }
+    }, options || {}));
+  }
+
+  const opts = options && typeof options === "object" ? options : {};
+  closeApiSocket();
+  clearBetaAuditPolling();
+  clearBetaSupportPolling();
+  clearApiStatePolling();
+  betaAuditRows = [];
+  betaAuditError = "";
+  betaAuditLoading = false;
+  betaSupportThreads = [];
+  betaSupportMessages = [];
+  betaSupportError = "";
+  betaSupportMessagesError = "";
+  betaSupportLoading = false;
+  betaSupportMessagesLoading = false;
+  apiOnline = Object.prototype.hasOwnProperty.call(opts, "apiOnline") ? !!opts.apiOnline : false;
+  apiLastError = Object.prototype.hasOwnProperty.call(opts, "apiLastError") ? String(opts.apiLastError || "") : "";
 }
 
 function getBetaHistoryContext() {
@@ -5402,21 +5510,36 @@ function openPendingUsersModal() {
 
 // Sincroniza estado local com API (health + lista de emendas).
 async function bootstrapApiIntegration() {
+  const moduleFn = getApiStateSyncUtil("bootstrapApiIntegration");
+  if (moduleFn) {
+    return moduleFn({
+      isApiEnabled: isApiEnabled,
+      resetApiState: resetApiLinkedState,
+      apiRequest: apiRequest,
+      mergeRemoteEmendas: mergeRemoteEmendas,
+      setApiOnline: function (nextOnline) {
+        apiOnline = !!nextOnline;
+      },
+      setApiLastError: function (message) {
+        apiLastError = String(message || "");
+      },
+      isApiOnline: function () {
+        return apiOnline;
+      },
+      saveState: saveState,
+      syncYearFilter: syncYearFilter,
+      applyAccessProfile: applyAccessProfile,
+      render: render,
+      refreshBetaAudit: refreshBetaAuditFromApi,
+      refreshBetaSupport: refreshBetaSupportFromApi,
+      syncApiPolling: syncApiStatePolling
+    });
+  }
   if (!isApiEnabled()) {
-    closeApiSocket();
-    clearBetaAuditPolling();
-    clearBetaSupportPolling();
-    clearApiStatePolling();
-    betaAuditRows = [];
-    betaAuditError = "";
-    betaAuditLoading = false;
-    betaSupportThreads = [];
-    betaSupportMessages = [];
-    betaSupportError = "";
-    betaSupportMessagesError = "";
-    betaSupportLoading = false;
-    betaSupportMessagesLoading = false;
-    apiOnline = false;
+    resetApiLinkedState({
+      apiOnline: false,
+      apiLastError: ""
+    });
     applyAccessProfile();
     return;
   }
@@ -5428,14 +5551,11 @@ async function bootstrapApiIntegration() {
     apiOnline = true;
     apiLastError = "";
   } catch (err) {
-    apiOnline = false;
     apiLastError = err && err.message ? String(err.message) : "falha de conexao";
-    closeApiSocket();
-    clearBetaAuditPolling();
-    clearBetaSupportPolling();
-    clearApiStatePolling();
-    betaAuditRows = [];
-    betaSupportThreads = [];
+    resetApiLinkedState({
+      apiOnline: false,
+      apiLastError: apiLastError
+    });
     console.warn("API indisponivel, mantendo modo local:", apiLastError);
   }
 
