@@ -84,6 +84,7 @@ const auxModalsUtils = SEC_FRONTEND.auxModalsUtils || null;
 const importReportUtils = SEC_FRONTEND.importReportUtils || null;
 const modalSectionsUtils = SEC_FRONTEND.modalSectionsUtils || null;
 const modalDraftStateUtils = SEC_FRONTEND.modalDraftStateUtils || null;
+const modalSaveUtils = SEC_FRONTEND.modalSaveUtils || null;
 const modalShellUtils = SEC_FRONTEND.modalShellUtils || null;
 const importControlsUtils = SEC_FRONTEND.importControlsUtils || null;
 const appBindingsUtils = SEC_FRONTEND.appBindingsUtils || null;
@@ -725,6 +726,12 @@ function getModalDraftStateUtil(methodName) {
   return typeof method === "function" ? method : null;
 }
 
+function getModalSaveUtil(methodName) {
+  if (!modalSaveUtils) return null;
+  const method = modalSaveUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
 function getModalShellUtil(methodName) {
   if (!modalShellUtils) return null;
   const method = modalShellUtils[methodName];
@@ -1283,6 +1290,10 @@ function clearModalAutoCloseTimer() {
 }
 
 function clearModalAutosaveTimer() {
+  const moduleFn = getModalSaveUtil("clearModalAutosaveTimer");
+  if (moduleFn) {
+    return moduleFn(getModalSaveContext());
+  }
   if (modalAutosaveTimer) {
     clearTimeout(modalAutosaveTimer);
     modalAutosaveTimer = null;
@@ -1431,6 +1442,10 @@ function restorePersistedModalDraft(rec) {
 }
 
 function scheduleModalAutosave(reason) {
+  const moduleFn = getModalSaveUtil("scheduleModalAutosave");
+  if (moduleFn) {
+    return moduleFn(reason, getModalSaveContext());
+  }
   clearModalAutosaveTimer();
   if (!modal || !modal.classList.contains("show")) return;
   if (!modalDraftState) return;
@@ -1446,6 +1461,10 @@ function scheduleModalAutosave(reason) {
 }
 
 function flushModalAutosave(options) {
+  const moduleFn = getModalSaveUtil("flushModalAutosave");
+  if (moduleFn) {
+    return moduleFn(options, getModalSaveContext());
+  }
   const opts = options && typeof options === "object" ? options : {};
   clearModalAutosaveTimer();
   if (!modalDraftState) return true;
@@ -1457,6 +1476,10 @@ function flushModalAutosave(options) {
 }
 
 function clearModalSaveFeedback() {
+  const moduleFn = getModalSaveUtil("clearModalSaveFeedback");
+  if (moduleFn) {
+    return moduleFn(getModalSaveContext());
+  }
   if (modalSaveFeedbackTimer) {
     clearTimeout(modalSaveFeedbackTimer);
     modalSaveFeedbackTimer = null;
@@ -1473,6 +1496,10 @@ function clearModalSaveFeedback() {
 }
 
 function showModalSaveFeedback(message, isError) {
+  const moduleFn = getModalSaveUtil("showModalSaveFeedback");
+  if (moduleFn) {
+    return moduleFn(message, isError, getModalSaveContext());
+  }
   if (!modalSaveFeedback) return;
   clearModalSaveFeedback();
   const setModalSaveFeedbackStateUtil = getUiRenderUtil("setModalSaveFeedbackState");
@@ -1489,6 +1516,10 @@ function showModalSaveFeedback(message, isError) {
 }
 
 function updateModalDraftUi() {
+  const moduleFn = getModalSaveUtil("updateModalDraftUi");
+  if (moduleFn) {
+    return moduleFn(getModalSaveContext());
+  }
   const dirty = isModalDraftDirty();
   const pending = hasPendingModalAction();
   const hasMarkDraft = hasModalMarkDraft();
@@ -1784,180 +1815,11 @@ function renderKvEditor(rec) {
 
 // Salva alteracoes de campos feitas no modal e registra eventos.
 async function saveModalDraftChanges(keepOpenOrOptions) {
-  if (modalDraftSavePromise) {
-    return await modalDraftSavePromise;
+  const moduleFn = getModalSaveUtil("saveModalDraftChanges");
+  if (moduleFn) {
+    return await moduleFn(keepOpenOrOptions, getModalSaveContext());
   }
-
-  const saveOptions = keepOpenOrOptions && typeof keepOpenOrOptions === "object"
-    ? keepOpenOrOptions
-    : { keepOpen: !!keepOpenOrOptions };
-  const keepOpen = !!saveOptions.keepOpen;
-  const preserveInteraction = !!saveOptions.preserveInteraction;
-  const silentSuccess = !!saveOptions.silentSuccess;
-
-  modalDraftSavePromise = (async function () {
-    clearModalAutoCloseTimer();
-    clearModalAutosaveTimer();
-    if (!canMutateRecords()) {
-      showModalSaveFeedback(getReadOnlyRoleMessage() || "Perfil em leitura: salvamento bloqueado.", true);
-      return false;
-    }
-    if (isEmendaLockReadOnly()) {
-      showModalSaveFeedback("Edicao bloqueada: emenda em uso por outro usuario.", true);
-      return false;
-    }
-    if (!modalDraftState) return true;
-
-    const hasDirty = isModalDraftDirty();
-    const pendingAction = modalDraftState.pendingAction || null;
-    if (!hasDirty && !pendingAction) return true;
-
-    const rec = getSelected();
-    if (!rec || rec.id !== modalDraftState.recordId) return false;
-    const recSnapshot = deepClone(rec);
-
-    const changedEvents = [];
-    const dirtyKeys = Object.keys(modalDraftState.dirty || {});
-
-    dirtyKeys.forEach(function (key) {
-      if (isLockedStructuralField(key)) return;
-      const type = getModalFieldType(key);
-      const label = getModalFieldLabel(key, key);
-      const prev = rec[key];
-      const next = normalizeDraftFieldValue(modalDraftState.draft[key], type);
-      if (!hasFieldChanged(prev, next, type)) return;
-
-      rec[key] = next;
-      changedEvents.push(mkEvent("EDIT_FIELD", {
-        key: key,
-        field: label,
-        from: stringifyFieldValue(prev, type),
-        to: stringifyFieldValue(next, type),
-        raw_from: prev,
-        raw_to: next,
-        note: "Edicao manual confirmada."
-      }));
-    });
-
-    const oldRef = rec.ref_key || "";
-    syncCanonicalToAllFields(rec);
-    rec.ref_key = buildReferenceKey(rec);
-    if (oldRef !== rec.ref_key) {
-      changedEvents.push(mkEvent("EDIT_FIELD", {
-        field: "Chave Referencia",
-        from: oldRef,
-        to: rec.ref_key,
-        note: "Recalculada apos edicao manual."
-      }));
-    }
-
-    let action = pendingAction;
-    if (!action) {
-      const selectedStatus = markStatus ? (markStatus.value || "").trim() : "";
-      const reasonForSave = (markReason ? (markReason.value || "") : "").trim();
-      if (changedEvents.length || selectedStatus || reasonForSave) {
-        if (!selectedStatus) {
-          showModalSaveFeedback("ERRO: nao pode salvar alteracoes sem marcar status.", true);
-          if (markStatus) markStatus.focus();
-          updateModalDraftUi();
-          return false;
-        }
-        if (!reasonForSave) {
-          showModalSaveFeedback("ERRO: informe motivo/observacao para salvar alteracoes.", true);
-          if (markReason) markReason.focus();
-          updateModalDraftUi();
-          return false;
-        }
-        action = { type: "MARK_STATUS", status: normalizeStatus(selectedStatus), reason: reasonForSave };
-      }
-    }
-
-    if (!action && !changedEvents.length) {
-      modalDraftState.dirty = {};
-      updateModalDraftUi();
-      return true;
-    }
-
-    const prependEvents = [];
-    if (action && action.type === "MARK_STATUS") {
-      prependEvents.push(mkEvent("MARK_STATUS", { to: normalizeStatus(action.status || ""), note: String(action.reason || "") }));
-    }
-
-    prependEvents.push.apply(prependEvents, changedEvents);
-    if (!prependEvents.length) return true;
-
-    rec.updated_at = isoNow();
-    rec.eventos = prependEvents.concat(rec.eventos || []);
-
-    if (action && action.type === "MARK_STATUS") {
-      try {
-        await syncGenericEventToApi(rec, {
-          tipo_evento: "MARK_STATUS",
-          valor_novo: normalizeStatus(action.status || ""),
-          motivo: String(action.reason || "")
-        });
-      } catch (err) {
-        await rollbackSaveAndReport(err, rec, recSnapshot, "marcacao de status para salvar");
-        return false;
-      }
-    }
-
-    for (let i = 0; i < changedEvents.length; i += 1) {
-      const ev = changedEvents[i];
-      try {
-        const fieldKey = String(ev.key || "").trim();
-        const fieldType = getModalFieldType(fieldKey);
-        const rawOld = Object.prototype.hasOwnProperty.call(ev, "raw_from") ? ev.raw_from : ev.from;
-        const rawNew = Object.prototype.hasOwnProperty.call(ev, "raw_to") ? ev.raw_to : ev.to;
-        await syncGenericEventToApi(rec, {
-          tipo_evento: "EDIT_FIELD",
-          campo_alterado: fieldKey || ev.field || "",
-          valor_antigo: String(rawOld == null ? "" : normalizeDraftFieldValue(rawOld, fieldType)),
-          valor_novo: String(rawNew == null ? "" : normalizeDraftFieldValue(rawNew, fieldType)),
-          motivo: ev.note || "Edicao manual confirmada."
-        });
-      } catch (err) {
-        await rollbackSaveAndReport(err, rec, recSnapshot, "edicao de campo");
-        return false;
-      }
-    }
-
-    saveState();
-    clearPersistedModalDraft(rec.id);
-    clearModalStatusDraftInputs();
-    if (typeof notifyStateUpdated === "function") notifyStateUpdated();
-    render();
-
-    if (keepOpen) {
-      if (preserveInteraction) {
-        rebaseModalDraftAfterSave(rec);
-        refreshOpenModalAfterSave(rec);
-        updateModalDraftUi();
-        if (!silentSuccess) {
-          showModalSaveFeedback("Registro salvo com sucesso.", false);
-        }
-      } else {
-        openModal(rec.id, true);
-        setTimeout(function () {
-          if (!silentSuccess) {
-            showModalSaveFeedback("Registro salvo com sucesso.", false);
-          }
-        }, 80);
-      }
-    } else {
-      modalDraftState = null;
-      updateModalDraftUi();
-      showModalSaveFeedback("Registro salvo com sucesso.", false);
-    }
-
-    return true;
-  })();
-
-  try {
-    return await modalDraftSavePromise;
-  } finally {
-    modalDraftSavePromise = null;
-  }
+  return true;
 }
 function discardModalDraftChanges(keepOpen) {
   const moduleFn = getModalShellUtil("discardModalDraftChanges");
@@ -4932,6 +4794,81 @@ function getModalDraftStateContext() {
     isoNow: isoNow,
     clearModalSaveFeedback: clearModalSaveFeedback,
     scheduleModalAutosave: scheduleModalAutosave
+  };
+}
+
+function getModalSaveContext() {
+  return {
+    MODAL_AUTOSAVE_DEBOUNCE_MS: MODAL_AUTOSAVE_DEBOUNCE_MS,
+    modal: modal,
+    kv: kv,
+    kvDraftHint: kvDraftHint,
+    modalSaveGuard: modalSaveGuard,
+    btnKvSave: btnKvSave,
+    modalSaveFeedback: modalSaveFeedback,
+    markStatus: markStatus,
+    markReason: markReason,
+    setModalSaveFeedbackState: getUiRenderUtil("setModalSaveFeedbackState"),
+    updateModalDraftUiRenderer: getUiRenderUtil("updateModalDraftUi"),
+    fmtDateTime: fmtDateTime,
+    getModalAutosaveTimer: function () {
+      return modalAutosaveTimer;
+    },
+    setModalAutosaveTimer: function (nextTimer) {
+      modalAutosaveTimer = nextTimer;
+    },
+    getModalSaveFeedbackTimer: function () {
+      return modalSaveFeedbackTimer;
+    },
+    setModalSaveFeedbackTimer: function (nextTimer) {
+      modalSaveFeedbackTimer = nextTimer;
+    },
+    getModalDraftSavePromise: function () {
+      return modalDraftSavePromise;
+    },
+    setModalDraftSavePromise: function (nextPromise) {
+      modalDraftSavePromise = nextPromise;
+    },
+    getModalDraftState: function () {
+      return modalDraftState;
+    },
+    setModalDraftState: function (nextState) {
+      modalDraftState = nextState;
+    },
+    getSelected: getSelected,
+    canMutateRecords: canMutateRecords,
+    isEmendaLockReadOnly: isEmendaLockReadOnly,
+    getReadOnlyRoleMessage: getReadOnlyRoleMessage,
+    isModalDraftDirty: isModalDraftDirty,
+    hasPendingModalAction: hasPendingModalAction,
+    hasModalMarkDraft: hasModalMarkDraft,
+    hasPendingModalDraft: hasPendingModalDraft,
+    canSaveDraftNow: canSaveDraftNow,
+    getDraftSaveBlockReason: getDraftSaveBlockReason,
+    clearPersistedModalDraft: clearPersistedModalDraft,
+    persistModalDraftSnapshot: persistModalDraftSnapshot,
+    clearModalAutoCloseTimer: clearModalAutoCloseTimer,
+    clearModalStatusDraftInputs: clearModalStatusDraftInputs,
+    saveState: saveState,
+    notifyStateUpdated: notifyStateUpdated,
+    render: render,
+    rebaseModalDraftAfterSave: rebaseModalDraftAfterSave,
+    refreshOpenModalAfterSave: refreshOpenModalAfterSave,
+    openModal: openModal,
+    deepClone: deepClone,
+    mkEvent: mkEvent,
+    isLockedStructuralField: isLockedStructuralField,
+    getModalFieldType: getModalFieldType,
+    getModalFieldLabel: getModalFieldLabel,
+    normalizeDraftFieldValue: normalizeDraftFieldValue,
+    hasFieldChanged: hasFieldChanged,
+    stringifyFieldValue: stringifyFieldValue,
+    syncCanonicalToAllFields: syncCanonicalToAllFields,
+    buildReferenceKey: buildReferenceKey,
+    normalizeStatus: normalizeStatus,
+    syncGenericEventToApi: syncGenericEventToApi,
+    rollbackSaveAndReport: rollbackSaveAndReport,
+    isoNow: isoNow
   };
 }
 
