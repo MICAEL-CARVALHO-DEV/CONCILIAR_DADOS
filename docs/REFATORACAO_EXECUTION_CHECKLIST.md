@@ -91,6 +91,7 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Extrair o perfil de acesso visual da interface para `frontend/js/ui/accessProfile.js`, deixando `app.js` com wrappers e contexto de permissao.
 - [DONE] Extrair as operacoes de sincronizacao com a API para `frontend/js/api/apiSyncOps.js`, deixando `app.js` com wrappers curtos para status, eventos, importacao e logs de exportacao.
 - [DONE] Extrair o bootstrap residual da aplicacao para `frontend/js/ui/appStartup.js`, deixando `app.js` com contextos de startup e fallback minimo.
+- [DONE] Extrair o modelo de registro da emenda para `frontend/js/utils/recordModel.js`, deixando `app.js` com wrappers curtos para evento, normalizacao e deteccao de demo.
 
-Active: ID-FE-87
+Active: ID-FE-88
 Risks: validar comportamento em dispositivos com storage bloqueado.

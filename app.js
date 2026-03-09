@@ -81,6 +81,7 @@ const exportTemplateUtils = SEC_FRONTEND.exportTemplateUtils || null;
 const exportTemplateWriterUtils = SEC_FRONTEND.exportTemplateWriterUtils || null;
 const exportDataUtils = SEC_FRONTEND.exportDataUtils || null;
 const exportExecutiveUtils = SEC_FRONTEND.exportExecutiveUtils || null;
+const recordModelUtils = SEC_FRONTEND.recordModelUtils || null;
 const auxModalsUtils = SEC_FRONTEND.auxModalsUtils || null;
 const importReportUtils = SEC_FRONTEND.importReportUtils || null;
 const modalSectionsUtils = SEC_FRONTEND.modalSectionsUtils || null;
@@ -713,6 +714,12 @@ function getBetaSyncUtil(methodName) {
 function getExportExecutiveUtil(methodName) {
   if (!exportExecutiveUtils) return null;
   const method = exportExecutiveUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getRecordModelUtil(methodName) {
+  if (!recordModelUtils) return null;
+  const method = recordModelUtils[methodName];
   return typeof method === "function" ? method : null;
 }
 
@@ -5257,6 +5264,32 @@ function getApiSyncOpsContext() {
   };
 }
 
+function getRecordModelContext() {
+  return {
+    currentUser: CURRENT_USER,
+    currentRole: CURRENT_ROLE,
+    systemMigrationUser: SYSTEM_MIGRATION_USER,
+    systemMigrationRole: SYSTEM_MIGRATION_ROLE,
+    isoNow: isoNow,
+    asText: asText,
+    text: text,
+    toInt: toInt,
+    toNumber: toNumber,
+    currentYear: currentYear,
+    normalizeStatus: normalizeStatus,
+    normalizeLooseText: normalizeLooseText,
+    buildReferenceKey: buildReferenceKey,
+    syncCanonicalToAllFields: syncCanonicalToAllFields,
+    getEventsSorted: getEventsSorted,
+    getRecords: function () {
+      return Array.isArray(state && state.records) ? state.records : [];
+    },
+    setRecords: function (nextRecords) {
+      state.records = Array.isArray(nextRecords) ? nextRecords : [];
+    }
+  };
+}
+
 function resetApiLinkedState(options) {
   const moduleFn = getApiStateSyncUtil("resetApiLinkedState");
   if (moduleFn) {
@@ -6661,6 +6694,10 @@ function normalizeUserRole(roleInput) {
 }
 
 function mkEvent(type, payload) {
+  const moduleFn = getRecordModelUtil("mkEvent");
+  if (moduleFn) {
+    return moduleFn(type, payload, getRecordModelContext());
+  }
   const p = payload || {};
   return {
     at: p.at || isoNow(),
@@ -6678,6 +6715,10 @@ function mkEvent(type, payload) {
 }
 
 function mkRecord(data) {
+  const moduleFn = getRecordModelUtil("mkRecord");
+  if (moduleFn) {
+    return moduleFn(data, getRecordModelContext());
+  }
   const now = isoNow();
   const rec = {
     id: asText(data.id),
@@ -6714,6 +6755,10 @@ function mkRecord(data) {
 }
 
 function normalizeRecordShape(raw) {
+  const moduleFn = getRecordModelUtil("normalizeRecordShape");
+  if (moduleFn) {
+    return moduleFn(raw, getRecordModelContext());
+  }
   const rec = mkRecord(raw || {});
   rec.id = asText(raw && raw.id ? raw.id : rec.id);
   rec.backend_id = raw && raw.backend_id != null ? Number(raw.backend_id) : rec.backend_id;
@@ -6736,6 +6781,10 @@ function normalizeRecordShape(raw) {
 
 
 function inferDemoSeed(rec) {
+  const moduleFn = getRecordModelUtil("inferDemoSeed");
+  if (moduleFn) {
+    return moduleFn(rec, getRecordModelContext());
+  }
   if (!rec) return false;
   if (rec.demo_seed === true) return true;
 
@@ -6760,6 +6809,10 @@ function inferDemoSeed(rec) {
 }
 
 function purgeDemoBeforeOfficialImport() {
+  const moduleFn = getRecordModelUtil("purgeDemoBeforeOfficialImport");
+  if (moduleFn) {
+    return moduleFn(getRecordModelContext());
+  }
   const records = Array.isArray(state && state.records) ? state.records : [];
   const kept = records.filter(function (rec) {
     return !inferDemoSeed(rec);
@@ -6772,6 +6825,10 @@ function purgeDemoBeforeOfficialImport() {
 }
 
 function migrateLegacyStatusRecords(records) {
+  const moduleFn = getRecordModelUtil("migrateLegacyStatusRecords");
+  if (moduleFn) {
+    return moduleFn(records, getRecordModelContext());
+  }
   (records || []).forEach(function (rec) {
     const events = Array.isArray(rec && rec.eventos) ? rec.eventos : [];
     const hasMark = events.some(function (ev) { return ev && ev.type === "MARK_STATUS"; });
@@ -6795,6 +6852,10 @@ function migrateLegacyStatusRecords(records) {
 }
 
 function latestMarkedStatus(rec) {
+  const moduleFn = getRecordModelUtil("latestMarkedStatus");
+  if (moduleFn) {
+    return moduleFn(rec, getRecordModelContext());
+  }
   const events = getEventsSorted(rec || {});
   for (let i = 0; i < events.length; i += 1) {
     const ev = events[i];
@@ -6804,6 +6865,10 @@ function latestMarkedStatus(rec) {
 }
 
 function deriveStatusForBackend(rec) {
+  const moduleFn = getRecordModelUtil("deriveStatusForBackend");
+  if (moduleFn) {
+    return moduleFn(rec, getRecordModelContext());
+  }
   return latestMarkedStatus(rec) || "Recebido";
 }
 
