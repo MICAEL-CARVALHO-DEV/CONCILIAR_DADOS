@@ -95,6 +95,7 @@ const betaSupportUtils = SEC_FRONTEND.betaSupportUtils || null;
 const betaSyncUtils = SEC_FRONTEND.betaSyncUtils || null;
 const betaWorkspaceUtils = SEC_FRONTEND.betaWorkspaceUtils || null;
 const authStore = SEC_FRONTEND.authStore || null;
+const authSessionUtils = SEC_FRONTEND.authSessionUtils || null;
 const authUiUtils = SEC_FRONTEND.authUiUtils || null;
 const authFlowUtils = SEC_FRONTEND.authFlowUtils || null;
 const authGuard = SEC_FRONTEND.authGuard || null;
@@ -612,6 +613,12 @@ function getStorageUtil(methodName) {
 function getAuthStoreUtil(methodName) {
   if (!authStore) return null;
   const method = authStore[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getAuthSessionUtil(methodName) {
+  if (!authSessionUtils) return null;
+  const method = authSessionUtils[methodName];
   return typeof method === "function" ? method : null;
 }
 
@@ -3304,17 +3311,29 @@ function switchAuthMode(mode) {
 }
 
 function setAuthMessage(msg, isError) {
+  const moduleFn = getAuthSessionUtil("setAuthMessage");
+  if (moduleFn) {
+    return moduleFn(msg, isError, getAuthSessionContext());
+  }
   if (!authMsg) return;
   authMsg.textContent = msg || "";
   authMsg.style.color = isError ? "#b4233d" : "";
 }
 
 function showAuthGate(msg) {
+  const moduleFn = getAuthSessionUtil("showAuthGate");
+  if (moduleFn) {
+    return moduleFn(msg, getAuthSessionContext());
+  }
   const q = msg ? "msg=" + encodeURIComponent(msg) : "";
   redirectToAuth(AUTH_LOGIN_PAGE, q);
 }
 
 function hideAuthGate() {
+  const moduleFn = getAuthSessionUtil("hideAuthGate");
+  if (moduleFn) {
+    return moduleFn(getAuthSessionContext());
+  }
   if (!authGate) return;
   authGate.classList.add("hidden");
   authGate.setAttribute("aria-hidden", "true");
@@ -3322,6 +3341,10 @@ function hideAuthGate() {
 }
 
 function extractApiError(err, fallback) {
+  const moduleFn = getAuthSessionUtil("extractApiError");
+  if (moduleFn) {
+    return moduleFn(err, fallback, getAuthSessionContext());
+  }
   const extractApiErrorUtil = getFormatUtil("extractApiError");
   if (extractApiErrorUtil) {
     return extractApiErrorUtil(err, fallback);
@@ -3396,6 +3419,10 @@ function removeStorageValue(store, key) {
 
 // Persiste usuario autenticado no contexto local da UI.
 function setAuthenticatedUser(usuario) {
+  const moduleFn = getAuthSessionUtil("setAuthenticatedUser");
+  if (moduleFn) {
+    return moduleFn(usuario, getAuthSessionContext());
+  }
   CURRENT_USER = String(usuario.nome || CURRENT_USER).trim() || CURRENT_USER;
   CURRENT_ROLE = normalizeUserRole(usuario.perfil || CURRENT_ROLE);
   betaWorkspaceTabTouched = false;
@@ -3411,6 +3438,10 @@ function setAuthenticatedUser(usuario) {
 
 // Redireciona para login/cadastro preservando pagina de retorno.
 function redirectToAuth(page, query) {
+  const moduleFn = getAuthSessionUtil("redirectToAuth");
+  if (moduleFn) {
+    return moduleFn(page, query, getAuthSessionContext());
+  }
   const redirectToAuthUtil = getAuthStoreUtil("redirectToAuth");
   if (redirectToAuthUtil) {
     redirectToAuthUtil(page || AUTH_LOGIN_PAGE, query, "index.html");
@@ -3475,6 +3506,10 @@ function isLocalFrontendContext() {
 }
 
 function readStoredSessionToken() {
+  const moduleFn = getAuthSessionUtil("readStoredSessionToken");
+  if (moduleFn) {
+    return moduleFn(getAuthSessionContext());
+  }
   const readStoredSessionTokenUtil = getAuthStoreUtil("readStoredSessionToken");
   if (readStoredSessionTokenUtil) {
     return readStoredSessionTokenUtil(AUTH_KEYS);
@@ -3510,6 +3545,10 @@ function readStoredSessionToken() {
 }
 
 function writeStoredSessionToken(token) {
+  const moduleFn = getAuthSessionUtil("writeStoredSessionToken");
+  if (moduleFn) {
+    return moduleFn(token, getAuthSessionContext());
+  }
   const writeStoredSessionTokenUtil = getAuthStoreUtil("writeStoredSessionToken");
   if (writeStoredSessionTokenUtil) {
     writeStoredSessionTokenUtil(token, AUTH_KEYS);
@@ -3541,6 +3580,10 @@ function writeStoredSessionToken(token) {
 }
 
 function clearStoredSessionToken() {
+  const moduleFn = getAuthSessionUtil("clearStoredSessionToken");
+  if (moduleFn) {
+    return moduleFn(getAuthSessionContext());
+  }
   const clearStoredSessionTokenUtil = getAuthStoreUtil("clearStoredSessionToken");
   if (clearStoredSessionTokenUtil) {
     clearStoredSessionTokenUtil(AUTH_KEYS);
@@ -4951,6 +4994,64 @@ function getAuthUiContext() {
     onAuthSuccess: onAuthSuccess,
     extractApiError: extractApiError,
     normalizeUserRole: normalizeUserRole
+  };
+}
+
+function getAuthSessionContext() {
+  return {
+    authGate: authGate,
+    authMsg: authMsg,
+    authLoginPage: AUTH_LOGIN_PAGE,
+    nextPath: "index.html",
+    authStoreRedirect: function (page, query, nextPath) {
+      const redirectToAuthUtil = getAuthStoreUtil("redirectToAuth");
+      if (redirectToAuthUtil) {
+        redirectToAuthUtil(page, query, nextPath);
+      }
+    },
+    extractApiErrorFromFormat: function (err, fallback) {
+      const extractApiErrorUtil = getFormatUtil("extractApiError");
+      return extractApiErrorUtil ? extractApiErrorUtil(err, fallback) : fallback;
+    },
+    getCurrentUser: function () {
+      return CURRENT_USER;
+    },
+    setCurrentUser: function (value) {
+      CURRENT_USER = value;
+    },
+    getCurrentRole: function () {
+      return CURRENT_ROLE;
+    },
+    setCurrentRole: function (value) {
+      CURRENT_ROLE = value;
+    },
+    normalizeUserRole: normalizeUserRole,
+    resetBetaWorkspaceTabs: function () {
+      betaWorkspaceTabTouched = false;
+      betaWorkspaceTab = getPreferredBetaWorkspaceTab();
+    },
+    writeAuthenticatedProfile: function (profile) {
+      const writeAuthenticatedProfileUtil = getAuthStoreUtil("writeAuthenticatedProfile");
+      if (writeAuthenticatedProfileUtil) {
+        writeAuthenticatedProfileUtil(profile, AUTH_KEYS);
+      }
+    },
+    authStoreReadStoredSessionToken: function () {
+      const fn = getAuthStoreUtil("readStoredSessionToken");
+      return fn ? fn(AUTH_KEYS) : "";
+    },
+    authStoreWriteStoredSessionToken: function (token) {
+      const fn = getAuthStoreUtil("writeStoredSessionToken");
+      if (fn) {
+        fn(token, AUTH_KEYS);
+      }
+    },
+    authStoreClearStoredSessionToken: function () {
+      const fn = getAuthStoreUtil("clearStoredSessionToken");
+      if (fn) {
+        fn(AUTH_KEYS);
+      }
+    }
   };
 }
 
