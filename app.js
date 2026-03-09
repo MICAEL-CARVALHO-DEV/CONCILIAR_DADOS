@@ -95,6 +95,7 @@ const betaSyncUtils = SEC_FRONTEND.betaSyncUtils || null;
 const betaWorkspaceUtils = SEC_FRONTEND.betaWorkspaceUtils || null;
 const authStore = SEC_FRONTEND.authStore || null;
 const authUiUtils = SEC_FRONTEND.authUiUtils || null;
+const authFlowUtils = SEC_FRONTEND.authFlowUtils || null;
 const authGuard = SEC_FRONTEND.authGuard || null;
 const apiClient = SEC_FRONTEND.apiClient || null;
 const apiStateSyncUtils = SEC_FRONTEND.apiStateSyncUtils || null;
@@ -610,6 +611,12 @@ function getAuthStoreUtil(methodName) {
 function getAuthGuardUtil(methodName) {
   if (!authGuard) return null;
   const method = authGuard[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getAuthFlowUtil(methodName) {
+  if (!authFlowUtils) return null;
+  const method = authFlowUtils[methodName];
   return typeof method === "function" ? method : null;
 }
 
@@ -3321,6 +3328,10 @@ function extractApiError(err, fallback) {
 
 // Trata sucesso de autenticacao: grava sessao, libera UI e sincroniza API.
 function onAuthSuccess(resp) {
+  const moduleFn = getAuthFlowUtil("onAuthSuccess");
+  if (moduleFn) {
+    return moduleFn(resp, getAuthFlowContext());
+  }
   const token = resp && resp.token ? String(resp.token) : "";
   const usuario = resp && resp.usuario ? resp.usuario : null;
   if (!token || !usuario) {
@@ -3409,6 +3420,10 @@ function redirectToAuth(page, query) {
 }
 // Encerra sessao local e tenta logout remoto na API.
 async function logoutCurrentUser() {
+  const moduleFn = getAuthFlowUtil("logoutCurrentUser");
+  if (moduleFn) {
+    return moduleFn(getAuthFlowContext());
+  }
   const token = readStoredSessionToken();
   if (token && isApiEnabled()) {
     try {
@@ -3438,6 +3453,10 @@ async function logoutCurrentUser() {
 }
 
 function isLocalFrontendContext() {
+  const moduleFn = getAuthFlowUtil("isLocalFrontendContext");
+  if (moduleFn) {
+    return moduleFn(getAuthFlowContext());
+  }
   const isLocalFrontendContextUtil = getAuthGuardUtil("isLocalFrontendContext");
   if (isLocalFrontendContextUtil) {
     return isLocalFrontendContextUtil();
@@ -3542,6 +3561,10 @@ function clearStoredSessionToken() {
 
 // Ponto de entrada da autenticacao ao abrir index.html.
 async function initializeAuthFlow() {
+  const moduleFn = getAuthFlowUtil("initializeAuthFlow");
+  if (moduleFn) {
+    return moduleFn(getAuthFlowContext());
+  }
   if (!isApiEnabled()) {
     closeApiSocket();
     loadUserConfig(false);
@@ -3598,6 +3621,10 @@ async function initializeAuthFlow() {
 
 // Carrega configuracao de usuario local (fallback quando API esta desativada).
 function loadUserConfig(forcePrompt) {
+  const moduleFn = getAuthFlowUtil("loadUserConfig");
+  if (moduleFn) {
+    return moduleFn(forcePrompt, getAuthFlowContext());
+  }
   const readAuthenticatedProfileUtil = getAuthStoreUtil("readAuthenticatedProfile");
   const savedAuthUser = readAuthenticatedProfileUtil
     ? readAuthenticatedProfileUtil(AUTH_KEYS)
@@ -4917,6 +4944,93 @@ function getAuthUiContext() {
     onAuthSuccess: onAuthSuccess,
     extractApiError: extractApiError,
     normalizeUserRole: normalizeUserRole
+  };
+}
+
+function getAuthFlowContext() {
+  return {
+    authLoginPage: AUTH_LOGIN_PAGE,
+    isApiEnabled: isApiEnabled,
+    setAuthMessage: setAuthMessage,
+    writeStoredSessionToken: writeStoredSessionToken,
+    readStoredSessionToken: readStoredSessionToken,
+    clearStoredSessionToken: clearStoredSessionToken,
+    setAuthenticatedUser: setAuthenticatedUser,
+    hideAuthGate: hideAuthGate,
+    applyAccessProfile: applyAccessProfile,
+    bootstrapApiIntegration: bootstrapApiIntegration,
+    connectApiSocket: connectApiSocket,
+    closeApiSocket: closeApiSocket,
+    apiRequest: apiRequest,
+    redirectToAuth: redirectToAuth,
+    writeApiBaseUrl: function (value) {
+      writeStorageValue(localStorage, API_BASE_URL_KEY, value);
+    },
+    detectLocalFrontendContext: function () {
+      const isLocalFrontendContextUtil = getAuthGuardUtil("isLocalFrontendContext");
+      if (isLocalFrontendContextUtil) {
+        return isLocalFrontendContextUtil();
+      }
+      const host = (typeof window !== "undefined" && window.location && window.location.hostname)
+        ? String(window.location.hostname)
+        : "";
+      return !host || host === "localhost" || host === "127.0.0.1";
+    },
+    clearSessionAndProfile: function () {
+      const clearSessionAndProfileUtil = getAuthStoreUtil("clearSessionAndProfile");
+      if (clearSessionAndProfileUtil) {
+        clearSessionAndProfileUtil(AUTH_KEYS);
+      } else {
+        clearStoredSessionToken();
+      }
+    },
+    clearBetaAuditPolling: clearBetaAuditPolling,
+    clearBetaSupportPolling: clearBetaSupportPolling,
+    resetBetaAuditState: function () {
+      betaAuditRows = [];
+      betaAuditError = "";
+      betaAuditLoading = false;
+    },
+    resetBetaSupportState: function () {
+      betaSupportThreads = [];
+      betaSupportMessages = [];
+      betaSupportError = "";
+      betaSupportMessagesError = "";
+      betaSupportLoading = false;
+      betaSupportMessagesLoading = false;
+    },
+    readAuthenticatedProfile: function () {
+      const readAuthenticatedProfileUtil = getAuthStoreUtil("readAuthenticatedProfile");
+      return readAuthenticatedProfileUtil ? readAuthenticatedProfileUtil(AUTH_KEYS) : null;
+    },
+    readLegacyAuthenticatedProfile: function () {
+      const readLegacyAuthenticatedProfileUtil = getAuthStoreUtil("readLegacyAuthenticatedProfile");
+      return readLegacyAuthenticatedProfileUtil ? readLegacyAuthenticatedProfileUtil(AUTH_KEYS) : null;
+    },
+    writeAuthenticatedProfile: function (profile) {
+      const writeAuthenticatedProfileUtil = getAuthStoreUtil("writeAuthenticatedProfile");
+      if (writeAuthenticatedProfileUtil) {
+        writeAuthenticatedProfileUtil(profile, AUTH_KEYS);
+      }
+    },
+    getCurrentUser: function () {
+      return CURRENT_USER;
+    },
+    setCurrentUser: function (value) {
+      CURRENT_USER = String(value || CURRENT_USER).trim() || CURRENT_USER;
+    },
+    getCurrentRole: function () {
+      return CURRENT_ROLE;
+    },
+    setCurrentRole: function (value) {
+      CURRENT_ROLE = value;
+    },
+    normalizeUserRole: normalizeUserRole,
+    resetBetaWorkspaceTabs: function () {
+      betaWorkspaceTabTouched = false;
+      betaWorkspaceTab = getPreferredBetaWorkspaceTab();
+    },
+    render: render
   };
 }
 
