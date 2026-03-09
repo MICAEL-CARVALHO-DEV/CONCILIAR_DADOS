@@ -79,7 +79,9 @@ const exportTemplateUtils = SEC_FRONTEND.exportTemplateUtils || null;
 const exportTemplateWriterUtils = SEC_FRONTEND.exportTemplateWriterUtils || null;
 const exportDataUtils = SEC_FRONTEND.exportDataUtils || null;
 const exportExecutiveUtils = SEC_FRONTEND.exportExecutiveUtils || null;
+const auxModalsUtils = SEC_FRONTEND.auxModalsUtils || null;
 const importReportUtils = SEC_FRONTEND.importReportUtils || null;
+const pendingUsersUtils = SEC_FRONTEND.pendingUsersUtils || null;
 const betaHistoryUtils = SEC_FRONTEND.betaHistoryUtils || null;
 const betaPowerBiUtils = SEC_FRONTEND.betaPowerBiUtils || null;
 const betaSupportUtils = SEC_FRONTEND.betaSupportUtils || null;
@@ -648,6 +650,18 @@ function getBetaWorkspaceUtil(methodName) {
 function getExportExecutiveUtil(methodName) {
   if (!exportExecutiveUtils) return null;
   const method = exportExecutiveUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getAuxModalUtil(methodName) {
+  if (!auxModalsUtils) return null;
+  const method = auxModalsUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getPendingUsersUtil(methodName) {
+  if (!pendingUsersUtils) return null;
+  const method = pendingUsersUtils[methodName];
   return typeof method === "function" ? method : null;
 }
 
@@ -4650,6 +4664,78 @@ function getExecutiveExportContext() {
   };
 }
 
+function getAuxModalContext() {
+  return {
+    setModalVisibility: function (modalEl, visible) {
+      const setModalVisibilityUtil = getUiRenderUtil("setModalVisibility");
+      if (setModalVisibilityUtil) {
+        setModalVisibilityUtil(modalEl, visible);
+        return;
+      }
+      if (!modalEl) return;
+      modalEl.classList.toggle("show", !!visible);
+      modalEl.setAttribute("aria-hidden", visible ? "false" : "true");
+    },
+    syncProfileModalFields: function (fields, state) {
+      const syncProfileModalFieldsUtil = getUiRenderUtil("syncProfileModalFields");
+      if (syncProfileModalFieldsUtil) {
+        syncProfileModalFieldsUtil(fields, state);
+        return;
+      }
+      if (fields.profileName) fields.profileName.value = state.userName || "-";
+      if (fields.profileRole) fields.profileRole.value = state.userRole || "-";
+      if (fields.profileMode) fields.profileMode.value = state.apiEnabled ? "Nuvem/API" : "Local";
+      if (fields.profileApi) fields.profileApi.value = state.apiOnline ? "Conectada" : "Indisponivel";
+    },
+    fields: {
+      profileName: profileName,
+      profileRole: profileRole,
+      profileMode: profileMode,
+      profileApi: profileApi
+    },
+    state: {
+      userName: CURRENT_USER,
+      userRole: CURRENT_ROLE,
+      apiEnabled: isApiEnabled(),
+      apiOnline: apiOnline
+    },
+    modal: profileModal,
+    syncFilters: syncCustomExportFilters,
+    refreshSummary: refreshCustomExportSummary,
+    exportCustomYear: exportCustomYear,
+    exportCustomStatus: exportCustomStatus,
+    exportCustomIncludeOld: exportCustomIncludeOld,
+    exportCustomDeputado: exportCustomDeputado,
+    exportCustomMunicipio: exportCustomMunicipio,
+    yearFilter: yearFilter
+  };
+}
+
+function getPendingUsersContext() {
+  return {
+    isApiEnabled: isApiEnabled,
+    isOwnerUser: isOwnerUser,
+    setFeedback: setPendingUsersFeedback,
+    renderTable: renderPendingUsersTable,
+    apiRequest: apiRequest,
+    extractApiError: extractApiError,
+    getSelectedRole: function (userId) {
+      const roleSelect = pendingUsersTableWrap ? pendingUsersTableWrap.querySelector("select[data-pending-role='" + String(userId) + "']") : null;
+      return normalizeUserRole(roleSelect ? roleSelect.value : "CONTABIL");
+    },
+    refresh: function () {
+      return refreshPendingUsersModal();
+    },
+    confirmAction: function (message) {
+      return confirm(message);
+    },
+    modal: pendingUsersModal,
+    setModalVisibility: function (modalEl, visible) {
+      setAuxModalVisibility(modalEl, visible);
+    }
+  };
+}
+
 function renderBetaSupportPanel(target, filteredRows) {
   const moduleFn = getBetaSupportUtil("renderBetaSupportPanel");
   if (moduleFn) {
@@ -5036,45 +5122,38 @@ function applyAccessProfile() {
 }
 
 function refreshProfileModal() {
-  const syncProfileModalFieldsUtil = getUiRenderUtil("syncProfileModalFields");
-  if (syncProfileModalFieldsUtil) {
-    syncProfileModalFieldsUtil({
-      profileName: profileName,
-      profileRole: profileRole,
-      profileMode: profileMode,
-      profileApi: profileApi
-    }, {
-      userName: CURRENT_USER,
-      userRole: CURRENT_ROLE,
-      apiEnabled: isApiEnabled(),
-      apiOnline: apiOnline
-    });
-    return;
+  const moduleFn = getAuxModalUtil("refreshProfileModal");
+  if (moduleFn) {
+    return moduleFn(getAuxModalContext());
   }
-  if (profileName) profileName.value = CURRENT_USER || "-";
-  if (profileRole) profileRole.value = CURRENT_ROLE || "-";
-  if (profileMode) profileMode.value = isApiEnabled() ? "Nuvem/API" : "Local";
-  if (profileApi) profileApi.value = apiOnline ? "Conectada" : "Indisponivel";
+  const ctx = getAuxModalContext();
+  ctx.syncProfileModalFields(ctx.fields, ctx.state);
 }
 
 function setAuxModalVisibility(modalEl, visible) {
-  const setModalVisibilityUtil = getUiRenderUtil("setModalVisibility");
-  if (setModalVisibilityUtil) {
-    setModalVisibilityUtil(modalEl, visible);
-    return;
+  const moduleFn = getAuxModalUtil("setAuxModalVisibility");
+  if (moduleFn) {
+    return moduleFn(modalEl, visible, getAuxModalContext());
   }
-  if (!modalEl) return;
-  modalEl.classList.toggle("show", !!visible);
-  modalEl.setAttribute("aria-hidden", visible ? "false" : "true");
+  const ctx = getAuxModalContext();
+  ctx.setModalVisibility(modalEl, visible);
 }
 
 function openProfileModal() {
+  const moduleFn = getAuxModalUtil("openProfileModal");
+  if (moduleFn) {
+    return moduleFn(getAuxModalContext());
+  }
   if (!profileModal) return;
   refreshProfileModal();
   setAuxModalVisibility(profileModal, true);
 }
 
 function closeProfileModal() {
+  const moduleFn = getAuxModalUtil("closeProfileModal");
+  if (moduleFn) {
+    return moduleFn(getAuxModalContext());
+  }
   if (!profileModal) return;
   setAuxModalVisibility(profileModal, false);
 }
@@ -5095,6 +5174,10 @@ function setPendingUsersFeedback(msg, isError) {
 }
 
 function closePendingUsersModal() {
+  const moduleFn = getPendingUsersUtil("closePendingUsersModal");
+  if (moduleFn) {
+    return moduleFn(getPendingUsersContext());
+  }
   if (!pendingUsersModal) return;
   setAuxModalVisibility(pendingUsersModal, false);
 }
@@ -5121,81 +5204,33 @@ function renderPendingUsersTable(items) {
 
 // Busca e lista cadastros pendentes para aprovacao.
 async function refreshPendingUsersModal() {
-  if (!isApiEnabled()) {
-    setPendingUsersFeedback("Aprovacao de cadastro exige API ativa.", true);
-    renderPendingUsersTable([]);
-    return;
-  }
-  if (!isOwnerUser()) {
-    setPendingUsersFeedback("Apenas PROGRAMADOR pode aprovar cadastros.", true);
-    renderPendingUsersTable([]);
-    return;
-  }
-
-  setPendingUsersFeedback("Carregando cadastros em analise...");
-  try {
-    const users = await apiRequest("GET", "/users?include_inactive=true", undefined, "UI");
-    const pending = (Array.isArray(users) ? users : []).filter(function (u) {
-      const registrationStatus = String(u && u.status_cadastro ? u.status_cadastro : "").trim().toUpperCase();
-      if (registrationStatus) return registrationStatus === "EM_ANALISE";
-      if (u && u.ativo) return false;
-      const lastLogin = u && u.ultimo_login ? String(u.ultimo_login).trim() : "";
-      return lastLogin === "";
-    });
-    renderPendingUsersTable(pending);
-    setPendingUsersFeedback("Pendentes: " + String(pending.length));
-  } catch (err) {
-    renderPendingUsersTable([]);
-    setPendingUsersFeedback(extractApiError(err, "Falha ao carregar cadastros pendentes."), true);
+  const moduleFn = getPendingUsersUtil("refreshPendingUsersModal");
+  if (moduleFn) {
+    return moduleFn(getPendingUsersContext());
   }
 }
 
 // Aprova usuario pendente com perfil selecionado pelo programador.
 async function approvePendingUser(userId) {
-  if (!userId) return;
-  if (!isOwnerUser()) {
-    setPendingUsersFeedback("Apenas PROGRAMADOR pode aprovar cadastros.", true);
-    return;
+  const moduleFn = getPendingUsersUtil("approvePendingUser");
+  if (moduleFn) {
+    return moduleFn(userId, getPendingUsersContext());
   }
-
-  const roleSelect = pendingUsersTableWrap ? pendingUsersTableWrap.querySelector("select[data-pending-role='" + String(userId) + "']") : null;
-  const selectedRole = normalizeUserRole(roleSelect ? roleSelect.value : "CONTABIL");
-
-  setPendingUsersFeedback("Aprovando usuario #" + String(userId) + "...");
-  await apiRequest("PATCH", "/users/" + String(userId) + "/status", {
-    ativo: true,
-    perfil: selectedRole,
-    status_cadastro: "APROVADO"
-  }, "UI");
-
-  setPendingUsersFeedback("Usuario aprovado com sucesso.");
-  await refreshPendingUsersModal();
 }
 
 async function rejectPendingUser(userId) {
-  if (!userId) return;
-  if (!isOwnerUser()) {
-    setPendingUsersFeedback("Apenas PROGRAMADOR pode recusar cadastros.", true);
-    return;
+  const moduleFn = getPendingUsersUtil("rejectPendingUser");
+  if (moduleFn) {
+    return moduleFn(userId, getPendingUsersContext());
   }
-  const roleSelect = pendingUsersTableWrap ? pendingUsersTableWrap.querySelector("select[data-pending-role='" + String(userId) + "']") : null;
-  const selectedRole = normalizeUserRole(roleSelect ? roleSelect.value : "CONTABIL");
-  const confirmed = confirm("Deseja realmente recusar o cadastro #" + String(userId) + "?");
-  if (!confirmed) return;
-
-  setPendingUsersFeedback("Recusando usuario #" + String(userId) + "...");
-  await apiRequest("PATCH", "/users/" + String(userId) + "/status", {
-    ativo: false,
-    perfil: selectedRole,
-    status_cadastro: "RECUSADO"
-  }, "UI");
-
-  setPendingUsersFeedback("Usuario recusado com sucesso.");
-  await refreshPendingUsersModal();
 }
 
 // Abre modal de aprovacao e dispara refresh inicial.
 function openPendingUsersModal() {
+  const moduleFn = getPendingUsersUtil("openPendingUsersModal");
+  if (moduleFn) {
+    return moduleFn(getPendingUsersContext());
+  }
   if (!pendingUsersModal) return;
   setAuxModalVisibility(pendingUsersModal, true);
   refreshPendingUsersModal().catch(function (err) {
@@ -7186,26 +7221,25 @@ function buildExportFiltersSnapshot(scope, customFilters) {
 }
 
 function openExportCustomModal() {
+  const moduleFn = getAuxModalUtil("openExportCustomModal");
+  if (moduleFn) {
+    return moduleFn(Object.assign({}, getAuxModalContext(), {
+      modal: exportCustomModal
+    }));
+  }
   if (!exportCustomModal) return;
   syncCustomExportFilters();
-
-  if (exportCustomYear && yearFilter && !exportCustomYear.value) {
-    exportCustomYear.value = yearFilter.value || "";
-  }
-
-  if (exportCustomStatus && !exportCustomStatus.value) {
-    exportCustomStatus.value = "";
-  }
-
-  if (exportCustomIncludeOld) exportCustomIncludeOld.checked = false;
-  if (exportCustomDeputado) exportCustomDeputado.value = "";
-  if (exportCustomMunicipio) exportCustomMunicipio.value = "";
-
   refreshCustomExportSummary();
   setAuxModalVisibility(exportCustomModal, true);
 }
 
 function closeExportCustomModal() {
+  const moduleFn = getAuxModalUtil("closeExportCustomModal");
+  if (moduleFn) {
+    return moduleFn(Object.assign({}, getAuxModalContext(), {
+      modal: exportCustomModal
+    }));
+  }
   if (!exportCustomModal) return;
   setAuxModalVisibility(exportCustomModal, false);
 }
