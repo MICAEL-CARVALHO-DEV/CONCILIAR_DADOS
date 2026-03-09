@@ -73,6 +73,7 @@ const idUtils = SEC_FRONTEND.idUtils || null;
 const statusUtils = SEC_FRONTEND.statusUtils || null;
 const progressUtils = SEC_FRONTEND.progressUtils || null;
 const filterUtils = SEC_FRONTEND.filterUtils || null;
+const accessProfileUtils = SEC_FRONTEND.accessProfileUtils || null;
 const exportUtils = SEC_FRONTEND.exportUtils || null;
 const exportFlowUtils = SEC_FRONTEND.exportFlowUtils || null;
 const exportWorkbookWriterUtils = SEC_FRONTEND.exportWorkbookWriterUtils || null;
@@ -469,6 +470,12 @@ if (bootstrapAppUiUtil) {
 function getFilterUtil(methodName) {
   if (!filterUtils) return null;
   const method = filterUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getAccessProfileUtil(methodName) {
+  if (!accessProfileUtils) return null;
+  const method = accessProfileUtils[methodName];
   return typeof method === "function" ? method : null;
 }
 
@@ -5397,6 +5404,34 @@ function getAuxModalContext() {
   };
 }
 
+function getAccessProfileContext() {
+  return {
+    currentRole: CURRENT_ROLE,
+    currentUser: CURRENT_USER,
+    apiOnline: apiOnline,
+    STORAGE_MODE_LOCAL: STORAGE_MODE_LOCAL,
+    currentUserInfo: currentUserInfo,
+    btnExportAtuais: btnExportAtuais,
+    btnExportHistorico: btnExportHistorico,
+    btnExportCustom: btnExportCustom,
+    btnPendingApprovals: btnPendingApprovals,
+    btnCreateProfile: btnCreateProfile,
+    importLabel: importLabel,
+    btnReset: btnReset,
+    btnDemo4Users: btnDemo4Users,
+    btnProfile: btnProfile,
+    btnLogout: btnLogout,
+    getStorageMode: getStorageMode,
+    getReadOnlyRoleMeta: getReadOnlyRoleMeta,
+    renderRoleNotice: renderRoleNotice,
+    renderSupervisorQuickPanel: renderSupervisorQuickPanel,
+    applyModalAccessProfile: applyModalAccessProfile,
+    syncBetaAuditPolling: syncBetaAuditPolling,
+    syncBetaSupportPolling: syncBetaSupportPolling,
+    refreshProfileModal: refreshProfileModal
+  };
+}
+
 function getPendingUsersContext() {
   return {
     isApiEnabled: isApiEnabled,
@@ -5800,6 +5835,10 @@ function renderSupervisorQuickPanel(prefilteredRows) {
 
 // Aplica regras de permissao por perfil e atualiza botoes/indicadores.
 function applyAccessProfile() {
+  const moduleFn = getAccessProfileUtil("applyAccessProfile");
+  if (moduleFn) {
+    return moduleFn(getAccessProfileContext());
+  }
   const isOwner = CURRENT_ROLE === "PROGRAMADOR";
   const isSupervisor = isSupervisorUser();
   const readOnlyMeta = getReadOnlyRoleMeta();
