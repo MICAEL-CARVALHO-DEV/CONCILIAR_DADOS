@@ -73,6 +73,7 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Extrair os builders do relatorio executivo para `frontend/js/utils/exportExecutive.js`, deixando `app.js` com orquestracao do export.
 - [DONE] Extrair o fluxo de `Cadastros em analise` para `frontend/js/ui/pendingUsers.js`, deixando `app.js` com wrappers de permissao e contexto.
 - [DONE] Extrair os modais auxiliares para `frontend/js/ui/auxModals.js`, deixando `app.js` com estado e callbacks dos modais de perfil/export.
+- [DONE] Extrair a orquestracao de polling e refresh do historico/suporte beta para `frontend/js/ui/betaSync.js`, deixando `app.js` com wrappers e contextos de estado.
 
-Active: ID-FE-69
+Active: ID-FE-70
 Risks: validar comportamento em dispositivos com storage bloqueado.

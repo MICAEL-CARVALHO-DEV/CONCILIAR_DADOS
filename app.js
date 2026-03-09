@@ -85,6 +85,7 @@ const pendingUsersUtils = SEC_FRONTEND.pendingUsersUtils || null;
 const betaHistoryUtils = SEC_FRONTEND.betaHistoryUtils || null;
 const betaPowerBiUtils = SEC_FRONTEND.betaPowerBiUtils || null;
 const betaSupportUtils = SEC_FRONTEND.betaSupportUtils || null;
+const betaSyncUtils = SEC_FRONTEND.betaSyncUtils || null;
 const betaWorkspaceUtils = SEC_FRONTEND.betaWorkspaceUtils || null;
 const authStore = SEC_FRONTEND.authStore || null;
 const authGuard = SEC_FRONTEND.authGuard || null;
@@ -644,6 +645,12 @@ function getBetaPowerBiUtil(methodName) {
 function getBetaWorkspaceUtil(methodName) {
   if (!betaWorkspaceUtils) return null;
   const method = betaWorkspaceUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getBetaSyncUtil(methodName) {
+  if (!betaSyncUtils) return null;
+  const method = betaSyncUtils[methodName];
   return typeof method === "function" ? method : null;
 }
 
@@ -4089,12 +4096,34 @@ function renderRoleNotice() {
 }
 
 function clearBetaAuditPolling() {
+  const moduleFn = getBetaSyncUtil("clearPollingTimer");
+  if (moduleFn) {
+    return moduleFn({
+      getTimer: function () {
+        return betaAuditPollTimer;
+      },
+      setTimer: function (nextTimer) {
+        betaAuditPollTimer = nextTimer;
+      }
+    });
+  }
   if (!betaAuditPollTimer) return;
   clearInterval(betaAuditPollTimer);
   betaAuditPollTimer = null;
 }
 
 function clearBetaSupportPolling() {
+  const moduleFn = getBetaSyncUtil("clearPollingTimer");
+  if (moduleFn) {
+    return moduleFn({
+      getTimer: function () {
+        return betaSupportPollTimer;
+      },
+      setTimer: function (nextTimer) {
+        betaSupportPollTimer = nextTimer;
+      }
+    });
+  }
   if (!betaSupportPollTimer) return;
   clearInterval(betaSupportPollTimer);
   betaSupportPollTimer = null;
@@ -4143,6 +4172,25 @@ function syncApiStatePolling() {
 }
 
 function syncBetaAuditPolling() {
+  const moduleFn = getBetaSyncUtil("syncPolling");
+  if (moduleFn) {
+    return moduleFn({
+      shouldRun: function () {
+        return canViewGlobalAuditApi() && apiOnline;
+      },
+      getTimer: function () {
+        return betaAuditPollTimer;
+      },
+      setTimer: function (nextTimer) {
+        betaAuditPollTimer = nextTimer;
+      },
+      onClear: clearBetaAuditPolling,
+      tick: function () {
+        return refreshBetaAuditFromApi(false);
+      },
+      intervalMs: BETA_AUDIT_POLL_MS
+    });
+  }
   if (!canViewGlobalAuditApi() || !apiOnline) {
     clearBetaAuditPolling();
     return;
@@ -4154,6 +4202,25 @@ function syncBetaAuditPolling() {
 }
 
 function syncBetaSupportPolling() {
+  const moduleFn = getBetaSyncUtil("syncPolling");
+  if (moduleFn) {
+    return moduleFn({
+      shouldRun: function () {
+        return canUseSupportApi() && apiOnline && getActiveBetaWorkspaceTab() === "support";
+      },
+      getTimer: function () {
+        return betaSupportPollTimer;
+      },
+      setTimer: function (nextTimer) {
+        betaSupportPollTimer = nextTimer;
+      },
+      onClear: clearBetaSupportPolling,
+      tick: function () {
+        return refreshBetaSupportFromApi(false);
+      },
+      intervalMs: BETA_SUPPORT_POLL_MS
+    });
+  }
   if (!canUseSupportApi() || !apiOnline || getActiveBetaWorkspaceTab() !== "support") {
     clearBetaSupportPolling();
     return;
@@ -4415,6 +4482,10 @@ function getAuditRecordMeta(row) {
 }
 
 async function refreshBetaAuditFromApi(forceRender) {
+  const moduleFn = getBetaSyncUtil("refreshBetaAuditFromApi");
+  if (moduleFn) {
+    return moduleFn(forceRender, getBetaAuditSyncContext());
+  }
   if (!canViewGlobalAuditApi()) {
     betaAuditRows = [];
     betaAuditError = isApiEnabled() ? "Perfil atual sem acesso ao historico global da API." : "";
@@ -4484,6 +4555,10 @@ function buildSupportApiQuery() {
 }
 
 async function refreshBetaSupportMessagesFromApi(forceRender, threadId) {
+  const moduleFn = getBetaSyncUtil("refreshBetaSupportMessagesFromApi");
+  if (moduleFn) {
+    return moduleFn(forceRender, threadId, getBetaSupportSyncContext());
+  }
   const id = Number(threadId || betaSupportSelectedThreadId || 0);
   if (!id || !canUseSupportApi()) {
     betaSupportMessages = [];
@@ -4507,6 +4582,10 @@ async function refreshBetaSupportMessagesFromApi(forceRender, threadId) {
 }
 
 async function refreshBetaSupportFromApi(forceRender) {
+  const moduleFn = getBetaSyncUtil("refreshBetaSupportFromApi");
+  if (moduleFn) {
+    return moduleFn(forceRender, getBetaSupportSyncContext());
+  }
   if (!canUseSupportApi()) {
     betaSupportThreads = [];
     betaSupportMessages = [];
@@ -4543,6 +4622,89 @@ async function refreshBetaSupportFromApi(forceRender) {
     if (forceRender) renderBetaWorkspace(getFiltered());
     syncBetaSupportPolling();
   }
+}
+
+function getBetaAuditSyncContext() {
+  return {
+    canViewGlobalAuditApi: canViewGlobalAuditApi,
+    isApiEnabled: isApiEnabled,
+    isLoading: function () {
+      return betaAuditLoading;
+    },
+    setLoading: function (nextLoading) {
+      betaAuditLoading = !!nextLoading;
+    },
+    setRows: function (rows) {
+      betaAuditRows = Array.isArray(rows) ? rows : [];
+    },
+    setError: function (message) {
+      betaAuditError = String(message || "");
+    },
+    setLastSyncAt: function (value) {
+      betaAuditLastSyncAt = value || "";
+    },
+    renderWorkspace: function () {
+      renderBetaWorkspace(getFiltered());
+    },
+    apiRequest: apiRequest,
+    buildQuery: buildBetaAuditApiQuery,
+    extractApiError: extractApiError,
+    isoNow: isoNow,
+    text: text
+  };
+}
+
+function getBetaSupportSyncContext() {
+  return {
+    canUseSupportApi: canUseSupportApi,
+    isApiEnabled: isApiEnabled,
+    isLoading: function () {
+      return betaSupportLoading;
+    },
+    setLoading: function (nextLoading) {
+      betaSupportLoading = !!nextLoading;
+    },
+    setThreads: function (threads) {
+      betaSupportThreads = Array.isArray(threads) ? threads : [];
+    },
+    setMessages: function (messages) {
+      betaSupportMessages = Array.isArray(messages) ? messages : [];
+    },
+    setError: function (message) {
+      betaSupportError = String(message || "");
+    },
+    setMessagesError: function (message) {
+      betaSupportMessagesError = String(message || "");
+    },
+    isMessagesLoading: function () {
+      return betaSupportMessagesLoading;
+    },
+    setMessagesLoading: function (nextLoading) {
+      betaSupportMessagesLoading = !!nextLoading;
+    },
+    setLastSyncAt: function (value) {
+      betaSupportLastSyncAt = value || "";
+    },
+    getSelectedThreadId: function () {
+      return Number(betaSupportSelectedThreadId || 0);
+    },
+    setSelectedThreadId: function (threadId) {
+      betaSupportSelectedThreadId = Number(threadId || 0);
+    },
+    renderWorkspace: function () {
+      renderBetaWorkspace(getFiltered());
+    },
+    apiRequest: apiRequest,
+    buildQuery: buildSupportApiQuery,
+    refreshMessages: function (nextForceRender, threadId) {
+      return refreshBetaSupportMessagesFromApi(nextForceRender, threadId);
+    },
+    syncPolling: function () {
+      syncBetaSupportPolling();
+    },
+    extractApiError: extractApiError,
+    isoNow: isoNow
+  };
 }
 
 function getBetaSupportContext() {
