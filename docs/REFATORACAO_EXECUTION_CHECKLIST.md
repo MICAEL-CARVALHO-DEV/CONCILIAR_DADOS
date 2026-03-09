@@ -90,6 +90,7 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Extrair o calculo de filtros e agregacao do dashboard executivo para `frontend/js/ui/powerBiData.js`, deixando `app.js` com wrappers e contexto do Power BI.
 - [DONE] Extrair o perfil de acesso visual da interface para `frontend/js/ui/accessProfile.js`, deixando `app.js` com wrappers e contexto de permissao.
 - [DONE] Extrair as operacoes de sincronizacao com a API para `frontend/js/api/apiSyncOps.js`, deixando `app.js` com wrappers curtos para status, eventos, importacao e logs de exportacao.
+- [DONE] Extrair o bootstrap residual da aplicacao para `frontend/js/ui/appStartup.js`, deixando `app.js` com contextos de startup e fallback minimo.
 
-Active: ID-FE-86
+Active: ID-FE-87
 Risks: validar comportamento em dispositivos com storage bloqueado.

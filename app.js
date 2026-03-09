@@ -90,6 +90,7 @@ const modalShellUtils = SEC_FRONTEND.modalShellUtils || null;
 const importControlsUtils = SEC_FRONTEND.importControlsUtils || null;
 const appBindingsUtils = SEC_FRONTEND.appBindingsUtils || null;
 const appLifecycleUtils = SEC_FRONTEND.appLifecycleUtils || null;
+const appStartupUtils = SEC_FRONTEND.appStartupUtils || null;
 const pendingUsersUtils = SEC_FRONTEND.pendingUsersUtils || null;
 const betaHistoryUtils = SEC_FRONTEND.betaHistoryUtils || null;
 const powerBiDataUtils = SEC_FRONTEND.powerBiDataUtils || null;
@@ -248,9 +249,6 @@ const MODAL_DRAFT_STORAGE_PREFIX = "SEC_MODAL_DRAFT_V1";
 const SUPPORT_CATEGORIES = ["OPERACAO", "IMPORTACAO", "EXPORTACAO", "DASHBOARD", "ACESSO", "ESTRUTURAL", "OUTRO"];
 const SUPPORT_THREAD_STATUS = ["ABERTO", "EM_ANALISE", "RESPONDIDO", "FECHADO"];
 const SUPPORT_MANAGER_ROLES = ["SUPERVISAO", "POWERBI", "PROGRAMADOR"];
-
-configureFrontendModules();
-loadUserConfig(false);
 
 const DEMO = [
   mkRecord({
@@ -456,17 +454,6 @@ const authRegisterRole = document.getElementById("authRegisterRole");
 const authRegisterPassword = document.getElementById("authRegisterPassword");
 const authRegisterPassword2 = document.getElementById("authRegisterPassword2");
 const authMsg = document.getElementById("authMsg");
-
-const bootstrapAppUiUtil = getAppLifecycleUtil("bootstrapAppUi");
-if (bootstrapAppUiUtil) {
-  bootstrapAppUiUtil(getAppLifecycleContext());
-} else {
-  initSelects();
-  setupAuthUi();
-  setupCrossTabSync();
-  render();
-  initializeAuthFlow();
-}
 
 function getFilterUtil(methodName) {
   if (!filterUtils) return null;
@@ -783,6 +770,12 @@ function getAppLifecycleUtil(methodName) {
   return typeof method === "function" ? method : null;
 }
 
+function getAppStartupUtil(methodName) {
+  if (!appStartupUtils) return null;
+  const method = appStartupUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
 function getPendingUsersUtil(methodName) {
   if (!pendingUsersUtils) return null;
   const method = pendingUsersUtils[methodName];
@@ -1000,9 +993,8 @@ function isUnsafeReloadShortcut(e) {
   var accel = !!(e.ctrlKey || e.metaKey);
   return accel && key === "r";
 }
-const bindUiShellEventsUtil = getAppBindingsUtil("bindUiShellEvents");
-if (bindUiShellEventsUtil) {
-  bindUiShellEventsUtil({
+function getUiShellBindingsContext() {
+  return {
     render: render,
     debounce: debounce,
     statusFilter: statusFilter,
@@ -1128,12 +1120,11 @@ if (bindUiShellEventsUtil) {
     rejectPendingUser: rejectPendingUser,
     extractApiError: extractApiError,
     setPendingUsersFeedback: setPendingUsersFeedback
-  });
+  };
 }
 
-const bindImportControlsUtil = getImportControlsUtil("bindImportControls");
-if (bindImportControlsUtil) {
-  bindImportControlsUtil({
+function getImportControlsContext() {
+  return {
     btnReset: btnReset,
     fileCsv: fileCsv,
     canMutateRecords: canMutateRecords,
@@ -1175,7 +1166,7 @@ if (bindImportControlsUtil) {
     mkEvent: mkEvent,
     isoNow: isoNow,
     syncCanonicalToAllFields: syncCanonicalToAllFields
-  });
+  };
 }
 
 function getModalFieldType(fieldKey) {
@@ -8944,4 +8935,47 @@ function configureFrontendModules() {
   const configureConcurrencyUtil = getConcurrencyUtil("configure");
   if (!configureConcurrencyUtil) return;
   configureConcurrencyUtil(getConcurrencyConfigContext());
+}
+
+const initializeAppStartupUtil = getAppStartupUtil("initializeAppStartup");
+if (initializeAppStartupUtil) {
+  initializeAppStartupUtil({
+    configureFrontendModules: configureFrontendModules,
+    loadUserConfig: loadUserConfig,
+    bootstrapAppUi: getAppLifecycleUtil("bootstrapAppUi"),
+    getAppLifecycleContext: getAppLifecycleContext,
+    initSelects: initSelects,
+    setupAuthUi: setupAuthUi,
+    setupCrossTabSync: setupCrossTabSync,
+    render: render,
+    initializeAuthFlow: initializeAuthFlow,
+    bindUiShellEvents: getAppBindingsUtil("bindUiShellEvents"),
+    getUiShellBindingsContext: getUiShellBindingsContext,
+    bindImportControls: getImportControlsUtil("bindImportControls"),
+    getImportControlsContext: getImportControlsContext
+  });
+} else {
+  configureFrontendModules();
+  loadUserConfig(false);
+
+  const bootstrapAppUiUtil = getAppLifecycleUtil("bootstrapAppUi");
+  if (bootstrapAppUiUtil) {
+    bootstrapAppUiUtil(getAppLifecycleContext());
+  } else {
+    initSelects();
+    setupAuthUi();
+    setupCrossTabSync();
+    render();
+    initializeAuthFlow();
+  }
+
+  const bindUiShellEventsUtil = getAppBindingsUtil("bindUiShellEvents");
+  if (bindUiShellEventsUtil) {
+    bindUiShellEventsUtil(getUiShellBindingsContext());
+  }
+
+  const bindImportControlsUtil = getImportControlsUtil("bindImportControls");
+  if (bindImportControlsUtil) {
+    bindImportControlsUtil(getImportControlsContext());
+  }
 }
