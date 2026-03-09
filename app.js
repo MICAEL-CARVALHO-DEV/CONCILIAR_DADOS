@@ -104,6 +104,7 @@ const authStore = SEC_FRONTEND.authStore || null;
 const authSessionUtils = SEC_FRONTEND.authSessionUtils || null;
 const authUiUtils = SEC_FRONTEND.authUiUtils || null;
 const authFlowUtils = SEC_FRONTEND.authFlowUtils || null;
+const roleAccessUtils = SEC_FRONTEND.roleAccessUtils || null;
 const authGuard = SEC_FRONTEND.authGuard || null;
 const apiClient = SEC_FRONTEND.apiClient || null;
 const apiStateSyncUtils = SEC_FRONTEND.apiStateSyncUtils || null;
@@ -630,6 +631,12 @@ function getAuthGuardUtil(methodName) {
 function getAuthFlowUtil(methodName) {
   if (!authFlowUtils) return null;
   const method = authFlowUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getRoleAccessUtil(methodName) {
+  if (!roleAccessUtils) return null;
+  const method = roleAccessUtils[methodName];
   return typeof method === "function" ? method : null;
 }
 
@@ -3273,54 +3280,41 @@ function loadUserConfig(forcePrompt) {
   return requireModuleFunction(getAuthFlowUtil, "loadUserConfig", "authFlowUtils")(forcePrompt, getAuthFlowContext());
 }
 
+function getRoleAccessContext() {
+  return {
+    currentRole: CURRENT_ROLE,
+    currentUser: CURRENT_USER,
+    supportManagerRoles: SUPPORT_MANAGER_ROLES,
+    isApiEnabled: isApiEnabled
+  };
+}
+
 function isSupervisorUser() {
-  return CURRENT_ROLE === "SUPERVISAO";
+  return requireModuleFunction(getRoleAccessUtil, "isSupervisorUser", "roleAccessUtils")(getRoleAccessContext());
 }
 
 function isPowerBiUser() {
-  return CURRENT_ROLE === "POWERBI";
+  return requireModuleFunction(getRoleAccessUtil, "isPowerBiUser", "roleAccessUtils")(getRoleAccessContext());
 }
 
 function isSupportManagerUser() {
-  return SUPPORT_MANAGER_ROLES.indexOf(CURRENT_ROLE) >= 0;
+  return requireModuleFunction(getRoleAccessUtil, "isSupportManagerUser", "roleAccessUtils")(getRoleAccessContext());
 }
 
 function getReadOnlyRoleMeta() {
-  if (isSupervisorUser()) {
-    return {
-      key: "SUPERVISAO",
-      viewTag: " (supervisao)",
-      noticeTitle: "Modo supervisao: somente monitoramento",
-      noticeDescription: "Este perfil acompanha andamento e auditoria em tempo real, sem alterar dados.",
-      modalReadOnlyMessage: "MODO LEITURA: perfil SUPERVISAO monitora, sem alterar dados.",
-      lockModeLabel: "Modo supervisao (leitura)"
-    };
-  }
-  if (isPowerBiUser()) {
-    return {
-      key: "POWERBI",
-      viewTag: " (power bi)",
-      noticeTitle: "Modo Power BI: leitura analitica",
-      noticeDescription: "Este perfil consulta historico, indicadores e visao consolidada, sem alterar dados.",
-      modalReadOnlyMessage: "MODO LEITURA: perfil POWERBI consulta indicadores e historico, sem alterar dados.",
-      lockModeLabel: "Modo Power BI (leitura)"
-    };
-  }
-  return null;
+  return requireModuleFunction(getRoleAccessUtil, "getReadOnlyRoleMeta", "roleAccessUtils")(getRoleAccessContext());
 }
 
 function isReadOnlyRoleUser() {
-  return !!getReadOnlyRoleMeta();
+  return requireModuleFunction(getRoleAccessUtil, "isReadOnlyRoleUser", "roleAccessUtils")(getRoleAccessContext());
 }
 
 function getReadOnlyRoleMessage() {
-  const meta = getReadOnlyRoleMeta();
-  return meta ? meta.modalReadOnlyMessage : "";
+  return requireModuleFunction(getRoleAccessUtil, "getReadOnlyRoleMessage", "roleAccessUtils")(getRoleAccessContext());
 }
 
 function getReadOnlyRoleLockLabel() {
-  const meta = getReadOnlyRoleMeta();
-  return meta ? meta.lockModeLabel : "Modo leitura";
+  return requireModuleFunction(getRoleAccessUtil, "getReadOnlyRoleLockLabel", "roleAccessUtils")(getRoleAccessContext());
 }
 
 function isLockedStructuralField(fieldKey) {
@@ -3328,15 +3322,15 @@ function isLockedStructuralField(fieldKey) {
 }
 
 function canViewGlobalAuditApi() {
-  return isApiEnabled() && ["APG", "SUPERVISAO", "POWERBI", "PROGRAMADOR"].indexOf(CURRENT_ROLE) >= 0;
+  return requireModuleFunction(getRoleAccessUtil, "canViewGlobalAuditApi", "roleAccessUtils")(getRoleAccessContext());
 }
 
 function canUseSupportApi() {
-  return isApiEnabled() && !!CURRENT_USER;
+  return requireModuleFunction(getRoleAccessUtil, "canUseSupportApi", "roleAccessUtils")(getRoleAccessContext());
 }
 
 function canMutateRecords() {
-  return !isReadOnlyRoleUser();
+  return requireModuleFunction(getRoleAccessUtil, "canMutateRecords", "roleAccessUtils")(getRoleAccessContext());
 }
 
 function clearEmendaLockTimer() {
