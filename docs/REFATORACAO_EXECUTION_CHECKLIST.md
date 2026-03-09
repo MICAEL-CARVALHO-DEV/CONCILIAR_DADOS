@@ -95,6 +95,7 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Remover fallbacks inline de auth e estado local do `app.js`, promovendo `authUi/authSession/authFlow/appLifecycle/localState` a modulos obrigatorios e reduzindo o arquivo principal.
 - [DONE] Extrair regras de acesso/perfil (`isSupervisorUser`, `getReadOnlyRoleMeta`, `canMutateRecords`, `canUseSupportApi`) para `frontend/js/auth/roleAccess.js`, deixando `app.js` com wrappers e contexto.
 - [DONE] Consolidar `getImportControlsContext()` em uma unica definicao no `app.js`, removendo override oculto e reduzindo duplicacao de contexto.
+- [DONE] Extrair as acoes inline do `getUiShellBindingsContext()` (`exportOne`, `runExportAtuais`, `runExportHistorico`, `runCustomExport`) para `frontend/js/ui/uiShellActions.js`, deixando o context builder mais enxuto.
 
-Active: ID-FE-91
+Active: ID-FE-92
 Risks: validar comportamento em dispositivos com storage bloqueado.

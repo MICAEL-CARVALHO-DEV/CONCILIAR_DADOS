@@ -92,6 +92,7 @@ const importControlsUtils = SEC_FRONTEND.importControlsUtils || null;
 const appBindingsUtils = SEC_FRONTEND.appBindingsUtils || null;
 const appLifecycleUtils = SEC_FRONTEND.appLifecycleUtils || null;
 const appStartupUtils = SEC_FRONTEND.appStartupUtils || null;
+const uiShellActions = SEC_FRONTEND.uiShellActions || null;
 const pendingUsersUtils = SEC_FRONTEND.pendingUsersUtils || null;
 const betaHistoryUtils = SEC_FRONTEND.betaHistoryUtils || null;
 const powerBiDataUtils = SEC_FRONTEND.powerBiDataUtils || null;
@@ -784,6 +785,12 @@ function getAppLifecycleUtil(methodName) {
   return typeof method === "function" ? method : null;
 }
 
+function getUiShellActionsUtil(methodName) {
+  if (!uiShellActions) return null;
+  const method = uiShellActions[methodName];
+  return typeof method === "function" ? method : null;
+}
+
 function getAppStartupUtil(methodName) {
   if (!appStartupUtils) return null;
   const method = appStartupUtils[methodName];
@@ -1007,6 +1014,25 @@ function isUnsafeReloadShortcut(e) {
   var accel = !!(e.ctrlKey || e.metaKey);
   return accel && key === "r";
 }
+
+function getUiShellActionsContext() {
+  return {
+    getSelected: getSelected,
+    lastImportedWorkbookTemplate: lastImportedWorkbookTemplate,
+    dateStamp: dateStamp,
+    exportRecordsToXlsx: exportRecordsToXlsx,
+    EXPORT_SCOPE: EXPORT_SCOPE,
+    isoNow: isoNow,
+    setLatestExportReport: function (nextValue) {
+      latestExportReport = nextValue;
+    },
+    renderImportDashboard: renderImportDashboard,
+    syncExportLogToApi: syncExportLogToApi,
+    countAuditEvents: countAuditEvents,
+    runExportByScope: runExportByScope
+  };
+}
+
 function getUiShellBindingsContext() {
   return {
     render: render,
@@ -1053,59 +1079,21 @@ function getUiShellBindingsContext() {
     normalizeStatus: normalizeStatus,
     btnExportOne: btnExportOne,
     exportOne: async function () {
-      const rec = getSelected();
-      if (!rec) return;
-
-      const templateReady = !!(lastImportedWorkbookTemplate && lastImportedWorkbookTemplate.buffer);
-      const templateMode = templateReady
-        ? confirm("Exportar este registro em modo TEMPLATE (mesma estrutura do XLSX original)?")
-        : false;
-      const roundTripCheck = confirm("Executar round-trip check apos exportar? (pode ser mais lento)");
-      const filename = "emenda_" + rec.id + "_" + dateStamp() + ".xlsx";
-
-      const exportMeta = exportRecordsToXlsx([rec], filename, {
-        useOriginalHeaders: true,
-        roundTripCheck: roundTripCheck,
-        templateMode: templateMode,
-        exportScope: EXPORT_SCOPE.ATUAIS,
-        exportFilters: { single_id: rec.id }
-      });
-      if (!exportMeta) return;
-
-      latestExportReport = {
-        escopo: EXPORT_SCOPE.ATUAIS,
-        arquivoNome: filename,
-        quantidadeRegistros: 1,
-        filtros: { single_id: rec.id },
-        geradoEm: isoNow()
-      };
-      renderImportDashboard();
-
-      await syncExportLogToApi({
-        formato: "XLSX",
-        arquivoNome: filename,
-        quantidadeRegistros: 1,
-        quantidadeEventos: countAuditEvents([rec]),
-        filtros: { single_id: rec.id },
-        modoHeaders: templateMode ? "template_original" : "originais",
-        escopoExportacao: EXPORT_SCOPE.ATUAIS,
-        roundTripOk: exportMeta && exportMeta.roundTrip ? exportMeta.roundTrip.ok : null,
-        roundTripIssues: exportMeta && exportMeta.roundTrip ? (exportMeta.roundTrip.issues || []) : []
-      });
+      return requireModuleFunction(getUiShellActionsUtil, "exportOne", "uiShellActions")(getUiShellActionsContext());
     },
     btnExportAtuais: btnExportAtuais,
     runExportAtuais: async function () {
-      await runExportByScope(EXPORT_SCOPE.ATUAIS);
+      return requireModuleFunction(getUiShellActionsUtil, "runExportAtuais", "uiShellActions")(getUiShellActionsContext());
     },
     btnExportHistorico: btnExportHistorico,
     runExportHistorico: async function () {
-      await runExportByScope(EXPORT_SCOPE.HISTORICO);
+      return requireModuleFunction(getUiShellActionsUtil, "runExportHistorico", "uiShellActions")(getUiShellActionsContext());
     },
     btnExportCustom: btnExportCustom,
     openExportCustomModal: openExportCustomModal,
     btnExportCustomApply: btnExportCustomApply,
     runCustomExport: async function (filters) {
-      return runExportByScope(EXPORT_SCOPE.PERSONALIZADO, { customFilters: filters });
+      return requireModuleFunction(getUiShellActionsUtil, "runCustomExport", "uiShellActions")(filters, getUiShellActionsContext());
     },
     btnExportCustomClose: btnExportCustomClose,
     btnExportCustomCancel: btnExportCustomCancel,
