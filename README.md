@@ -1,24 +1,38 @@
-﻿# CONCILIAR_DADOS
+# CONCILIAR_DADOS
 
 Sistema de governanca de emendas com trilha de auditoria por usuario.
 
 ## Navegacao rapida
+### Entrada diaria
+- Mapa mestre da beta SEC: `CHECK62.md`
+- Sprint ativa: `CHECKUSER.md`
+- Pendencias de decisao: `checks/CHECK_PENDENCIAS_BETA_SEC.md`
+- Indice central da documentacao: `docs/INDICE_DOCUMENTACAO.md`
+- Catalogo canonico dos `.md`: `docs/CATALOGO_DOCUMENTOS_MD.md`
+- Padrao de organizacao dos `.md`: `docs/PADRAO_ORGANIZACAO_MD.md`
+
+### Operacao e manutencao
 - Operacao/manutencao: `README_MANUTENCAO.md`
+- Checklist final de deploy/operacao: `CHECKLIST_DEPLOY_FINAL_OPERACAO.md`
+- Anotacoes operacionais: `anotacoes/README_ANOTACOES.md`
+- Checks auxiliares: `checks/auxiliares/README.md`
+
+### Deploy
 - Guia de deploy geral: `DEPLOY.md`
 - Guia de deploy Render/Supabase: `DEPLOY_GRATIS_RENDER_SUPABASE.md`
 - Guia de deploy Front Cloudflare Pages: `DEPLOY_CLOUDFLARE_PAGES.md`
-- Controle total do processo: `GUIA_CONTROLE_TOTAL.md`
-- Catalogo de codigos/regras: `CATALOGO_CODIGOS_PREDEFINIDOS.md`
-- Log de mudancas: `LOG_ALTERACOES.md`
-- Termo com papeis/responsabilidades: `TERMO_DE_OPERACAO_E_RESPONSABILIDADES.md`
-- Decisoes de import/export XLSX: `DECISOES_IMPORT_EXPORT_XLSX.md`
-- Escopo e comparativo (Sheets/Excel): `ESCOPO_FLUXO_COMPARATIVO_SEC_EMENDAS.md`
-- Base de continuidade Codex: `BASE_CONTINUIDADE_CODEX.md`
+
+### Arquitetura e regras
 - Mapa logico do sistema: `MAPA_LOGICO_CONCILIAR_DADOS.md`
+- Base de continuidade Codex: `BASE_CONTINUIDADE_CODEX.md`
+- Decisoes de import/export XLSX: `anotacoes/DECISOES_IMPORT_EXPORT_XLSX.md`
+- Escopo e comparativo (Sheets/Excel): `anotacoes/ESCOPO_FLUXO_COMPARATIVO_SEC_EMENDAS.md`
+- Termo com papeis/responsabilidades: `anotacoes/TERMO_DE_OPERACAO_E_RESPONSABILIDADES.md`
+
+### Guias
 - Guia Trello + Notion: `GUIA_TRELLO_NOTION_OPERACAO.md`
 - Guia de skills e habilidades: `GUIA_SKILLS_E_HABILIDADES.md`
 - Guia do orquestrador multi-IA: `GUIA_ORQUESTRADOR_MULTI_IA.md`
-- Checklist final de deploy/operacao: `CHECKLIST_DEPLOY_FINAL_OPERACAO.md`
 
 ## Stack
 - Frontend: HTML, CSS, JavaScript
@@ -74,7 +88,3 @@ powershell -ExecutionPolicy Bypass -File .\scripts\start_tudo.ps1
 - `config.production.js`: override para producao (Render + Pages).
 
 Ajuste `API_BASE_URL` e `API_BASE_URL_BY_HOST` em `config.production.js` para nao depender de comando no console do navegador.
-
-
-
-

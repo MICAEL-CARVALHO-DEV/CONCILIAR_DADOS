@@ -31,6 +31,8 @@ EVENT_TYPES = {
 }
 
 EXPORT_SCOPES = {"ATUAIS", "HISTORICO", "PERSONALIZADO"}
+SUPPORT_THREAD_STATUS = {"ABERTO", "EM_ANALISE", "RESPONDIDO", "FECHADO"}
+SUPPORT_CATEGORIES = {"OPERACAO", "IMPORTACAO", "EXPORTACAO", "DASHBOARD", "ACESSO", "ESTRUTURAL", "OUTRO"}
 
 
 class UserOut(BaseModel):
@@ -46,6 +48,7 @@ class UserAdminOut(BaseModel):
     perfil: str
     setor: str
     ativo: bool
+    status_cadastro: str
     ultimo_login: datetime | None = None
     created_at: datetime
 
@@ -56,6 +59,7 @@ class UserAdminOut(BaseModel):
 class UserStatusUpdate(BaseModel):
     ativo: bool
     perfil: str | None = None
+    status_cadastro: str | None = None
 
     @field_validator("perfil")
     @classmethod
@@ -65,6 +69,16 @@ class UserStatusUpdate(BaseModel):
         v = (value or "").strip().upper()
         if v not in ROLE_SET:
             raise ValueError("perfil invalido")
+        return v
+
+    @field_validator("status_cadastro")
+    @classmethod
+    def validate_registration_status(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        v = (value or "").strip().upper()
+        if v not in {"EM_ANALISE", "APROVADO", "RECUSADO"}:
+            raise ValueError("status_cadastro invalido")
         return v
 
 
@@ -402,6 +416,71 @@ class ImportLinhaOut(BaseModel):
     status_linha: str
     id_interno: str
     ref_key: str
+    mensagem: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class SupportThreadCreate(BaseModel):
+    subject: str = Field(min_length=3, max_length=160)
+    categoria: str = "OUTRO"
+    emenda_id: int | None = Field(default=None, ge=1)
+    mensagem: str = Field(min_length=4, max_length=5000)
+
+    @field_validator("categoria")
+    @classmethod
+    def validate_support_category(cls, value: str) -> str:
+        v = (value or "OUTRO").strip().upper()
+        if v not in SUPPORT_CATEGORIES:
+            raise ValueError("categoria invalida")
+        return v
+
+
+class SupportMessageCreate(BaseModel):
+    mensagem: str = Field(min_length=1, max_length=5000)
+
+
+class SupportThreadStatusUpdate(BaseModel):
+    status: str
+
+    @field_validator("status")
+    @classmethod
+    def validate_support_status(cls, value: str) -> str:
+        v = (value or "").strip().upper()
+        if v not in SUPPORT_THREAD_STATUS:
+            raise ValueError("status invalido")
+        return v
+
+
+class SupportThreadOut(BaseModel):
+    id: int
+    subject: str
+    categoria: str
+    status: str
+    emenda_id: int | None = None
+    usuario_id: int | None = None
+    usuario_nome: str
+    setor: str
+    last_actor_nome: str
+    last_actor_role: str
+    last_message_preview: str
+    created_at: datetime
+    updated_at: datetime
+    last_message_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class SupportMessageOut(BaseModel):
+    id: int
+    thread_id: int
+    usuario_id: int | None = None
+    usuario_nome: str
+    setor: str
+    origem: str
     mensagem: str
     created_at: datetime
 

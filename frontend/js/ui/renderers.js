@@ -367,18 +367,20 @@
   function renderRoleNotice(container, options) {
     if (!container) return;
     var opts = options || {};
-    var isSupervisor = !!opts.isSupervisor;
+    var isReadOnlyRole = !!opts.isReadOnlyRole;
+    var noticeTitle = String(opts.roleNoticeTitle || "Modo supervisao: somente monitoramento");
+    var noticeDescription = String(opts.roleNoticeDescription || "Este perfil acompanha andamento e auditoria em tempo real, sem alterar dados.");
 
-    if (isSupervisor) {
+    if (isReadOnlyRole) {
       container.classList.remove("hidden");
       while (container.firstChild) {
         container.removeChild(container.firstChild);
       }
       var h4 = document.createElement("h4");
-      h4.textContent = "Modo supervisao: somente monitoramento";
+      h4.textContent = noticeTitle;
       var p = document.createElement("p");
       p.className = "muted small";
-      p.textContent = "Este perfil acompanha andamento e auditoria em tempo real, sem alterar dados.";
+      p.textContent = noticeDescription;
       container.appendChild(h4);
       container.appendChild(p);
       return;
@@ -523,6 +525,12 @@
     var roles = Array.isArray(opts.roles) ? opts.roles : [];
     var normalizeUserRole = typeof opts.normalizeUserRole === "function" ? opts.normalizeUserRole : function (role) { return role; };
     var dateFmt = typeof opts.fmtDateTime === "function" ? opts.fmtDateTime : function (value) { return String(value || "-"); };
+    var statusLabel = function (value) {
+      var raw = String(value || "EM_ANALISE").trim().toUpperCase();
+      if (raw === "APROVADO") return "Aprovado";
+      if (raw === "RECUSADO") return "Recusado";
+      return "Em analise";
+    };
 
     while (container.firstChild) {
       container.removeChild(container.firstChild);
@@ -580,17 +588,29 @@
       var tdStatus = document.createElement("td");
       var badge = document.createElement("span");
       badge.className = "badge pending";
-      badge.textContent = "Em analise";
+      badge.textContent = statusLabel(u && u.status_cadastro);
       tdStatus.appendChild(badge);
       row.appendChild(tdStatus);
 
       var tdAction = document.createElement("td");
-      var btn = document.createElement("button");
-      btn.className = "btn primary";
-      btn.setAttribute("data-pending-action", "approve");
-      btn.setAttribute("data-user-id", String(Number(u.id || 0)));
-      btn.textContent = "Aprovar";
-      tdAction.appendChild(btn);
+      var actions = document.createElement("div");
+      actions.className = "pending-actions";
+
+      var btnApprove = document.createElement("button");
+      btnApprove.className = "btn primary";
+      btnApprove.setAttribute("data-pending-action", "approve");
+      btnApprove.setAttribute("data-user-id", String(Number(u.id || 0)));
+      btnApprove.textContent = "Aprovar";
+      actions.appendChild(btnApprove);
+
+      var btnReject = document.createElement("button");
+      btnReject.className = "btn danger";
+      btnReject.setAttribute("data-pending-action", "reject");
+      btnReject.setAttribute("data-user-id", String(Number(u.id || 0)));
+      btnReject.textContent = "Recusar";
+      actions.appendChild(btnReject);
+
+      tdAction.appendChild(actions);
       row.appendChild(tdAction);
 
       tbody.appendChild(row);
@@ -638,6 +658,7 @@
         input.addEventListener("input", onModalFieldInput);
         v.appendChild(input);
       } else {
+        if (field && field.key) v.setAttribute("data-kv-readonly-field", field.key);
         v.textContent = String(rec && rec[field.key] == null ? "-" : rec[field.key]);
       }
 
@@ -693,19 +714,26 @@
     var opts = options || {};
     var dirty = !!opts.dirty;
     var pending = !!opts.pending;
-    var hasDraft = dirty || pending;
+    var hasMarkDraft = !!opts.hasMarkDraft;
+    var hasDraft = dirty || pending || hasMarkDraft;
     var canSave = !!opts.canSave;
     var blockReason = String(opts.blockReason || "");
+    var draftSavedAtText = String(opts.draftSavedAtText || "");
 
     if (draftHintEl) {
       draftHintEl.classList.toggle("hidden", !hasDraft);
       if (hasDraft) {
         if (pending) {
-          draftHintEl.textContent = "Marcacao/nota pronta: somente Salvar edicoes grava no historico.";
+          draftHintEl.textContent = "Marcacao pronta: rascunho local salvo automaticamente. Clique em Salvar edicoes para gravar oficialmente.";
         } else if (canSave) {
-          draftHintEl.textContent = "Edicao pendente: pronta para salvar.";
+          draftHintEl.textContent = "Rascunho local salvo automaticamente. Clique em Salvar edicoes para gravar oficialmente.";
+        } else if (hasMarkDraft) {
+          draftHintEl.textContent = "Rascunho local salvo automaticamente. Complete status e motivo para gravar oficialmente.";
         } else {
-          draftHintEl.textContent = "Edicao pendente: informe status e motivo na marcacao para salvar.";
+          draftHintEl.textContent = "Rascunho local salvo automaticamente. Informe status e motivo para salvar oficialmente.";
+        }
+        if (draftSavedAtText) {
+          draftHintEl.textContent += " Ultimo rascunho local: " + draftSavedAtText + ".";
         }
       }
     }
@@ -735,7 +763,6 @@
     if (refs.markStatus) refs.markStatus.disabled = readOnlyMode;
     if (refs.markReason) refs.markReason.disabled = readOnlyMode;
     if (refs.btnMarkStatus) refs.btnMarkStatus.disabled = readOnlyMode;
-    if (refs.btnAddNote) refs.btnAddNote.disabled = readOnlyMode;
     if (refs.btnKvSave) refs.btnKvSave.style.display = readOnlyMode ? "none" : "inline-block";
 
     if (!fieldContainer) return;
@@ -755,6 +782,13 @@
   function setModalVisibility(modalEl, visible) {
     if (!modalEl) return;
     var isVisible = !!visible;
+    var active = typeof document !== "undefined" ? document.activeElement : null;
+    if (!isVisible && active && modalEl.contains(active) && typeof active.blur === "function") {
+      active.blur();
+    }
+    if ("inert" in modalEl) {
+      modalEl.inert = !isVisible;
+    }
     modalEl.classList.toggle("show", isVisible);
     modalEl.setAttribute("aria-hidden", isVisible ? "false" : "true");
   }
@@ -818,6 +852,7 @@
     var apiEnabled = !!opts.apiEnabled;
     var isReadOnly = !!opts.isReadOnly;
     var lockState = opts.lockState || null;
+    var readOnlyRoleMessage = String(opts.readOnlyRoleMessage || "MODO LEITURA: perfil SUPERVISAO monitora, sem alterar dados.");
     var fmtDateTime = typeof opts.fmtDateTime === "function" ? opts.fmtDateTime : fallbackDateTime;
     var ownerText = typeof opts.emendaLockOwnerText === "function" ? opts.emendaLockOwnerText : function () { return ""; };
 
@@ -837,7 +872,7 @@
 
     if (!apiEnabled) {
       if (!canMutate) {
-        showAccessState("readonly", "MODO LEITURA: perfil SUPERVISAO monitora, sem alterar dados.");
+        showAccessState("readonly", readOnlyRoleMessage);
         return;
       }
       resetAccessState(container);
@@ -845,7 +880,7 @@
     }
 
     if (!canMutate) {
-      showAccessState("readonly", "MODO LEITURA: perfil SUPERVISAO monitora, sem alterar dados.");
+      showAccessState("readonly", readOnlyRoleMessage);
       return;
     }
 
@@ -871,6 +906,8 @@
     var opts = options || {};
     var apiEnabled = !!opts.apiEnabled;
     var isSupervisor = !!opts.isSupervisor;
+    var isReadOnlyRole = !!opts.isReadOnlyRole;
+    var readOnlyLockLabel = String(opts.readOnlyLockLabel || (isSupervisor ? "Modo supervisao (leitura)" : "Modo leitura"));
     var isReadOnly = !!opts.isReadOnly;
     var lockState = opts.lockState || null;
     var fmtDateTime = typeof opts.fmtDateTime === "function" ? opts.fmtDateTime : fallbackDateTime;
@@ -880,11 +917,11 @@
     if (record) {
       if (!apiEnabled) {
         message = "Modo local: lock de edicao indisponivel.";
-      } else if (isSupervisor) {
+      } else if (isSupervisor || isReadOnlyRole) {
         var supervisorOwner = ownerText(lockState);
         message = supervisorOwner
-          ? ("Modo supervisao (leitura). Em edicao por: " + supervisorOwner + ".")
-          : "Modo supervisao (leitura).";
+          ? (readOnlyLockLabel + ". Em edicao por: " + supervisorOwner + ".")
+          : (readOnlyLockLabel + ".");
       } else {
         var expiresAt = lockState && lockState.expires_at ? fmtDateTime(lockState.expires_at) : "";
         if (isReadOnly) {

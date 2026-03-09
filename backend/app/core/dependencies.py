@@ -15,6 +15,7 @@ from .security import (
 )
 
 MANAGER_ROLES = {"APG", "SUPERVISAO", "PROGRAMADOR"}
+MONITOR_ROLES = {"APG", "SUPERVISAO", "POWERBI", "PROGRAMADOR"}
 OWNER_ROLE = "PROGRAMADOR"
 
 
@@ -82,6 +83,12 @@ def _actor_optional_from_headers(
 
 def _require_manager(actor: dict = Depends(_actor_from_headers)) -> dict:
     if actor["role"] not in MANAGER_ROLES:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="perfil sem permissao")
+    return actor
+
+
+def _require_monitor(actor: dict = Depends(_actor_from_headers)) -> dict:
+    if actor["role"] not in MONITOR_ROLES:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="perfil sem permissao")
     return actor
 

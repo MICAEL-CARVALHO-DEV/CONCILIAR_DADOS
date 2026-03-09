@@ -6,7 +6,12 @@ param(
   [string]$ApgUser1 = "beta_apg_1",
   [string]$ApgUser2 = "beta_apg_2",
   [string]$ContabilUser1 = "beta_contabil_1",
-  [string]$ContabilUser2 = "beta_contabil_2"
+  [string]$ContabilUser2 = "beta_contabil_2",
+  [string]$ApgPass1 = "",
+  [string]$ApgPass2 = "",
+  [string]$ContabilPass1 = "",
+  [string]$ContabilPass2 = "",
+  [switch]$UseExistingUsers
 )
 
 $ErrorActionPreference = "Stop"
@@ -36,6 +41,23 @@ function New-AuthHeaders([string]$token) {
   }
 }
 
+function Invoke-Login {
+  param(
+    [string]$Name,
+    [string]$Password
+  )
+
+  $login = Invoke-Json -Method "POST" -Url "$base/auth/login" -Headers @{} -Body @{
+    nome = $Name
+    senha = $Password
+  }
+  $token = [string]$login.token
+  if (-not $token) {
+    throw "login sem token para $Name"
+  }
+  return $token
+}
+
 function Get-HttpStatusCode($err) {
   try {
     if ($err.Exception.Response -and $err.Exception.Response.StatusCode) {
@@ -50,30 +72,46 @@ function Ensure-UserAndLogin {
     [string]$Name,
     [string]$Role,
     [string]$Password,
-    [hashtable]$OwnerHeaders
+    [hashtable]$OwnerHeaders,
+    [bool]$UseExistingOnly = $false
   )
 
   $email = ($Name + "@teste.local").ToLower()
+  $token = $null
+
   try {
-    $null = Invoke-Json -Method "POST" -Url "$base/auth/register" -Headers $OwnerHeaders -Body @{
-      nome = $Name
-      email = $email
-      perfil = $Role
-      senha = $Password
-    }
+    $token = Invoke-Login -Name $Name -Password $Password
   } catch {
     $status = Get-HttpStatusCode $_
-    if ($status -ne 409) {
+    if ($UseExistingOnly) {
+      throw "falha ao autenticar usuario existente $Name"
+    }
+    if ($status -ne 401) {
       throw
     }
   }
 
-  $login = Invoke-Json -Method "POST" -Url "$base/auth/login" -Headers @{} -Body @{
-    nome = $Name
-    senha = $Password
+  if (-not $token) {
+    try {
+      $null = Invoke-Json -Method "POST" -Url "$base/auth/register" -Headers $OwnerHeaders -Body @{
+        nome = $Name
+        email = $email
+        perfil = $Role
+        senha = $Password
+      }
+    } catch {
+      $status = Get-HttpStatusCode $_
+      if ($status -ne 409) {
+        throw
+      }
+    }
+
+    try {
+      $token = Invoke-Login -Name $Name -Password $Password
+    } catch {
+      throw
+    }
   }
-  $token = [string]$login.token
-  if (-not $token) { throw "login sem token para $Name" }
 
   return [pscustomobject]@{
     name = $Name
@@ -85,6 +123,11 @@ function Ensure-UserAndLogin {
 if (-not $OwnerUser -or -not $OwnerPass) {
   throw "Informe -OwnerUser e -OwnerPass para executar o Item 8."
 }
+
+if (-not $ApgPass1) { $ApgPass1 = $DefaultPassword }
+if (-not $ApgPass2) { $ApgPass2 = $DefaultPassword }
+if (-not $ContabilPass1) { $ContabilPass1 = $DefaultPassword }
+if (-not $ContabilPass2) { $ContabilPass2 = $DefaultPassword }
 
 Write-Host "[item8] health"
 $health = Invoke-Json -Method "GET" -Url "$base/health" -Headers @{} -Body $null
@@ -114,10 +157,10 @@ $ownerHeaders = New-AuthHeaders -token $ownerToken
 
 Write-Host "[item8] garantindo 4 usuarios (2 APG + 2 CONTABIL)"
 $users = @()
-$users += Ensure-UserAndLogin -Name $ApgUser1 -Role "APG" -Password $DefaultPassword -OwnerHeaders $ownerHeaders
-$users += Ensure-UserAndLogin -Name $ApgUser2 -Role "APG" -Password $DefaultPassword -OwnerHeaders $ownerHeaders
-$users += Ensure-UserAndLogin -Name $ContabilUser1 -Role "CONTABIL" -Password $DefaultPassword -OwnerHeaders $ownerHeaders
-$users += Ensure-UserAndLogin -Name $ContabilUser2 -Role "CONTABIL" -Password $DefaultPassword -OwnerHeaders $ownerHeaders
+$users += Ensure-UserAndLogin -Name $ApgUser1 -Role "APG" -Password $ApgPass1 -OwnerHeaders $ownerHeaders -UseExistingOnly:$UseExistingUsers
+$users += Ensure-UserAndLogin -Name $ApgUser2 -Role "APG" -Password $ApgPass2 -OwnerHeaders $ownerHeaders -UseExistingOnly:$UseExistingUsers
+$users += Ensure-UserAndLogin -Name $ContabilUser1 -Role "CONTABIL" -Password $ContabilPass1 -OwnerHeaders $ownerHeaders -UseExistingOnly:$UseExistingUsers
+$users += Ensure-UserAndLogin -Name $ContabilUser2 -Role "CONTABIL" -Password $ContabilPass2 -OwnerHeaders $ownerHeaders -UseExistingOnly:$UseExistingUsers
 
 $seed = Get-Date -Format "HHmmss"
 $idInterno = "EPI-ITEM8-$seed"

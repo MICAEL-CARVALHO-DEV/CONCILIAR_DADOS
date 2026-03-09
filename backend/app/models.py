@@ -21,6 +21,7 @@ class Usuario(Base):
     senha_salt: Mapped[str] = mapped_column(String(255), default="", nullable=False)
     senha_hash: Mapped[str] = mapped_column(String(255), default="", nullable=False)
     ativo: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    status_cadastro: Mapped[str] = mapped_column(String(20), default="APROVADO", nullable=False)
     ultimo_login: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
@@ -187,4 +188,40 @@ class Historico(Base):
     data_hora: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     emenda: Mapped["Emenda"] = relationship(back_populates="historicos")
+
+
+class SupportThread(Base):
+    __tablename__ = "support_threads"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    subject: Mapped[str] = mapped_column(String(160), nullable=False)
+    categoria: Mapped[str] = mapped_column(String(40), default="OUTRO", nullable=False)
+    status: Mapped[str] = mapped_column(String(20), default="ABERTO", nullable=False)
+    emenda_id: Mapped[Optional[int]] = mapped_column(ForeignKey("emendas.id"), index=True, nullable=True)
+    usuario_id: Mapped[Optional[int]] = mapped_column(ForeignKey("usuarios.id"), index=True, nullable=True)
+    usuario_nome: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    setor: Mapped[str] = mapped_column(String(40), default="", nullable=False)
+    last_actor_nome: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    last_actor_role: Mapped[str] = mapped_column(String(40), default="", nullable=False)
+    last_message_preview: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    last_message_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    mensagens: Mapped[list["SupportMessage"]] = relationship(back_populates="thread", cascade="all, delete-orphan")
+
+
+class SupportMessage(Base):
+    __tablename__ = "support_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    thread_id: Mapped[int] = mapped_column(ForeignKey("support_threads.id"), index=True, nullable=False)
+    usuario_id: Mapped[Optional[int]] = mapped_column(ForeignKey("usuarios.id"), index=True, nullable=True)
+    usuario_nome: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    setor: Mapped[str] = mapped_column(String(40), default="", nullable=False)
+    origem: Mapped[str] = mapped_column(String(20), default="USUARIO", nullable=False)
+    mensagem: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+    thread: Mapped["SupportThread"] = relationship(back_populates="mensagens")
 

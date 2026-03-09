@@ -6,10 +6,10 @@ from typing import Annotated
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect, or_, text
 from sqlalchemy.orm import Session
 
-from .core.dependencies import _actor_from_headers, _actor_optional_from_headers, _require_manager, _require_owner
+from .core.dependencies import _actor_from_headers, _actor_optional_from_headers, _require_manager, _require_monitor, _require_owner
 from .core.security import (
     _actor_from_bearer_token,
     _actor_from_legacy_session,
@@ -19,7 +19,7 @@ from .core.security import (
 )
 from .ai_schemas import AIProviderStatusResponse, AIWorkflowRequest, AIWorkflowResponse
 from .db import Base, SessionLocal, engine, get_db
-from .models import Emenda, ExportLog, Historico, ImportLinha, ImportLote
+from .models import Emenda, ExportLog, Historico, ImportLinha, ImportLote, SupportMessage, SupportThread
 from .schemas import (
     AuthGoogleIn,
     AuthAuditLogOut,
@@ -42,6 +42,13 @@ from .schemas import (
     ImportLoteCreate,
     ImportLoteOut,
     ROLES,
+    SupportMessageCreate,
+    SupportMessageOut,
+    SUPPORT_CATEGORIES,
+    SUPPORT_THREAD_STATUS,
+    SupportThreadCreate,
+    SupportThreadOut,
+    SupportThreadStatusUpdate,
     UserAdminOut,
     UserOut,
     UserStatusUpdate,
@@ -221,6 +228,8 @@ def _ensure_legacy_schema() -> None:
             statements.append("ALTER TABLE usuarios ADD COLUMN senha_hash VARCHAR(255) NOT NULL DEFAULT ''")
         if "ativo" not in cols:
             statements.append("ALTER TABLE usuarios ADD COLUMN ativo BOOLEAN NOT NULL DEFAULT TRUE")
+        if "status_cadastro" not in cols:
+            statements.append("ALTER TABLE usuarios ADD COLUMN status_cadastro VARCHAR(20) NOT NULL DEFAULT 'APROVADO'")
         if "ultimo_login" not in cols:
             statements.append("ALTER TABLE usuarios ADD COLUMN ultimo_login TIMESTAMP")
 
@@ -228,6 +237,15 @@ def _ensure_legacy_schema() -> None:
             with engine.begin() as conn:
                 for st in statements:
                     conn.execute(text(st))
+                conn.execute(
+                    text(
+                        "UPDATE usuarios "
+                        "SET status_cadastro = CASE "
+                        "WHEN ativo = TRUE THEN 'APROVADO' "
+                        "ELSE 'EM_ANALISE' END "
+                        "WHERE status_cadastro IS NULL OR TRIM(status_cadastro) = ''"
+                    )
+                )
 
     if "emendas" in tables:
         cols = {c["name"] for c in insp.get_columns("emendas")}
@@ -297,6 +315,47 @@ def _ensure_legacy_schema() -> None:
             for st in statements:
                 conn.execute(text(st))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_export_logs_created_at ON export_logs(created_at)"))
+
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS support_threads ("
+                "id INTEGER PRIMARY KEY, "
+                "subject VARCHAR(160) NOT NULL, "
+                "categoria VARCHAR(40) NOT NULL DEFAULT 'OUTRO', "
+                "status VARCHAR(20) NOT NULL DEFAULT 'ABERTO', "
+                "emenda_id INTEGER NULL, "
+                "usuario_id INTEGER NULL, "
+                "usuario_nome VARCHAR(120) NOT NULL DEFAULT '', "
+                "setor VARCHAR(40) NOT NULL DEFAULT '', "
+                "last_actor_nome VARCHAR(120) NOT NULL DEFAULT '', "
+                "last_actor_role VARCHAR(40) NOT NULL DEFAULT '', "
+                "last_message_preview TEXT NOT NULL DEFAULT '', "
+                "created_at TIMESTAMP NOT NULL, "
+                "updated_at TIMESTAMP NOT NULL, "
+                "last_message_at TIMESTAMP NOT NULL"
+                ")"
+            )
+        )
+        conn.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS support_messages ("
+                "id INTEGER PRIMARY KEY, "
+                "thread_id INTEGER NOT NULL, "
+                "usuario_id INTEGER NULL, "
+                "usuario_nome VARCHAR(120) NOT NULL DEFAULT '', "
+                "setor VARCHAR(40) NOT NULL DEFAULT '', "
+                "origem VARCHAR(20) NOT NULL DEFAULT 'USUARIO', "
+                "mensagem TEXT NOT NULL DEFAULT '', "
+                "created_at TIMESTAMP NOT NULL"
+                ")"
+            )
+        )
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_support_threads_status ON support_threads(status)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_support_threads_usuario_id ON support_threads(usuario_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_support_threads_last_message_at ON support_threads(last_message_at)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_support_messages_thread_id ON support_messages(thread_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_support_messages_created_at ON support_messages(created_at)"))
 
 def _versioned_id_interno(base_id: str, version_num: int, db: Session) -> str:
     raw_base = (base_id or "").strip() or "EMENDA"
@@ -728,28 +787,302 @@ def listar_logs_exportacao(
 
 
 @app.get("/audit")
-def audit_log(_actor: dict = Depends(_require_manager), db: Session = Depends(get_db)):
-    rows = db.query(Historico).order_by(Historico.data_hora.desc()).all()
+def audit_log(
+    limit: int = Query(default=150, ge=1, le=500),
+    ano: int | None = Query(default=None, ge=2000, le=2100),
+    mes: int | None = Query(default=None, ge=1, le=12),
+    usuario: str | None = Query(default=None),
+    setor: str | None = Query(default=None),
+    tipo_evento: str | None = Query(default=None),
+    origem_evento: str | None = Query(default=None),
+    q: str | None = Query(default=None),
+    _actor: dict = Depends(_require_monitor),
+    db: Session = Depends(get_db),
+):
+    query = db.query(Historico, Emenda).join(Emenda, Historico.emenda_id == Emenda.id)
+
+    if ano is not None:
+        start = datetime(ano, mes or 1, 1)
+        if mes is not None:
+          end = datetime(ano + 1, 1, 1) if mes == 12 else datetime(ano, mes + 1, 1)
+        else:
+          end = datetime(ano + 1, 1, 1)
+        query = query.filter(Historico.data_hora >= start, Historico.data_hora < end)
+
+    if usuario:
+        query = query.filter(Historico.usuario_nome.ilike(f"%{usuario.strip()}%"))
+    if setor:
+        query = query.filter(Historico.setor.ilike(f"%{setor.strip()}%"))
+    if tipo_evento:
+        query = query.filter(Historico.tipo_evento.ilike(f"%{tipo_evento.strip()}%"))
+    if origem_evento:
+        query = query.filter(Historico.origem_evento.ilike(f"%{origem_evento.strip()}%"))
+    if q:
+        pattern = f"%{q.strip()}%"
+        query = query.filter(
+            or_(
+                Historico.usuario_nome.ilike(pattern),
+                Historico.setor.ilike(pattern),
+                Historico.tipo_evento.ilike(pattern),
+                Historico.origem_evento.ilike(pattern),
+                Historico.campo_alterado.ilike(pattern),
+                Historico.valor_antigo.ilike(pattern),
+                Historico.valor_novo.ilike(pattern),
+                Historico.motivo.ilike(pattern),
+                Emenda.identificacao.ilike(pattern),
+                Emenda.deputado.ilike(pattern),
+                Emenda.municipio.ilike(pattern),
+                Emenda.cod_acao.ilike(pattern),
+                Emenda.descricao_acao.ilike(pattern),
+            )
+        )
+
+    rows = query.order_by(Historico.data_hora.desc(), Historico.id.desc()).limit(limit).all()
     response: list[dict] = []
-    for r in rows:
-        old_value_masked, new_value_masked = _mask_history_pair(r.campo_alterado, r.valor_antigo, r.valor_novo)
+    for hist, emenda in rows:
+        old_value_masked, new_value_masked = _mask_history_pair(hist.campo_alterado, hist.valor_antigo, hist.valor_novo)
         response.append(
             {
-                "id": r.id,
-                "emenda_id": r.emenda_id,
-                "usuario_id": r.usuario_id,
-                "usuario_nome": r.usuario_nome,
-                "setor": r.setor,
-                "tipo_evento": r.tipo_evento,
-                "origem_evento": r.origem_evento,
-                "campo_alterado": r.campo_alterado,
+                "id": hist.id,
+                "emenda_id": hist.emenda_id,
+                "emenda_identificacao": emenda.identificacao,
+                "emenda_ano": emenda.ano,
+                "emenda_municipio": emenda.municipio,
+                "emenda_deputado": emenda.deputado,
+                "usuario_id": hist.usuario_id,
+                "usuario_nome": hist.usuario_nome,
+                "setor": hist.setor,
+                "tipo_evento": hist.tipo_evento,
+                "origem_evento": hist.origem_evento,
+                "campo_alterado": hist.campo_alterado,
                 "valor_antigo": old_value_masked,
                 "valor_novo": new_value_masked,
-                "motivo": r.motivo,
-                "data_hora": r.data_hora,
+                "motivo": hist.motivo,
+                "data_hora": hist.data_hora,
             }
         )
     return response
+
+
+SUPPORT_MANAGER_ROLES = {"SUPERVISAO", "POWERBI", "PROGRAMADOR"}
+
+
+def _is_support_manager(actor: dict | None) -> bool:
+    return str((actor or {}).get("role") or "").strip().upper() in SUPPORT_MANAGER_ROLES
+
+
+def _support_actor_matches_thread(thread: SupportThread, actor: dict | None) -> bool:
+    if not thread or not actor:
+        return False
+    actor_id = actor.get("id")
+    if actor_id is not None and thread.usuario_id is not None:
+        try:
+            return int(actor_id) == int(thread.usuario_id)
+        except Exception:
+            pass
+    actor_name = str(actor.get("name") or "").strip().lower()
+    actor_role = str(actor.get("role") or "").strip().upper()
+    return actor_name == str(thread.usuario_nome or "").strip().lower() and actor_role == str(thread.setor or "").strip().upper()
+
+
+def _ensure_support_thread_access(thread: SupportThread, actor: dict) -> None:
+    if _is_support_manager(actor):
+        return
+    if _support_actor_matches_thread(thread, actor):
+        return
+    raise HTTPException(status_code=403, detail="sem acesso a este chamado")
+
+
+def _support_origin(actor: dict) -> str:
+    return "SUPORTE" if _is_support_manager(actor) else "USUARIO"
+
+
+def _support_preview(message: str, limit: int = 220) -> str:
+    clean = " ".join(str(message or "").split())
+    if len(clean) <= limit:
+        return clean
+    return clean[: max(0, limit - 3)] + "..."
+
+
+def _touch_support_thread(thread: SupportThread, actor: dict, message: str, explicit_status: str | None = None) -> None:
+    now = _utcnow()
+    thread.updated_at = now
+    thread.last_message_at = now
+    thread.last_actor_nome = str(actor.get("name") or "")
+    thread.last_actor_role = str(actor.get("role") or "")
+    thread.last_message_preview = _support_preview(message)
+    if explicit_status:
+        thread.status = explicit_status
+        return
+    if _is_support_manager(actor):
+        if thread.status != "FECHADO":
+            thread.status = "RESPONDIDO"
+    else:
+        thread.status = "ABERTO"
+
+
+@app.get("/support/threads", response_model=list[SupportThreadOut])
+def list_support_threads(
+    limit: int = Query(default=80, ge=1, le=200),
+    status: str | None = Query(default=None),
+    categoria: str | None = Query(default=None),
+    usuario: str | None = Query(default=None),
+    q: str | None = Query(default=None),
+    mine_only: bool = Query(default=False),
+    actor: dict = Depends(_actor_from_headers),
+    db: Session = Depends(get_db),
+):
+    query = db.query(SupportThread)
+
+    if not _is_support_manager(actor) or mine_only:
+        actor_id = actor.get("id")
+        if actor_id is not None:
+            query = query.filter(SupportThread.usuario_id == actor_id)
+        else:
+            query = query.filter(
+                SupportThread.usuario_nome == str(actor.get("name") or ""),
+                SupportThread.setor == str(actor.get("role") or ""),
+            )
+
+    if status:
+        value = str(status).strip().upper()
+        if value not in SUPPORT_THREAD_STATUS:
+            raise HTTPException(status_code=400, detail="status invalido")
+        query = query.filter(SupportThread.status == value)
+    if categoria:
+        value = str(categoria).strip().upper()
+        if value not in SUPPORT_CATEGORIES:
+            raise HTTPException(status_code=400, detail="categoria invalida")
+        query = query.filter(SupportThread.categoria == value)
+    if usuario:
+        query = query.filter(SupportThread.usuario_nome.ilike(f"%{str(usuario).strip()}%"))
+    if q:
+        pattern = f"%{str(q).strip()}%"
+        query = query.filter(
+            or_(
+                SupportThread.subject.ilike(pattern),
+                SupportThread.last_message_preview.ilike(pattern),
+                SupportThread.usuario_nome.ilike(pattern),
+                SupportThread.setor.ilike(pattern),
+            )
+        )
+
+    return (
+        query.order_by(SupportThread.last_message_at.desc(), SupportThread.id.desc())
+        .limit(limit)
+        .all()
+    )
+
+
+@app.post("/support/threads", response_model=SupportThreadOut)
+def create_support_thread(
+    payload: SupportThreadCreate,
+    actor: dict = Depends(_actor_from_headers),
+    db: Session = Depends(get_db),
+):
+    now = _utcnow()
+    thread = SupportThread(
+        subject=str(payload.subject or "").strip(),
+        categoria=str(payload.categoria or "OUTRO").strip().upper(),
+        status="ABERTO",
+        emenda_id=payload.emenda_id,
+        usuario_id=actor.get("id"),
+        usuario_nome=str(actor.get("name") or ""),
+        setor=str(actor.get("role") or ""),
+        last_actor_nome=str(actor.get("name") or ""),
+        last_actor_role=str(actor.get("role") or ""),
+        last_message_preview=_support_preview(payload.mensagem),
+        created_at=now,
+        updated_at=now,
+        last_message_at=now,
+    )
+    db.add(thread)
+    db.flush()
+
+    message = SupportMessage(
+        thread_id=thread.id,
+        usuario_id=actor.get("id"),
+        usuario_nome=str(actor.get("name") or ""),
+        setor=str(actor.get("role") or ""),
+        origem=_support_origin(actor),
+        mensagem=str(payload.mensagem or "").strip(),
+        created_at=now,
+    )
+    db.add(message)
+    db.commit()
+    db.refresh(thread)
+    _broadcast_update("support_thread", thread.id)
+    return thread
+
+
+@app.get("/support/threads/{thread_id}/messages", response_model=list[SupportMessageOut])
+def list_support_messages(
+    thread_id: int,
+    actor: dict = Depends(_actor_from_headers),
+    db: Session = Depends(get_db),
+):
+    thread = db.get(SupportThread, thread_id)
+    if not thread:
+        raise HTTPException(status_code=404, detail="chamado nao encontrado")
+    _ensure_support_thread_access(thread, actor)
+    return (
+        db.query(SupportMessage)
+        .filter(SupportMessage.thread_id == thread_id)
+        .order_by(SupportMessage.created_at.asc(), SupportMessage.id.asc())
+        .all()
+    )
+
+
+@app.post("/support/threads/{thread_id}/messages", response_model=SupportMessageOut)
+def create_support_message(
+    thread_id: int,
+    payload: SupportMessageCreate,
+    actor: dict = Depends(_actor_from_headers),
+    db: Session = Depends(get_db),
+):
+    thread = db.get(SupportThread, thread_id)
+    if not thread:
+        raise HTTPException(status_code=404, detail="chamado nao encontrado")
+    _ensure_support_thread_access(thread, actor)
+
+    now = _utcnow()
+    message = SupportMessage(
+        thread_id=thread.id,
+        usuario_id=actor.get("id"),
+        usuario_nome=str(actor.get("name") or ""),
+        setor=str(actor.get("role") or ""),
+        origem=_support_origin(actor),
+        mensagem=str(payload.mensagem or "").strip(),
+        created_at=now,
+    )
+    db.add(message)
+    _touch_support_thread(thread, actor, message.mensagem)
+    db.commit()
+    db.refresh(message)
+    _broadcast_update("support_thread", thread.id)
+    return message
+
+
+@app.patch("/support/threads/{thread_id}/status", response_model=SupportThreadOut)
+def update_support_thread_status(
+    thread_id: int,
+    payload: SupportThreadStatusUpdate,
+    actor: dict = Depends(_actor_from_headers),
+    db: Session = Depends(get_db),
+):
+    if not _is_support_manager(actor):
+        raise HTTPException(status_code=403, detail="apenas suporte pode alterar status do chamado")
+    thread = db.get(SupportThread, thread_id)
+    if not thread:
+        raise HTTPException(status_code=404, detail="chamado nao encontrado")
+
+    _touch_support_thread(thread, actor, f"Status do chamado definido para {payload.status}.", explicit_status=payload.status)
+    db.commit()
+    db.refresh(thread)
+    _broadcast_update("support_thread", thread.id)
+    return thread
+
+
 @app.websocket("/ws")
 async def websocket_updates(websocket: WebSocket):
     actor = {

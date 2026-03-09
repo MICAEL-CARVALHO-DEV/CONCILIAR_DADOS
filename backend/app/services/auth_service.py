@@ -26,6 +26,9 @@ from ..models import AuthAuditLog, Usuario, UsuarioSessao
 from ..settings import settings
 
 PUBLIC_REGISTER_ROLES = {"APG", "SUPERVISAO", "CONTABIL", "POWERBI"}
+REGISTRATION_STATUS_PENDING = "EM_ANALISE"
+REGISTRATION_STATUS_APPROVED = "APROVADO"
+REGISTRATION_STATUS_REJECTED = "RECUSADO"
 
 
 def _owner_exists(db: Session) -> bool:
@@ -37,13 +40,28 @@ def _owner_exists(db: Session) -> bool:
     )
 
 
+def _registration_status(user: Usuario | None) -> str:
+    if user is None:
+        return REGISTRATION_STATUS_APPROVED
+    raw = (getattr(user, "status_cadastro", None) or "").strip().upper()
+    if raw:
+        return raw
+    return REGISTRATION_STATUS_APPROVED if bool(getattr(user, "ativo", True)) else REGISTRATION_STATUS_PENDING
+
+
+def _inactive_account_detail(user: Usuario | None) -> str:
+    if _registration_status(user) == REGISTRATION_STATUS_REJECTED:
+        return "Seu cadastro foi recusado. Procure o PROGRAMADOR para revisar o acesso."
+    return "Sua conta esta em analise. Aguarde aprovacao do PROGRAMADOR."
+
+
 def auth_google_intake_service(*, payload, request: Request, db: Session) -> dict:
     identity = _verify_google_identity_token(payload.credential)
 
     user = db.query(Usuario).filter(Usuario.google_sub == identity["sub"]).first()
     if user is not None:
         detail = (
-            "Sua conta esta em analise. Aguarde aprovacao do PROGRAMADOR."
+            _inactive_account_detail(user)
             if not user.ativo
             else "Sua conta Google ja esta cadastrada. Use o login."
         )
@@ -63,7 +81,7 @@ def auth_google_intake_service(*, payload, request: Request, db: Session) -> dic
     existing_by_email = _find_user_by_email(db, identity["email"])
     if existing_by_email is not None:
         if not existing_by_email.ativo:
-            detail = "Sua conta esta em analise. Aguarde aprovacao do PROGRAMADOR."
+            detail = _inactive_account_detail(existing_by_email)
             status_code = 403
         elif existing_by_email.google_sub:
             detail = "Conta Google nao corresponde ao cadastro."
@@ -118,18 +136,22 @@ def auth_register_service(*, payload, actor: dict | None, db: Session) -> dict:
 
     exists = db.query(Usuario).filter(Usuario.nome.ilike(nome)).first()
     if exists:
+        if not exists.ativo:
+            raise HTTPException(status_code=403, detail=_inactive_account_detail(exists))
         raise HTTPException(status_code=409, detail="usuario ja existe")
 
     if email:
         existing_email = _find_user_by_email(db, email)
         if existing_email is not None:
+            if not existing_email.ativo:
+                raise HTTPException(status_code=403, detail=_inactive_account_detail(existing_email))
             raise HTTPException(status_code=409, detail="gmail ja cadastrado")
 
     if google_identity is not None:
         existing_google = db.query(Usuario).filter(Usuario.google_sub == google_identity["sub"]).first()
         if existing_google is not None:
             detail = (
-                "Sua conta esta em analise. Aguarde aprovacao do PROGRAMADOR."
+                _inactive_account_detail(existing_google)
                 if not existing_google.ativo
                 else "Sua conta Google ja esta cadastrada. Use o login."
             )
@@ -183,6 +205,7 @@ def auth_register_service(*, payload, actor: dict | None, db: Session) -> dict:
         senha_salt="",
         senha_hash=pwd_hash,
         ativo=activate_now,
+        status_cadastro=(REGISTRATION_STATUS_PENDING if pending_approval else REGISTRATION_STATUS_APPROVED),
     )
     db.add(user)
     try:
@@ -240,7 +263,7 @@ def auth_google_service(*, payload, request: Request, db: Session) -> dict:
     user = db.query(Usuario).filter(Usuario.google_sub == identity["sub"]).first()
     if user is not None:
         if not user.ativo:
-            detail = "Sua conta esta em analise. Aguarde aprovacao do PROGRAMADOR."
+            detail = _inactive_account_detail(user)
             _add_auth_audit(
                 db,
                 request=request,
@@ -278,7 +301,7 @@ def auth_google_service(*, payload, request: Request, db: Session) -> dict:
             detail = "Conta Google nao corresponde ao cadastro."
             status_code = 409
         elif not existing_by_email.ativo:
-            detail = "Sua conta esta em analise. Aguarde aprovacao do PROGRAMADOR."
+            detail = _inactive_account_detail(existing_by_email)
             status_code = 403
         else:
             detail = "Ja existe cadastro com este Gmail. Use o login normal e depois sincronize o Google."
@@ -332,7 +355,7 @@ def auth_login_service(*, payload, request: Request, db: Session) -> dict:
         raise HTTPException(status_code=401, detail=public_detail)
 
     if not user.ativo:
-        detail = "Sua conta esta em analise. Aguarde aprovacao do PROGRAMADOR."
+        detail = _inactive_account_detail(user)
         _add_auth_audit(
             db,
             request=request,
@@ -405,7 +428,7 @@ def auth_recovery_request_service(*, payload, request: Request, db: Session) -> 
         return {"ok": True, "detail": "Se o cadastro existir e estiver ativo, a solicitacao foi registrada."}
 
     if not user.ativo:
-        detail = "Sua conta esta em analise. Aguarde aprovacao do PROGRAMADOR."
+        detail = _inactive_account_detail(user)
         _add_auth_audit(
             db,
             request=request,
@@ -515,6 +538,10 @@ def update_user_status_service(
         user.setor = normalized_next_role
 
     user.ativo = bool(payload.ativo)
+    if payload.status_cadastro is not None:
+        user.status_cadastro = payload.status_cadastro
+    elif user.ativo:
+        user.status_cadastro = REGISTRATION_STATUS_APPROVED
 
     if not user.ativo:
         now = _utcnow()
@@ -529,4 +556,10 @@ def update_user_status_service(
 
     db.commit()
     broadcast_update("usuario", user.id)
-    return {"ok": True, "id": user.id, "ativo": user.ativo, "perfil": user.perfil}
+    return {
+        "ok": True,
+        "id": user.id,
+        "ativo": user.ativo,
+        "perfil": user.perfil,
+        "status_cadastro": _registration_status(user),
+    }

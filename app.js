@@ -1,5 +1,5 @@
 /***********************
- * Prototipo SEC Emendas - v3
+ * SEC Emendas - v3
  * - Status oficial controlado por usuarios operacionais (supervisao monitora)
  * - Marcacao por usuario e timeline completa
  * - Importacao de XLSX (multiplas abas)
@@ -97,6 +97,11 @@ const WS_RECONNECT_MAX_MS = 15000;
 const WS_REFRESH_DEBOUNCE_MS = 400;
 const API_WS_ENABLED = String((RUNTIME_CONFIG && RUNTIME_CONFIG.API_WS_ENABLED) != null ? RUNTIME_CONFIG.API_WS_ENABLED : "false").trim().toLowerCase() === "true";
 const EMENDA_LOCK_POLL_MS = 20000;
+const BETA_AUDIT_LIMIT = 150;
+const BETA_AUDIT_POLL_MS = 15000;
+const BETA_SUPPORT_LIMIT = 80;
+const BETA_SUPPORT_POLL_MS = 10000;
+const API_STATE_POLL_MS = 5000;
 const API_DEFAULT_EVENT_ORIGIN = "UI";
 const DEMO_MULTI_USERS = [
   { name: "Miguel", role: "APG" },
@@ -114,6 +119,7 @@ const DEMO_NOTES = [
 
 const HOME_CHANGES_LIMIT = 14;
 const REFERENCE_FIELDS = ["identificacao", "cod_subfonte", "cod_acao", "municipio", "deputado"];
+const LOCKED_STRUCTURAL_FIELD_KEYS = new Set(["identificacao", "deputado", "cod_acao", "descricao_acao"]);
 
 const TRACKED_FIELDS = [
   { key: "ano", label: "Ano", type: "number" },
@@ -140,14 +146,14 @@ const TRACKED_FIELD_BY_KEY = TRACKED_FIELDS.reduce(function (acc, def) {
 
 const MODAL_FIELD_ORDER = [
   { key: "ano", label: "Ano", editable: true },
-  { key: "identificacao", label: "Identificacao", editable: true },
+  { key: "identificacao", label: "Identificacao", editable: false },
   { key: "cod_subfonte", label: "Cod Subfonte", editable: true },
-  { key: "cod_acao", label: "Cod Acao", editable: true },
-  { key: "descricao_acao", label: "Descricao Acao", editable: true },
+  { key: "cod_acao", label: "Cod Acao", editable: false },
+  { key: "descricao_acao", label: "Descricao Acao", editable: false },
   { key: "plan_a", label: "Plano A", editable: true },
   { key: "plan_b", label: "Plano B", editable: true },
   { key: "municipio", label: "Municipio", editable: true },
-  { key: "deputado", label: "Deputado", editable: true },
+  { key: "deputado", label: "Deputado", editable: false },
   { key: "cod_uo", label: "Cod UO", editable: true },
   { key: "sigla_uo", label: "Sigla UO", editable: true },
   { key: "cod_orgao", label: "Cod Orgao", editable: true },
@@ -208,6 +214,15 @@ let modalDraftState = null;
 let modalCloseInProgress = false;
 let modalSaveFeedbackTimer = null;
 let modalAutoCloseTimer = null;
+let modalAutosaveTimer = null;
+let modalDraftSavePromise = null;
+let betaWorkspaceTab = "history";
+let betaWorkspaceTabTouched = false;
+const MODAL_AUTOSAVE_DEBOUNCE_MS = 2000;
+const MODAL_DRAFT_STORAGE_PREFIX = "SEC_MODAL_DRAFT_V1";
+const SUPPORT_CATEGORIES = ["OPERACAO", "IMPORTACAO", "EXPORTACAO", "DASHBOARD", "ACESSO", "ESTRUTURAL", "OUTRO"];
+const SUPPORT_THREAD_STATUS = ["ABERTO", "EM_ANALISE", "RESPONDIDO", "FECHADO"];
+const SUPPORT_MANAGER_ROLES = ["SUPERVISAO", "POWERBI", "PROGRAMADOR"];
 
 configureFrontendModules();
 loadUserConfig(false);
@@ -285,6 +300,46 @@ let latestExportReport = null;
 let lastImportValidation = null;
 let lastImportedWorkbookTemplate = null;
 let lastImportedPlanilha1Aoa = null;
+let betaAuditRows = [];
+let betaAuditLoading = false;
+let betaAuditError = "";
+let betaAuditLastSyncAt = "";
+let betaAuditPollTimer = null;
+let betaSupportThreads = [];
+let betaSupportLoading = false;
+let betaSupportError = "";
+let betaSupportLastSyncAt = "";
+let betaSupportSelectedThreadId = 0;
+let betaSupportMessages = [];
+let betaSupportMessagesLoading = false;
+let betaSupportMessagesError = "";
+let betaSupportPollTimer = null;
+let apiStatePollTimer = null;
+const BETA_AUDIT_FILTER_DEFAULTS = Object.freeze({
+  ano: "",
+  mes: "",
+  usuario: "",
+  setor: "",
+  tipo_evento: "",
+  origem_evento: "",
+  q: ""
+});
+let betaAuditFilters = Object.assign({}, BETA_AUDIT_FILTER_DEFAULTS);
+const BETA_SUPPORT_FILTER_DEFAULTS = Object.freeze({
+  status: "",
+  categoria: "",
+  usuario: "",
+  q: "",
+  scope: ""
+});
+let betaSupportFilters = Object.assign({}, BETA_SUPPORT_FILTER_DEFAULTS);
+const BETA_POWERBI_FILTER_DEFAULTS = Object.freeze({
+  deputado: "",
+  municipio: "",
+  status: "",
+  q: ""
+});
+let betaPowerBiFilters = Object.assign({}, BETA_POWERBI_FILTER_DEFAULTS);
 const stateChannel = (typeof window !== "undefined" && "BroadcastChannel" in window) ? new BroadcastChannel(CROSS_TAB_CHANNEL_NAME) : null;
 assignMissingIds(state.records, idCountersByYear);
 syncReferenceKeys(state.records);
@@ -314,7 +369,6 @@ const livePresenceText = document.getElementById("livePresenceText");
 const markStatus = document.getElementById("markStatus");
 const markReason = document.getElementById("markReason");
 const btnMarkStatus = document.getElementById("btnMarkStatus");
-const btnAddNote = document.getElementById("btnAddNote");
 
 const conflictBox = document.getElementById("conflictBox");
 const conflictText = document.getElementById("conflictText");
@@ -328,6 +382,7 @@ const btnExportOne = document.getElementById("btnExportOne");
 const btnReset = document.getElementById("btnReset");
 const fileCsv = document.getElementById("fileCsv");
 const importReport = document.getElementById("importReport");
+const betaWorkspace = document.getElementById("betaWorkspace");
 const importLabel = document.querySelector("label[for='fileCsv']");
 const currentUserInfo = document.getElementById("currentUserInfo");
 const roleNotice = document.getElementById("roleNotice");
@@ -487,6 +542,28 @@ function getExportTemplateWriterUtil(methodName) {
 function getExportTemplateValue(key) {
   if (!exportTemplateUtils) return null;
   return exportTemplateUtils[key];
+}
+
+function getTemplateCanonicalKeys() {
+  const keys = getExportTemplateValue("templateCanonicalKeys");
+  if (Array.isArray(keys) && keys.length) return keys.slice(0);
+  return [
+    "identificacao",
+    "cod_subfonte",
+    "deputado",
+    "cod_uo",
+    "sigla_uo",
+    "cod_orgao",
+    "cod_acao",
+    "descricao_acao",
+    "plan_a",
+    "plan_b",
+    "municipio",
+    "valor_inicial",
+    "valor_atual",
+    "processo_sei",
+    "status_oficial"
+  ];
 }
 
 function getExportDataUtil(methodName) {
@@ -717,6 +794,7 @@ function render() {
   }
 
   renderImportDashboard();
+  renderBetaWorkspace(rows);
   renderSupervisorQuickPanel(rows);
 }
 
@@ -767,6 +845,7 @@ modal.addEventListener("click", function (e) {
 });
 if (btnKvSave) {
   btnKvSave.addEventListener("click", async function (e) { if (e) { e.preventDefault(); e.stopPropagation(); }
+    clearModalAutosaveTimer();
     clearModalAutoCloseTimer();
     const ok = await saveModalDraftChanges(false);
     if (ok) {
@@ -776,8 +855,8 @@ if (btnKvSave) {
     }
   });
 }
-if (markStatus) markStatus.addEventListener("change", function () { clearModalAutoCloseTimer(); updateModalDraftUi(); });
-if (markReason) markReason.addEventListener("input", function () { clearModalAutoCloseTimer(); updateModalDraftUi(); });
+if (markStatus) markStatus.addEventListener("change", function () { clearModalAutoCloseTimer(); updateModalDraftUi(); scheduleModalAutosave("status"); });
+if (markReason) markReason.addEventListener("input", function () { clearModalAutoCloseTimer(); updateModalDraftUi(); scheduleModalAutosave("reason"); });
 
 function isUnsafeReloadShortcut(e) {
   if (!e) return false;
@@ -788,7 +867,7 @@ function isUnsafeReloadShortcut(e) {
 }
 
 document.addEventListener("keydown", function (e) {
-  if (modal.classList.contains("show") && isModalDraftDirty() && isUnsafeReloadShortcut(e)) {
+  if (modal.classList.contains("show") && hasPendingModalDraft() && isUnsafeReloadShortcut(e)) {
     e.preventDefault();
     e.stopPropagation();
     showModalSaveFeedback("ATENCAO: salve as edicoes antes de recarregar a pagina.", true);
@@ -815,9 +894,17 @@ document.addEventListener("keydown", function (e) {
 });
 window.addEventListener("beforeunload", function (e) {
   if (!modal.classList.contains("show")) return;
-  if (!isModalDraftDirty() && !hasPendingModalAction()) return;
+  if (!hasPendingModalDraft()) return;
+  flushModalAutosave({ reason: "beforeunload" });
   e.preventDefault();
   e.returnValue = "";
+});
+window.addEventListener("pagehide", function () {
+  flushModalAutosave({ reason: "pagehide" });
+});
+document.addEventListener("visibilitychange", function () {
+  if (document.visibilityState !== "hidden") return;
+  flushModalAutosave({ reason: "visibilitychange" });
 });
 
 btnMarkStatus.addEventListener("click", function (e) { if (e) { e.preventDefault(); e.stopPropagation(); }
@@ -825,7 +912,7 @@ btnMarkStatus.addEventListener("click", function (e) { if (e) { e.preventDefault
   const rec = getSelected();
   if (!rec || !modalDraftState) return;
   if (!canMutateRecords()) {
-    showModalSaveFeedback("Perfil SUPERVISAO: monitoramento apenas. Edicao bloqueada.", true);
+    showModalSaveFeedback(getReadOnlyRoleMessage() || "Perfil em leitura. Edicao bloqueada.", true);
     return;
   }
 
@@ -850,30 +937,8 @@ btnMarkStatus.addEventListener("click", function (e) { if (e) { e.preventDefault
     reason: why
   };
   updateModalDraftUi();
-  showModalSaveFeedback("Marcacao preparada. Agora clique em Salvar edicoes para gravar.", false);
-});
-
-btnAddNote.addEventListener("click", function (e) { if (e) { e.preventDefault(); e.stopPropagation(); }
-  clearModalAutoCloseTimer();
-  const rec = getSelected();
-  if (!rec || !modalDraftState) return;
-  if (!canMutateRecords()) {
-    showModalSaveFeedback("Perfil SUPERVISAO: monitoramento apenas. Edicao bloqueada.", true);
-    return;
-  }
-
-  const why = (markReason.value || "").trim();
-  if (!why) {
-    showModalSaveFeedback("ATENCAO: escreva uma observacao para preparar a nota.", true);
-    return;
-  }
-
-  modalDraftState.pendingAction = {
-    type: "NOTE",
-    reason: why
-  };
-  updateModalDraftUi();
-  showModalSaveFeedback("Nota preparada. Agora clique em Salvar edicoes para gravar.", false);
+  scheduleModalAutosave("mark-status");
+  showModalSaveFeedback("Marcacao preparada. O rascunho local sera salvo automaticamente; clique em Salvar edicoes para gravar oficialmente.", false);
 });
 
 if (btnExportOne) {
@@ -994,12 +1059,15 @@ if (pendingUsersModal) {
 }
 if (pendingUsersTableWrap) {
   pendingUsersTableWrap.addEventListener("click", function (e) {
-    const btn = e.target && e.target.closest ? e.target.closest("button[data-pending-action='approve']") : null;
+    const btn = e.target && e.target.closest ? e.target.closest("button[data-pending-action]") : null;
     if (!btn) return;
     const userId = Number(btn.getAttribute("data-user-id") || 0);
     if (!userId) return;
-    approvePendingUser(userId).catch(function (err) {
-      const msg = extractApiError(err, "Falha ao aprovar cadastro.");
+    const action = String(btn.getAttribute("data-pending-action") || "").toLowerCase();
+    const runner = action === "reject" ? rejectPendingUser : approvePendingUser;
+    const fallbackMessage = action === "reject" ? "Falha ao recusar cadastro." : "Falha ao aprovar cadastro.";
+    runner(userId).catch(function (err) {
+      const msg = extractApiError(err, fallbackMessage);
       setPendingUsersFeedback(msg, true);
     });
   });
@@ -1127,7 +1195,10 @@ function initModalDraftForRecord(rec) {
     dirty: {}
   };
 
+  const restored = restorePersistedModalDraft(rec);
+
   updateModalDraftUi();
+  return restored;
 }
 
 function isModalDraftDirty() {
@@ -1139,30 +1210,47 @@ function hasPendingModalAction() {
   return !!(modalDraftState && modalDraftState.pendingAction && modalDraftState.pendingAction.type);
 }
 
+function hasModalMarkDraft() {
+  const selectedStatus = markStatus ? (markStatus.value || "").trim() : "";
+  const reason = (markReason ? (markReason.value || "") : "").trim();
+  return selectedStatus.length > 0 || reason.length > 0;
+}
+
 function canSaveDraftNow() {
   if (!canMutateRecords()) return false;
   if (isEmendaLockReadOnly()) return false;
   if (hasPendingModalAction()) return true;
-  if (!isModalDraftDirty()) return false;
   const selectedStatus = markStatus ? (markStatus.value || "").trim() : "";
   const reason = (markReason ? (markReason.value || "") : "").trim();
+  if (!isModalDraftDirty()) {
+    return selectedStatus.length > 0 && reason.length > 0;
+  }
   return selectedStatus.length > 0 && reason.length > 0;
 }
 
 function getDraftSaveBlockReason() {
   if (!canMutateRecords()) {
-    return "Perfil SUPERVISAO: monitoramento apenas, sem alteracao de dados.";
+    return getReadOnlyRoleMessage() || "Perfil em leitura: sem alteracao de dados.";
   }
   if (isEmendaLockReadOnly()) {
     return "Edicao bloqueada: esta emenda esta em uso por outro usuario (modo leitura).";
   }
   if (hasPendingModalAction()) return "";
-  if (!isModalDraftDirty()) return "";
   const selectedStatus = markStatus ? (markStatus.value || "").trim() : "";
+  const reason = (markReason ? (markReason.value || "") : "").trim();
+  if (!isModalDraftDirty()) {
+    if (!selectedStatus && !reason) return "";
+    if (!selectedStatus) {
+      return "ATENCAO: selecione um status para concluir o salvamento oficial.";
+    }
+    if (!reason) {
+      return "ATENCAO: informe o motivo/observacao para concluir o salvamento oficial.";
+    }
+    return "";
+  }
   if (!selectedStatus) {
     return "ATENCAO: nao e permitido salvar alteracoes de campos sem marcar status na secao de Marcacao de Status.";
   }
-  const reason = (markReason ? (markReason.value || "") : "").trim();
   if (!reason) {
     return "ATENCAO: informe o motivo/observacao na Marcacao de Status para concluir o salvamento.";
   }
@@ -1174,6 +1262,148 @@ function clearModalAutoCloseTimer() {
     clearTimeout(modalAutoCloseTimer);
     modalAutoCloseTimer = null;
   }
+}
+
+function clearModalAutosaveTimer() {
+  if (modalAutosaveTimer) {
+    clearTimeout(modalAutosaveTimer);
+    modalAutosaveTimer = null;
+  }
+}
+
+function hasPendingModalDraft() {
+  return isModalDraftDirty() || hasPendingModalAction() || hasModalMarkDraft();
+}
+
+function normalizeDraftStoragePart(value) {
+  return String(value == null ? "" : value)
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_-]+/g, "_");
+}
+
+function getModalDraftStorageKey(recordId) {
+  return [
+    MODAL_DRAFT_STORAGE_PREFIX,
+    normalizeDraftStoragePart(CURRENT_USER || "anon"),
+    normalizeDraftStoragePart(CURRENT_ROLE || "role"),
+    normalizeDraftStoragePart(recordId || "")
+  ].join(":");
+}
+
+function readPersistedModalDraft(recordId) {
+  const key = getModalDraftStorageKey(recordId);
+  const raw = readStorageValue(localStorage, key);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    if (String(parsed.recordId || "") !== String(recordId || "")) return null;
+    return parsed;
+  } catch (_err) {
+    removeStorageValue(localStorage, key);
+    return null;
+  }
+}
+
+function clearPersistedModalDraft(recordId) {
+  removeStorageValue(localStorage, getModalDraftStorageKey(recordId));
+  if (modalDraftState && modalDraftState.recordId === recordId) {
+    delete modalDraftState.lastDraftSavedAt;
+  }
+}
+
+function clearModalStatusDraftInputs() {
+  if (markStatus) markStatus.value = "";
+  if (markReason) markReason.value = "";
+}
+
+function persistModalDraftSnapshot(reason) {
+  if (!modalDraftState || !modalDraftState.recordId) return false;
+  const recordId = modalDraftState.recordId;
+  if (!hasPendingModalDraft()) {
+    clearPersistedModalDraft(recordId);
+    return false;
+  }
+
+  const payload = {
+    recordId: recordId,
+    user: CURRENT_USER,
+    role: CURRENT_ROLE,
+    savedAt: isoNow(),
+    reason: String(reason || "autosave"),
+    draft: shallowCloneObj(modalDraftState.draft || {}),
+    pendingAction: modalDraftState.pendingAction ? deepClone(modalDraftState.pendingAction) : null,
+    markStatus: markStatus ? String(markStatus.value || "") : "",
+    markReason: markReason ? String(markReason.value || "") : ""
+  };
+
+  writeStorageValue(localStorage, getModalDraftStorageKey(recordId), JSON.stringify(payload));
+  modalDraftState.lastDraftSavedAt = payload.savedAt;
+  return true;
+}
+
+function restorePersistedModalDraft(rec) {
+  if (!rec || !modalDraftState) return false;
+  const snapshot = readPersistedModalDraft(rec.id);
+  if (!snapshot) return false;
+
+  const nextDirty = {};
+  MODAL_FIELD_ORDER.forEach(function (field) {
+    if (!field.editable) return;
+    const type = getModalFieldType(field.key);
+    const originalValue = normalizeDraftFieldValue(rec[field.key], type);
+    const draftSource = snapshot.draft && Object.prototype.hasOwnProperty.call(snapshot.draft, field.key)
+      ? snapshot.draft[field.key]
+      : originalValue;
+    const draftValue = normalizeDraftFieldValue(draftSource, type);
+
+    modalDraftState.original[field.key] = originalValue;
+    modalDraftState.draft[field.key] = draftValue;
+    if (hasFieldChanged(originalValue, draftValue, type)) {
+      nextDirty[field.key] = true;
+    }
+  });
+
+  modalDraftState.dirty = nextDirty;
+  modalDraftState.pendingAction = snapshot.pendingAction && snapshot.pendingAction.type === "MARK_STATUS"
+    ? {
+      type: "MARK_STATUS",
+      status: normalizeStatus(snapshot.pendingAction.status || snapshot.markStatus || ""),
+      reason: String(snapshot.pendingAction.reason || snapshot.markReason || "")
+    }
+    : null;
+  modalDraftState.lastDraftSavedAt = snapshot.savedAt || "";
+
+  if (markStatus) markStatus.value = String(snapshot.markStatus || "");
+  if (markReason) markReason.value = String(snapshot.markReason || "");
+  return true;
+}
+
+function scheduleModalAutosave(reason) {
+  clearModalAutosaveTimer();
+  if (!modal || !modal.classList.contains("show")) return;
+  if (!modalDraftState) return;
+  if (!hasPendingModalDraft()) {
+    clearPersistedModalDraft(modalDraftState.recordId);
+    return;
+  }
+
+  modalAutosaveTimer = setTimeout(function () {
+    persistModalDraftSnapshot(reason || "debounce");
+    updateModalDraftUi();
+  }, MODAL_AUTOSAVE_DEBOUNCE_MS);
+}
+
+function flushModalAutosave(options) {
+  const opts = options && typeof options === "object" ? options : {};
+  clearModalAutosaveTimer();
+  if (!modalDraftState) return true;
+  if (!hasPendingModalDraft()) {
+    clearPersistedModalDraft(modalDraftState.recordId);
+    return true;
+  }
+  return persistModalDraftSnapshot(opts.reason || "flush");
 }
 
 function clearModalSaveFeedback() {
@@ -1211,16 +1441,22 @@ function showModalSaveFeedback(message, isError) {
 function updateModalDraftUi() {
   const dirty = isModalDraftDirty();
   const pending = hasPendingModalAction();
-  const hasDraft = dirty || pending;
+  const hasMarkDraft = hasModalMarkDraft();
+  const hasDraft = dirty || pending || hasMarkDraft;
   const canSave = canSaveDraftNow();
   const blockReason = getDraftSaveBlockReason();
+  const draftSavedAtText = modalDraftState && modalDraftState.lastDraftSavedAt
+    ? fmtDateTime(modalDraftState.lastDraftSavedAt)
+    : "";
   const updateModalDraftUiUtil = getUiRenderUtil("updateModalDraftUi");
   if (updateModalDraftUiUtil) {
     updateModalDraftUiUtil(kv, kvDraftHint, modalSaveGuard, btnKvSave, modalDraftState, {
       dirty: dirty,
       pending: pending,
+      hasMarkDraft: hasMarkDraft,
       canSave: canSave,
-      blockReason: blockReason
+      blockReason: blockReason,
+      draftSavedAtText: draftSavedAtText
     });
     return;
   }
@@ -1229,11 +1465,16 @@ function updateModalDraftUi() {
     kvDraftHint.classList.toggle("hidden", !hasDraft);
     if (hasDraft) {
       if (pending) {
-        kvDraftHint.textContent = "Marcacao/nota pronta: somente Salvar edicoes grava no historico.";
+        kvDraftHint.textContent = "Marcacao pronta: rascunho local salvo automaticamente. Clique em Salvar edicoes para gravar oficialmente.";
       } else if (canSave) {
-        kvDraftHint.textContent = "Edicao pendente: pronta para salvar.";
+        kvDraftHint.textContent = "Rascunho local salvo automaticamente. Clique em Salvar edicoes para gravar oficialmente.";
+      } else if (hasMarkDraft) {
+        kvDraftHint.textContent = "Rascunho local salvo automaticamente. Complete status e motivo para gravar oficialmente.";
       } else {
-        kvDraftHint.textContent = "Edicao pendente: informe status e motivo na marcacao para salvar.";
+        kvDraftHint.textContent = "Rascunho local salvo automaticamente. Informe status e motivo para salvar oficialmente.";
+      }
+      if (draftSavedAtText) {
+        kvDraftHint.textContent += " Ultimo rascunho local: " + draftSavedAtText + ".";
       }
     }
   }
@@ -1262,7 +1503,6 @@ function applyModalAccessProfile() {
       markStatus: markStatus,
       markReason: markReason,
       btnMarkStatus: btnMarkStatus,
-      btnAddNote: btnAddNote,
       btnKvSave: btnKvSave
     }, {
       readOnlyMode: readOnlyMode
@@ -1273,7 +1513,6 @@ function applyModalAccessProfile() {
   if (markStatus) markStatus.disabled = readOnlyMode;
   if (markReason) markReason.disabled = readOnlyMode;
   if (btnMarkStatus) btnMarkStatus.disabled = readOnlyMode;
-  if (btnAddNote) btnAddNote.disabled = readOnlyMode;
   if (btnKvSave) btnKvSave.style.display = readOnlyMode ? "none" : "inline-block";
   if (kv) {
     const inputs = kv.querySelectorAll("[data-kv-field]");
@@ -1300,6 +1539,103 @@ function onModalFieldInput(e) {
   else delete modalDraftState.dirty[key];
 
   updateModalDraftUi();
+  scheduleModalAutosave("field");
+}
+
+function syncModalReadonlyFieldValues(rec) {
+  if (!kv || !rec) return;
+  const readonlyFields = kv.querySelectorAll("[data-kv-readonly-field]");
+  readonlyFields.forEach(function (el) {
+    const key = el.getAttribute("data-kv-readonly-field");
+    el.textContent = String(rec[key] == null ? "-" : rec[key]);
+  });
+}
+
+function refreshModalRecordHeader(rec) {
+  if (!rec) return;
+  const syncModalRecordHeaderUtil = getUiRenderUtil("syncModalRecordHeader");
+  if (syncModalRecordHeaderUtil) {
+    syncModalRecordHeaderUtil(modalTitle, modalSub, rec);
+    return;
+  }
+  modalTitle.textContent = "Emenda: " + rec.id;
+  modalSub.textContent = rec.identificacao + " | " + rec.municipio + " | " + rec.deputado;
+}
+
+function refreshOpenModalAfterSave(rec) {
+  if (!rec || !modal || !modal.classList.contains("show") || selectedId !== rec.id) return;
+  refreshModalRecordHeader(rec);
+  syncModalReadonlyFieldValues(rec);
+
+  const users = getActiveUsersWithLastMark(rec);
+  const progress = calcProgress(users);
+  const delays = whoIsDelaying(users);
+  const attentionIssues = getAttentionIssues(users);
+  const lastMarks = getLastMarksByUser(rec);
+
+  renderMarksSummary(lastMarks);
+  renderRawFields(rec);
+  if (userProgressBox) {
+    renderUserProgressBox(userProgressBox, progress, delays, {
+      renderProgressBar: renderProgressBar,
+      renderMemberChips: renderMemberChips,
+      users: users
+    });
+  }
+
+  const renderConflictStateUtil = getUiRenderUtil("renderConflictState");
+  if (renderConflictStateUtil) {
+    renderConflictStateUtil(conflictBox, conflictText, attentionIssues);
+  } else if (attentionIssues.length) {
+    conflictBox.classList.remove("hidden");
+    conflictText.textContent = attentionIssues.join(" | ");
+  } else {
+    conflictBox.classList.add("hidden");
+    conflictText.textContent = "";
+  }
+
+  renderHistoryFallback(rec);
+  applyModalAccessProfile();
+}
+
+function shouldRefreshOpenModalFromRemote(rec) {
+  if (!rec || !modal || !modal.classList.contains("show") || selectedId !== rec.id) return false;
+  if (!canMutateRecords()) return true;
+  if (isEmendaLockReadOnly()) return true;
+  return !hasPendingModalDraft();
+}
+
+function refreshOpenModalAfterRemoteSync() {
+  const rec = getSelected();
+  if (!shouldRefreshOpenModalFromRemote(rec)) return;
+  refreshOpenModalAfterSave(rec);
+}
+
+function rebaseModalDraftAfterSave(rec) {
+  if (!rec || !modalDraftState || modalDraftState.recordId !== rec.id) return;
+  const nextDraft = {};
+  const nextOriginal = {};
+  const nextDirty = {};
+
+  MODAL_FIELD_ORDER.forEach(function (field) {
+    if (!field.editable) return;
+    const type = getModalFieldType(field.key);
+    const savedValue = normalizeDraftFieldValue(rec[field.key], type);
+    const currentDraftValue = modalDraftState && modalDraftState.draft
+      ? normalizeDraftFieldValue(modalDraftState.draft[field.key], type)
+      : savedValue;
+
+    nextOriginal[field.key] = savedValue;
+    nextDraft[field.key] = currentDraftValue;
+    if (hasFieldChanged(savedValue, currentDraftValue, type)) {
+      nextDirty[field.key] = true;
+    }
+  });
+
+  modalDraftState.original = nextOriginal;
+  modalDraftState.draft = nextDraft;
+  modalDraftState.dirty = nextDirty;
+  modalDraftState.pendingAction = null;
 }
 
 // Renderiza editor de campos da emenda no modal.
@@ -1342,6 +1678,7 @@ function renderKvEditor(rec) {
       input.addEventListener("input", onModalFieldInput);
       v.appendChild(input);
     } else {
+      if (field.key) v.setAttribute("data-kv-readonly-field", field.key);
       v.textContent = String(rec[field.key] == null ? "-" : rec[field.key]);
     }
 
@@ -1354,159 +1691,184 @@ function renderKvEditor(rec) {
 }
 
 // Salva alteracoes de campos feitas no modal e registra eventos.
-async function saveModalDraftChanges(keepOpen) {
-  clearModalAutoCloseTimer();
-  if (!canMutateRecords()) {
-    showModalSaveFeedback("Perfil SUPERVISAO: monitoramento apenas. Salvamento bloqueado.", true);
-    return false;
-  }
-  if (isEmendaLockReadOnly()) {
-    showModalSaveFeedback("Edicao bloqueada: emenda em uso por outro usuario.", true);
-    return false;
-  }
-  if (!modalDraftState) return true;
-
-  const hasDirty = isModalDraftDirty();
-  const pendingAction = modalDraftState.pendingAction || null;
-  if (!hasDirty && !pendingAction) return true;
-
-  const rec = getSelected();
-  if (!rec || rec.id !== modalDraftState.recordId) return false;
-  const recSnapshot = deepClone(rec);
-
-  const changedEvents = [];
-  const dirtyKeys = Object.keys(modalDraftState.dirty || {});
-
-  dirtyKeys.forEach(function (key) {
-    const type = getModalFieldType(key);
-    const label = getModalFieldLabel(key, key);
-    const prev = rec[key];
-    const next = normalizeDraftFieldValue(modalDraftState.draft[key], type);
-    if (!hasFieldChanged(prev, next, type)) return;
-
-    rec[key] = next;
-    changedEvents.push(mkEvent("EDIT_FIELD", {
-      key: key,
-      field: label,
-      from: stringifyFieldValue(prev, type),
-      to: stringifyFieldValue(next, type),
-      raw_from: prev,
-      raw_to: next,
-      note: "Edicao manual confirmada."
-    }));
-  });
-
-  const oldRef = rec.ref_key || "";
-  syncCanonicalToAllFields(rec);
-  rec.ref_key = buildReferenceKey(rec);
-  if (oldRef !== rec.ref_key) {
-    changedEvents.push(mkEvent("EDIT_FIELD", {
-      field: "Chave Referencia",
-      from: oldRef,
-      to: rec.ref_key,
-      note: "Recalculada apos edicao manual."
-    }));
+async function saveModalDraftChanges(keepOpenOrOptions) {
+  if (modalDraftSavePromise) {
+    return await modalDraftSavePromise;
   }
 
-  let action = pendingAction;
-  if (!action && changedEvents.length) {
-    const selectedStatus = markStatus ? (markStatus.value || "").trim() : "";
-    const reasonForSave = (markReason ? (markReason.value || "") : "").trim();
-    if (!selectedStatus) {
-      showModalSaveFeedback("ERRO: nao pode salvar alteracoes sem marcar status.", true);
-      if (markStatus) markStatus.focus();
+  const saveOptions = keepOpenOrOptions && typeof keepOpenOrOptions === "object"
+    ? keepOpenOrOptions
+    : { keepOpen: !!keepOpenOrOptions };
+  const keepOpen = !!saveOptions.keepOpen;
+  const preserveInteraction = !!saveOptions.preserveInteraction;
+  const silentSuccess = !!saveOptions.silentSuccess;
+
+  modalDraftSavePromise = (async function () {
+    clearModalAutoCloseTimer();
+    clearModalAutosaveTimer();
+    if (!canMutateRecords()) {
+      showModalSaveFeedback(getReadOnlyRoleMessage() || "Perfil em leitura: salvamento bloqueado.", true);
+      return false;
+    }
+    if (isEmendaLockReadOnly()) {
+      showModalSaveFeedback("Edicao bloqueada: emenda em uso por outro usuario.", true);
+      return false;
+    }
+    if (!modalDraftState) return true;
+
+    const hasDirty = isModalDraftDirty();
+    const pendingAction = modalDraftState.pendingAction || null;
+    if (!hasDirty && !pendingAction) return true;
+
+    const rec = getSelected();
+    if (!rec || rec.id !== modalDraftState.recordId) return false;
+    const recSnapshot = deepClone(rec);
+
+    const changedEvents = [];
+    const dirtyKeys = Object.keys(modalDraftState.dirty || {});
+
+    dirtyKeys.forEach(function (key) {
+      if (isLockedStructuralField(key)) return;
+      const type = getModalFieldType(key);
+      const label = getModalFieldLabel(key, key);
+      const prev = rec[key];
+      const next = normalizeDraftFieldValue(modalDraftState.draft[key], type);
+      if (!hasFieldChanged(prev, next, type)) return;
+
+      rec[key] = next;
+      changedEvents.push(mkEvent("EDIT_FIELD", {
+        key: key,
+        field: label,
+        from: stringifyFieldValue(prev, type),
+        to: stringifyFieldValue(next, type),
+        raw_from: prev,
+        raw_to: next,
+        note: "Edicao manual confirmada."
+      }));
+    });
+
+    const oldRef = rec.ref_key || "";
+    syncCanonicalToAllFields(rec);
+    rec.ref_key = buildReferenceKey(rec);
+    if (oldRef !== rec.ref_key) {
+      changedEvents.push(mkEvent("EDIT_FIELD", {
+        field: "Chave Referencia",
+        from: oldRef,
+        to: rec.ref_key,
+        note: "Recalculada apos edicao manual."
+      }));
+    }
+
+    let action = pendingAction;
+    if (!action) {
+      const selectedStatus = markStatus ? (markStatus.value || "").trim() : "";
+      const reasonForSave = (markReason ? (markReason.value || "") : "").trim();
+      if (changedEvents.length || selectedStatus || reasonForSave) {
+        if (!selectedStatus) {
+          showModalSaveFeedback("ERRO: nao pode salvar alteracoes sem marcar status.", true);
+          if (markStatus) markStatus.focus();
+          updateModalDraftUi();
+          return false;
+        }
+        if (!reasonForSave) {
+          showModalSaveFeedback("ERRO: informe motivo/observacao para salvar alteracoes.", true);
+          if (markReason) markReason.focus();
+          updateModalDraftUi();
+          return false;
+        }
+        action = { type: "MARK_STATUS", status: normalizeStatus(selectedStatus), reason: reasonForSave };
+      }
+    }
+
+    if (!action && !changedEvents.length) {
+      modalDraftState.dirty = {};
       updateModalDraftUi();
-      return false;
+      return true;
     }
-    if (!reasonForSave) {
-      showModalSaveFeedback("ERRO: informe motivo/observacao para salvar alteracoes.", true);
-      if (markReason) markReason.focus();
+
+    const prependEvents = [];
+    if (action && action.type === "MARK_STATUS") {
+      prependEvents.push(mkEvent("MARK_STATUS", { to: normalizeStatus(action.status || ""), note: String(action.reason || "") }));
+    }
+
+    prependEvents.push.apply(prependEvents, changedEvents);
+    if (!prependEvents.length) return true;
+
+    rec.updated_at = isoNow();
+    rec.eventos = prependEvents.concat(rec.eventos || []);
+
+    if (action && action.type === "MARK_STATUS") {
+      try {
+        await syncGenericEventToApi(rec, {
+          tipo_evento: "MARK_STATUS",
+          valor_novo: normalizeStatus(action.status || ""),
+          motivo: String(action.reason || "")
+        });
+      } catch (err) {
+        await rollbackSaveAndReport(err, rec, recSnapshot, "marcacao de status para salvar");
+        return false;
+      }
+    }
+
+    for (let i = 0; i < changedEvents.length; i += 1) {
+      const ev = changedEvents[i];
+      try {
+        const fieldKey = String(ev.key || "").trim();
+        const fieldType = getModalFieldType(fieldKey);
+        const rawOld = Object.prototype.hasOwnProperty.call(ev, "raw_from") ? ev.raw_from : ev.from;
+        const rawNew = Object.prototype.hasOwnProperty.call(ev, "raw_to") ? ev.raw_to : ev.to;
+        await syncGenericEventToApi(rec, {
+          tipo_evento: "EDIT_FIELD",
+          campo_alterado: fieldKey || ev.field || "",
+          valor_antigo: String(rawOld == null ? "" : normalizeDraftFieldValue(rawOld, fieldType)),
+          valor_novo: String(rawNew == null ? "" : normalizeDraftFieldValue(rawNew, fieldType)),
+          motivo: ev.note || "Edicao manual confirmada."
+        });
+      } catch (err) {
+        await rollbackSaveAndReport(err, rec, recSnapshot, "edicao de campo");
+        return false;
+      }
+    }
+
+    saveState();
+    clearPersistedModalDraft(rec.id);
+    clearModalStatusDraftInputs();
+    if (typeof notifyStateUpdated === "function") notifyStateUpdated();
+    render();
+
+    if (keepOpen) {
+      if (preserveInteraction) {
+        rebaseModalDraftAfterSave(rec);
+        refreshOpenModalAfterSave(rec);
+        updateModalDraftUi();
+        if (!silentSuccess) {
+          showModalSaveFeedback("Registro salvo com sucesso.", false);
+        }
+      } else {
+        openModal(rec.id, true);
+        setTimeout(function () {
+          if (!silentSuccess) {
+            showModalSaveFeedback("Registro salvo com sucesso.", false);
+          }
+        }, 80);
+      }
+    } else {
+      modalDraftState = null;
       updateModalDraftUi();
-      return false;
-    }
-    action = { type: "MARK_STATUS", status: normalizeStatus(selectedStatus), reason: reasonForSave };
-  }
-
-  if (!action && !changedEvents.length) {
-    modalDraftState.dirty = {};
-    updateModalDraftUi();
-    return true;
-  }
-
-  const prependEvents = [];
-  if (action && action.type === "MARK_STATUS") {
-    prependEvents.push(mkEvent("MARK_STATUS", { to: normalizeStatus(action.status || ""), note: String(action.reason || "") }));
-  } else if (action && action.type === "NOTE") {
-    prependEvents.push(mkEvent("NOTE", { note: String(action.reason || "") }));
-  }
-
-  prependEvents.push.apply(prependEvents, changedEvents);
-  if (!prependEvents.length) return true;
-
-  rec.updated_at = isoNow();
-  rec.eventos = prependEvents.concat(rec.eventos || []);
-
-  if (action && action.type === "MARK_STATUS") {
-    try {
-      await syncGenericEventToApi(rec, {
-        tipo_evento: "MARK_STATUS",
-        valor_novo: normalizeStatus(action.status || ""),
-        motivo: String(action.reason || "")
-      });
-    } catch (err) {
-      await rollbackSaveAndReport(err, rec, recSnapshot, "marcacao de status para salvar");
-      return false;
-    }
-  } else if (action && action.type === "NOTE") {
-    try {
-      await syncGenericEventToApi(rec, {
-        tipo_evento: "NOTE",
-        motivo: String(action.reason || "")
-      });
-    } catch (err) {
-      await rollbackSaveAndReport(err, rec, recSnapshot, "nota para salvar");
-      return false;
-    }
-  }
-
-  for (let i = 0; i < changedEvents.length; i += 1) {
-    const ev = changedEvents[i];
-    try {
-      const fieldKey = String(ev.key || "").trim();
-      const fieldType = getModalFieldType(fieldKey);
-      const rawOld = Object.prototype.hasOwnProperty.call(ev, "raw_from") ? ev.raw_from : ev.from;
-      const rawNew = Object.prototype.hasOwnProperty.call(ev, "raw_to") ? ev.raw_to : ev.to;
-      await syncGenericEventToApi(rec, {
-        tipo_evento: "EDIT_FIELD",
-        campo_alterado: fieldKey || ev.field || "",
-        valor_antigo: String(rawOld == null ? "" : normalizeDraftFieldValue(rawOld, fieldType)),
-        valor_novo: String(rawNew == null ? "" : normalizeDraftFieldValue(rawNew, fieldType)),
-        motivo: ev.note || "Edicao manual confirmada."
-      });
-    } catch (err) {
-      await rollbackSaveAndReport(err, rec, recSnapshot, "edicao de campo");
-      return false;
-    }
-  }
-
-  saveState();
-  if (typeof notifyStateUpdated === "function") notifyStateUpdated();
-  render();
-
-  if (keepOpen) {
-    openModal(rec.id, true);
-    setTimeout(function () {
       showModalSaveFeedback("Registro salvo com sucesso.", false);
-    }, 80);
-  } else {
-    modalDraftState = null;
-    updateModalDraftUi();
-    showModalSaveFeedback("Registro salvo com sucesso.", false);
-  }
+    }
 
-  return true;
+    return true;
+  })();
+
+  try {
+    return await modalDraftSavePromise;
+  } finally {
+    modalDraftSavePromise = null;
+  }
 }
 function discardModalDraftChanges(keepOpen) {
+  clearModalAutosaveTimer();
   if (keepOpen) {
     const rec = getSelected();
     if (rec) {
@@ -1524,8 +1886,30 @@ async function requestCloseModal() {
   if (modalCloseInProgress) return;
   modalCloseInProgress = true;
   try {
-    if (isModalDraftDirty() || hasPendingModalAction()) {
-      discardModalDraftChanges(false);
+    if (hasPendingModalDraft()) {
+      const rec = getSelected();
+      flushModalAutosave({ reason: "close-request" });
+
+      if (canSaveDraftNow()) {
+        const shouldSave = confirm("Existe rascunho nesta emenda. OK = salvar oficialmente agora. Cancelar = escolher entre descartar ou manter o rascunho local.");
+        if (shouldSave) {
+          const saved = await saveModalDraftChanges(false);
+          if (saved) {
+            forceCloseModal();
+          }
+          return;
+        }
+      }
+
+      const shouldDiscard = confirm("Deseja descartar o rascunho desta emenda? OK = descartar. Cancelar = manter o rascunho local para continuar depois.");
+      if (shouldDiscard) {
+        if (rec) clearPersistedModalDraft(rec.id);
+        discardModalDraftChanges(false);
+        forceCloseModal();
+        return;
+      }
+
+      flushModalAutosave({ reason: "close-keep-draft" });
       forceCloseModal();
       return;
     }
@@ -1538,6 +1922,7 @@ async function requestCloseModal() {
 // Abre modal de detalhe da emenda selecionada.
 function openModal(id, keepReasons) {
   clearModalAutoCloseTimer();
+  clearModalAutosaveTimer();
   clearModalSaveFeedback();
   const previousId = selectedId;
   if (previousId && previousId !== id) {
@@ -1566,7 +1951,7 @@ function openModal(id, keepReasons) {
     markReason.value = "";
   }
 
-  initModalDraftForRecord(rec);
+  const restoredDraft = initModalDraftForRecord(rec);
   renderKvEditor(rec);
 
   const users = getActiveUsersWithLastMark(rec);
@@ -1605,6 +1990,11 @@ function openModal(id, keepReasons) {
   syncModalEmendaLock(rec).catch(function (_err) {
     renderEmendaLockInfo(rec);
   });
+  if (restoredDraft) {
+    setTimeout(function () {
+      showModalSaveFeedback("Rascunho local restaurado. Clique em Salvar edicoes para gravar oficialmente.", false);
+    }, 120);
+  }
   setTimeout(function () {
     focusIfPossible(modalClose);
   }, 0);
@@ -1962,16 +2352,25 @@ function forceCloseModal() {
   clearEmendaLockTimer();
   setEmendaLockState(null);
   clearModalAutoCloseTimer();
+  clearModalAutosaveTimer();
   clearModalSaveFeedback();
+  if (lastFocusedElement && modal && !modal.contains(lastFocusedElement)) {
+    focusIfPossible(lastFocusedElement);
+  } else if (typeof document !== "undefined" && document.activeElement && modal && modal.contains(document.activeElement) && typeof document.activeElement.blur === "function") {
+    document.activeElement.blur();
+  }
   setAuxModalVisibility(modal, false);
   if (modalAccessState) {
     modalAccessState.classList.add("hidden");
     modalAccessState.textContent = "";
   }
+  clearModalStatusDraftInputs();
   selectedId = null;
   modalDraftState = null;
   updateModalDraftUi();
-  focusIfPossible(lastFocusedElement);
+  if (!lastFocusedElement || (modal && modal.contains(lastFocusedElement))) {
+    focusIfPossible(document.body);
+  }
 }
 
 function getSelected() {
@@ -2978,6 +3377,8 @@ function removeStorageValue(store, key) {
 function setAuthenticatedUser(usuario) {
   CURRENT_USER = String(usuario.nome || CURRENT_USER).trim() || CURRENT_USER;
   CURRENT_ROLE = normalizeUserRole(usuario.perfil || CURRENT_ROLE);
+  betaWorkspaceTabTouched = false;
+  betaWorkspaceTab = getPreferredBetaWorkspaceTab();
   const writeAuthenticatedProfileUtil = getAuthStoreUtil("writeAuthenticatedProfile");
   if (writeAuthenticatedProfileUtil) {
     writeAuthenticatedProfileUtil({
@@ -3020,6 +3421,17 @@ async function logoutCurrentUser() {
     clearStoredSessionToken();
   }
   closeApiSocket();
+  clearBetaAuditPolling();
+  clearBetaSupportPolling();
+  betaAuditRows = [];
+  betaAuditError = "";
+  betaAuditLoading = false;
+  betaSupportThreads = [];
+  betaSupportMessages = [];
+  betaSupportError = "";
+  betaSupportMessagesError = "";
+  betaSupportLoading = false;
+  betaSupportMessagesLoading = false;
 }
 
 function isLocalFrontendContext() {
@@ -3195,7 +3607,11 @@ function loadUserConfig(forcePrompt) {
   const savedRole = savedAuthUser && savedAuthUser.role;
 
   if (savedUser) CURRENT_USER = String(savedUser).trim() || CURRENT_USER;
-  if (savedRole) CURRENT_ROLE = normalizeUserRole(savedRole);
+  if (savedRole) {
+    CURRENT_ROLE = normalizeUserRole(savedRole);
+    betaWorkspaceTabTouched = false;
+    betaWorkspaceTab = getPreferredBetaWorkspaceTab();
+  }
 
   if (isApiEnabled()) return;
 
@@ -3205,6 +3621,8 @@ function loadUserConfig(forcePrompt) {
 
     CURRENT_USER = String(nameInput).trim() || CURRENT_USER;
     CURRENT_ROLE = normalizeUserRole(roleInput);
+    betaWorkspaceTabTouched = false;
+    betaWorkspaceTab = getPreferredBetaWorkspaceTab();
     const writeAuthenticatedProfileUtil = getAuthStoreUtil("writeAuthenticatedProfile");
     if (writeAuthenticatedProfileUtil) {
       writeAuthenticatedProfileUtil({
@@ -3219,8 +3637,66 @@ function isSupervisorUser() {
   return CURRENT_ROLE === "SUPERVISAO";
 }
 
+function isPowerBiUser() {
+  return CURRENT_ROLE === "POWERBI";
+}
+
+function isSupportManagerUser() {
+  return SUPPORT_MANAGER_ROLES.indexOf(CURRENT_ROLE) >= 0;
+}
+
+function getReadOnlyRoleMeta() {
+  if (isSupervisorUser()) {
+    return {
+      key: "SUPERVISAO",
+      viewTag: " (supervisao)",
+      noticeTitle: "Modo supervisao: somente monitoramento",
+      noticeDescription: "Este perfil acompanha andamento e auditoria em tempo real, sem alterar dados.",
+      modalReadOnlyMessage: "MODO LEITURA: perfil SUPERVISAO monitora, sem alterar dados.",
+      lockModeLabel: "Modo supervisao (leitura)"
+    };
+  }
+  if (isPowerBiUser()) {
+    return {
+      key: "POWERBI",
+      viewTag: " (power bi)",
+      noticeTitle: "Modo Power BI: leitura analitica",
+      noticeDescription: "Este perfil consulta historico, indicadores e visao consolidada, sem alterar dados.",
+      modalReadOnlyMessage: "MODO LEITURA: perfil POWERBI consulta indicadores e historico, sem alterar dados.",
+      lockModeLabel: "Modo Power BI (leitura)"
+    };
+  }
+  return null;
+}
+
+function isReadOnlyRoleUser() {
+  return !!getReadOnlyRoleMeta();
+}
+
+function getReadOnlyRoleMessage() {
+  const meta = getReadOnlyRoleMeta();
+  return meta ? meta.modalReadOnlyMessage : "";
+}
+
+function getReadOnlyRoleLockLabel() {
+  const meta = getReadOnlyRoleMeta();
+  return meta ? meta.lockModeLabel : "Modo leitura";
+}
+
+function isLockedStructuralField(fieldKey) {
+  return LOCKED_STRUCTURAL_FIELD_KEYS.has(String(fieldKey || "").trim());
+}
+
+function canViewGlobalAuditApi() {
+  return isApiEnabled() && ["APG", "SUPERVISAO", "POWERBI", "PROGRAMADOR"].indexOf(CURRENT_ROLE) >= 0;
+}
+
+function canUseSupportApi() {
+  return isApiEnabled() && !!CURRENT_USER;
+}
+
 function canMutateRecords() {
-  return !isSupervisorUser();
+  return !isReadOnlyRoleUser();
 }
 
 function clearEmendaLockTimer() {
@@ -3286,6 +3762,7 @@ function emendaLockOwnerText(payload) {
 }
 
 function renderModalAccessState(rec) {
+  const readOnlyRoleMessage = getReadOnlyRoleMessage();
   const renderModalAccessStateUtil = getUiRenderUtil("renderModalAccessState");
   if (renderModalAccessStateUtil) {
     renderModalAccessStateUtil(modalAccessState, rec, {
@@ -3294,6 +3771,7 @@ function renderModalAccessState(rec) {
       apiEnabled: isApiEnabled(),
       isReadOnly: isEmendaLockReadOnly(),
       lockState: getEmendaLockState(),
+      readOnlyRoleMessage: readOnlyRoleMessage,
       fmtDateTime: fmtDateTime,
       emendaLockOwnerText: emendaLockOwnerText
     });
@@ -3324,7 +3802,7 @@ function renderModalAccessState(rec) {
 
   if (!isApiEnabled()) {
     if (!canMutateRecords()) {
-      showAccessState("readonly", "MODO LEITURA: perfil SUPERVISAO monitora, sem alterar dados.");
+      showAccessState("readonly", readOnlyRoleMessage || "MODO LEITURA: perfil monitor apenas.");
       return;
     }
     modalAccessState.classList.add("hidden");
@@ -3334,7 +3812,7 @@ function renderModalAccessState(rec) {
   }
 
   if (!canMutateRecords()) {
-    showAccessState("readonly", "MODO LEITURA: perfil SUPERVISAO monitora, sem alterar dados.");
+    showAccessState("readonly", readOnlyRoleMessage || "MODO LEITURA: perfil monitor apenas.");
     return;
   }
 
@@ -3359,11 +3837,14 @@ function renderModalAccessState(rec) {
 }
 
 function renderEmendaLockInfo(rec) {
+  const readOnlyLockLabel = getReadOnlyRoleLockLabel();
   const renderEmendaLockInfoUtil = getUiRenderUtil("renderEmendaLockInfo");
   if (renderEmendaLockInfoUtil) {
     renderEmendaLockInfoUtil(livePresenceText, rec, {
       apiEnabled: isApiEnabled(),
       isSupervisor: isSupervisorUser(),
+      isReadOnlyRole: isReadOnlyRoleUser(),
+      readOnlyLockLabel: readOnlyLockLabel,
       isReadOnly: isEmendaLockReadOnly(),
       lockState: getEmendaLockState(),
       fmtDateTime: fmtDateTime,
@@ -3377,12 +3858,12 @@ function renderEmendaLockInfo(rec) {
   if (rec) {
     if (!isApiEnabled()) {
       message = "Modo local: lock de edicao indisponivel.";
-    } else if (isSupervisorUser()) {
+    } else if (isReadOnlyRoleUser()) {
       const lockState = getEmendaLockState();
       const owner = emendaLockOwnerText(lockState);
       message = owner
-        ? ("Modo supervisao (leitura). Em edicao por: " + owner + ".")
-        : "Modo supervisao (leitura).";
+        ? (readOnlyLockLabel + ". Em edicao por: " + owner + ".")
+        : (readOnlyLockLabel + ".");
     } else {
       const lockState = getEmendaLockState();
       const expiresAt = lockState && lockState.expires_at ? fmtDateTime(lockState.expires_at) : "";
@@ -3538,17 +4019,1958 @@ function renderRoleNotice() {
     return;
   }
 
-  roleNotice.classList.toggle("hidden", !uiCtx.isSupervisor);
+  roleNotice.classList.toggle("hidden", !uiCtx.isReadOnlyRole);
   clearNodeChildren(roleNotice);
-  if (uiCtx.isSupervisor) {
+  if (uiCtx.isReadOnlyRole) {
     const h4 = document.createElement("h4");
-    h4.textContent = "Modo supervisao: somente monitoramento";
+    h4.textContent = uiCtx.roleNoticeTitle;
     const p = document.createElement("p");
     p.className = "muted small";
-    p.textContent = "Este perfil acompanha andamento e auditoria em tempo real, sem alterar dados.";
+    p.textContent = uiCtx.roleNoticeDescription;
     roleNotice.appendChild(h4);
     roleNotice.appendChild(p);
     return;
+  }
+}
+
+function clearBetaAuditPolling() {
+  if (!betaAuditPollTimer) return;
+  clearInterval(betaAuditPollTimer);
+  betaAuditPollTimer = null;
+}
+
+function clearBetaSupportPolling() {
+  if (!betaSupportPollTimer) return;
+  clearInterval(betaSupportPollTimer);
+  betaSupportPollTimer = null;
+}
+
+function clearApiStatePolling() {
+  if (!apiStatePollTimer) return;
+  clearInterval(apiStatePollTimer);
+  apiStatePollTimer = null;
+}
+
+async function refreshRemoteEmendasFromApi(forceRender) {
+  if (!isApiEnabled()) return false;
+  try {
+    const remoteList = await apiRequest("GET", "/emendas", undefined, "API", { handleAuthFailure: false });
+    mergeRemoteEmendas(Array.isArray(remoteList) ? remoteList : []);
+    apiOnline = true;
+    apiLastError = "";
+    saveState(true);
+    syncYearFilter();
+    if (forceRender !== false) {
+      render();
+    }
+    refreshOpenModalAfterRemoteSync();
+    return true;
+  } catch (err) {
+    const status = Number(err && err.status ? err.status : 0);
+    if (status >= 500 || status === 0) {
+      apiOnline = false;
+      apiLastError = err && err.message ? String(err.message) : "falha ao atualizar emendas";
+      applyAccessProfile();
+    }
+    return false;
+  }
+}
+
+function syncApiStatePolling() {
+  if (!isApiEnabled() || !apiOnline || API_WS_ENABLED) {
+    clearApiStatePolling();
+    return;
+  }
+  if (apiStatePollTimer) return;
+  apiStatePollTimer = setInterval(function () {
+    refreshRemoteEmendasFromApi(true).catch(function () { /* no-op */ });
+  }, API_STATE_POLL_MS);
+}
+
+function syncBetaAuditPolling() {
+  if (!canViewGlobalAuditApi() || !apiOnline) {
+    clearBetaAuditPolling();
+    return;
+  }
+  if (betaAuditPollTimer) return;
+  betaAuditPollTimer = setInterval(function () {
+    refreshBetaAuditFromApi(false).catch(function () { /* no-op */ });
+  }, BETA_AUDIT_POLL_MS);
+}
+
+function syncBetaSupportPolling() {
+  if (!canUseSupportApi() || !apiOnline || getActiveBetaWorkspaceTab() !== "support") {
+    clearBetaSupportPolling();
+    return;
+  }
+  if (betaSupportPollTimer) return;
+  betaSupportPollTimer = setInterval(function () {
+    refreshBetaSupportFromApi(false).catch(function () { /* no-op */ });
+  }, BETA_SUPPORT_POLL_MS);
+}
+
+function getPreferredBetaWorkspaceTab() {
+  return isPowerBiUser() ? "powerbi" : "history";
+}
+
+function getActiveBetaWorkspaceTab() {
+  if (!betaWorkspaceTabTouched) {
+    betaWorkspaceTab = getPreferredBetaWorkspaceTab();
+  }
+  if (betaWorkspaceTab !== "powerbi" && betaWorkspaceTab !== "history" && betaWorkspaceTab !== "support") {
+    betaWorkspaceTab = getPreferredBetaWorkspaceTab();
+  }
+  return betaWorkspaceTab;
+}
+
+function setBetaWorkspaceTab(nextTab) {
+  betaWorkspaceTab = nextTab === "powerbi" || nextTab === "support" ? nextTab : "history";
+  betaWorkspaceTabTouched = true;
+  syncBetaSupportPolling();
+  if (betaWorkspaceTab === "support" && canUseSupportApi() && apiOnline) {
+    refreshBetaSupportFromApi(true).catch(function () { /* no-op */ });
+  }
+  render();
+}
+
+function describeApiAuditRow(row) {
+  if (!row) return "Evento";
+  const type = text(row.tipo_evento || "");
+  if (type === "OFFICIAL_STATUS") {
+    return "Status oficial: " + text(row.valor_antigo || "-") + " -> " + text(row.valor_novo || "-");
+  }
+  if (type === "MARK_STATUS") {
+    return "Marcacao de status: " + text(row.valor_novo || "-");
+  }
+  if (type === "EDIT_FIELD") {
+    return "Edicao de campo: " + text(row.campo_alterado || "-");
+  }
+  if (type === "NOTE") {
+    return "Nota adicionada";
+  }
+  if (type === "IMPORT") {
+    return "Importacao/atualizacao de registro";
+  }
+  return type || "Evento";
+}
+
+function flattenLocalAuditRows(records) {
+  const out = [];
+  (Array.isArray(records) ? records : []).forEach(function (rec) {
+    (Array.isArray(rec && rec.eventos) ? rec.eventos : []).forEach(function (ev, idx) {
+      const when = text(ev && ev.at);
+      out.push({
+        id: text(rec && rec.id) + ":" + String(idx) + ":" + when,
+        source: "LOCAL",
+        emenda_id: getBackendIdForRecord(rec),
+        emenda_ref: text(rec && rec.id) || "-",
+        emenda_identificacao: text(rec && rec.identificacao) || "-",
+        usuario_nome: text(ev && ev.actor_user) || "sistema",
+        setor: text(ev && ev.actor_role) || "-",
+        tipo_evento: text(ev && ev.type) || "EVENTO",
+        origem_evento: text(ev && ev.origin) || "LOCAL",
+        campo_alterado: text(ev && ev.field) || "",
+        valor_antigo: ev && Object.prototype.hasOwnProperty.call(ev, "from") ? text(ev.from) : "",
+        valor_novo: ev && Object.prototype.hasOwnProperty.call(ev, "to") ? text(ev.to) : "",
+        motivo: text(ev && ev.note) || "",
+        data_hora: when,
+        at_ts: new Date(when).getTime() || 0
+      });
+    });
+  });
+  out.sort(function (a, b) {
+    return b.at_ts - a.at_ts;
+  });
+  return out;
+}
+
+function getAuditYearValue(row) {
+  const when = text(row && row.data_hora);
+  const d = new Date(when);
+  const ts = d.getTime();
+  if (!Number.isFinite(ts)) return "";
+  return String(d.getFullYear());
+}
+
+function getAuditMonthValue(row) {
+  const when = text(row && row.data_hora);
+  const d = new Date(when);
+  const ts = d.getTime();
+  if (!Number.isFinite(ts)) return "";
+  return String(d.getMonth() + 1).padStart(2, "0");
+}
+
+function buildAuditSearchBlob(row) {
+  const meta = getAuditRecordMeta(row);
+  return normalizeLooseText([
+    text(row && row.usuario_nome),
+    text(row && row.setor),
+    text(row && row.tipo_evento),
+    text(row && row.origem_evento),
+    text(row && row.campo_alterado),
+    text(row && row.valor_antigo),
+    text(row && row.valor_novo),
+    text(row && row.motivo),
+    text(row && row.emenda_identificacao),
+    text(row && row.emenda_municipio),
+    text(row && row.emenda_deputado),
+    text(meta && meta.code),
+    text(meta && meta.detail)
+  ].join(" "));
+}
+
+function buildAuditMonthOptions(rows, yearValue) {
+  const source = Array.isArray(rows) ? rows : [];
+  const selectedYear = String(yearValue || "");
+  const monthMap = {};
+  source.forEach(function (row) {
+    const year = getAuditYearValue(row);
+    const month = getAuditMonthValue(row);
+    if (!month) return;
+    if (selectedYear && year !== selectedYear) return;
+    monthMap[month] = true;
+  });
+  const labels = {
+    "01": "01 - Janeiro",
+    "02": "02 - Fevereiro",
+    "03": "03 - Marco",
+    "04": "04 - Abril",
+    "05": "05 - Maio",
+    "06": "06 - Junho",
+    "07": "07 - Julho",
+    "08": "08 - Agosto",
+    "09": "09 - Setembro",
+    "10": "10 - Outubro",
+    "11": "11 - Novembro",
+    "12": "12 - Dezembro"
+  };
+  return Object.keys(monthMap).sort().map(function (month) {
+    return {
+      label: labels[month] || month,
+      value: month
+    };
+  });
+}
+
+function applyBetaAuditFilters(rows) {
+  const source = Array.isArray(rows) ? rows : [];
+  return source.filter(function (row) {
+    if (betaAuditFilters.ano && getAuditYearValue(row) !== String(betaAuditFilters.ano)) return false;
+    if (betaAuditFilters.mes && getAuditMonthValue(row) !== String(betaAuditFilters.mes).padStart(2, "0")) return false;
+    if (betaAuditFilters.usuario && text(row && row.usuario_nome) !== betaAuditFilters.usuario) return false;
+    if (betaAuditFilters.setor && text(row && row.setor) !== betaAuditFilters.setor) return false;
+    if (betaAuditFilters.tipo_evento && text(row && row.tipo_evento) !== betaAuditFilters.tipo_evento) return false;
+    if (betaAuditFilters.origem_evento && text(row && row.origem_evento) !== betaAuditFilters.origem_evento) return false;
+    if (betaAuditFilters.q) {
+      const queryText = normalizeLooseText(betaAuditFilters.q);
+      if (!buildAuditSearchBlob(row).includes(queryText)) return false;
+    }
+    return true;
+  });
+}
+
+function buildBetaAuditFilterOptions(rows) {
+  const source = Array.isArray(rows) ? rows : [];
+  const years = Array.from(new Set(source.map(getAuditYearValue).filter(Boolean))).sort().reverse();
+  const users = Array.from(new Set(source.map(function (row) { return text(row && row.usuario_nome); }).filter(Boolean))).sort();
+  const roles = Array.from(new Set(source.map(function (row) { return text(row && row.setor); }).filter(Boolean))).sort();
+  const eventTypes = Array.from(new Set(source.map(function (row) { return text(row && row.tipo_evento); }).filter(Boolean))).sort();
+  const origins = Array.from(new Set(source.map(function (row) { return text(row && row.origem_evento); }).filter(Boolean))).sort();
+
+  return {
+    years: years,
+    months: buildAuditMonthOptions(source, betaAuditFilters.ano),
+    users: users,
+    roles: roles,
+    eventTypes: eventTypes,
+    origins: origins
+  };
+}
+
+function buildBetaAuditApiQuery() {
+  const params = new URLSearchParams();
+  params.set("limit", String(BETA_AUDIT_LIMIT));
+  if (betaAuditFilters.ano) params.set("ano", String(betaAuditFilters.ano));
+  if (betaAuditFilters.mes) params.set("mes", String(toInt(betaAuditFilters.mes)));
+  if (betaAuditFilters.usuario) params.set("usuario", String(betaAuditFilters.usuario));
+  if (betaAuditFilters.setor) params.set("setor", String(betaAuditFilters.setor));
+  if (betaAuditFilters.tipo_evento) params.set("tipo_evento", String(betaAuditFilters.tipo_evento));
+  if (betaAuditFilters.origem_evento) params.set("origem_evento", String(betaAuditFilters.origem_evento));
+  if (betaAuditFilters.q) params.set("q", String(betaAuditFilters.q));
+  return params.toString();
+}
+
+function getVisibleAuditRows(filteredRows) {
+  const rows = Array.isArray(filteredRows) ? filteredRows : [];
+  if (canViewGlobalAuditApi() && betaAuditRows.length) {
+    return {
+      source: "API",
+      rows: applyBetaAuditFilters(betaAuditRows)
+    };
+  }
+  return {
+    source: "LOCAL",
+    rows: applyBetaAuditFilters(flattenLocalAuditRows(rows))
+  };
+}
+
+function getAuditRecordMeta(row) {
+  if (!row) return { code: "-", detail: "-" };
+  if (row.emenda_ref) {
+    return {
+      code: text(row.emenda_ref) || "-",
+      detail: text(row.emenda_identificacao) || "-"
+    };
+  }
+  if (row.emenda_identificacao) {
+    const apiLabel = row.emenda_ano ? ("API#" + String(row.emenda_id || "-") + " / " + String(row.emenda_ano)) : ("API#" + String(row.emenda_id || "-"));
+    const apiDetail = [
+      text(row.emenda_identificacao),
+      text(row.emenda_municipio),
+      text(row.emenda_deputado)
+    ].filter(Boolean).join(" | ");
+    return {
+      code: apiLabel,
+      detail: apiDetail || text(row.emenda_identificacao) || "-"
+    };
+  }
+  const backendId = Number(row.emenda_id || 0);
+  const rec = backendId ? state.records.find(function (item) {
+    return Number(item && item.backend_id ? item.backend_id : 0) === backendId;
+  }) : null;
+  if (rec) {
+    return {
+      code: text(rec.id) || ("API#" + String(backendId)),
+      detail: text(rec.identificacao) || "-"
+    };
+  }
+  return {
+    code: backendId ? ("API#" + String(backendId)) : "-",
+    detail: "-"
+  };
+}
+
+async function refreshBetaAuditFromApi(forceRender) {
+  if (!canViewGlobalAuditApi()) {
+    betaAuditRows = [];
+    betaAuditError = isApiEnabled() ? "Perfil atual sem acesso ao historico global da API." : "";
+    betaAuditLoading = false;
+    if (forceRender) renderBetaWorkspace(getFiltered());
+    return;
+  }
+  if (betaAuditLoading) return;
+
+  betaAuditLoading = true;
+  if (forceRender) renderBetaWorkspace(getFiltered());
+
+  try {
+    const remoteRows = await apiRequest("GET", "/audit?" + buildBetaAuditApiQuery(), undefined, "UI", { handleAuthFailure: false });
+    betaAuditRows = (Array.isArray(remoteRows) ? remoteRows : []).map(function (row) {
+      const when = text(row && row.data_hora);
+      return Object.assign({}, row, {
+        source: "API",
+        data_hora: when,
+        at_ts: new Date(when).getTime() || 0
+      });
+    }).sort(function (a, b) {
+      return (b.at_ts || 0) - (a.at_ts || 0);
+    });
+    betaAuditError = "";
+    betaAuditLastSyncAt = isoNow();
+  } catch (err) {
+    betaAuditError = extractApiError(err, "Falha ao carregar historico global da API.");
+  } finally {
+    betaAuditLoading = false;
+    if (forceRender) renderBetaWorkspace(getFiltered());
+  }
+}
+
+function getSupportScopeValue() {
+  if (!isSupportManagerUser()) return "mine";
+  return betaSupportFilters.scope === "mine" ? "mine" : "all";
+}
+
+function getSupportThreadEmendaLabel(thread) {
+  const backendId = Number(thread && thread.emenda_id ? thread.emenda_id : 0);
+  if (!backendId) return "";
+  const rec = state.records.find(function (item) {
+    return Number(item && item.backend_id ? item.backend_id : 0) === backendId;
+  });
+  if (!rec) return "Emenda #" + String(backendId);
+  return String(rec.id || ("API#" + String(backendId))) + " | " + text(rec.identificacao || "-");
+}
+
+function buildSupportUserOptions(threads) {
+  return Array.from(new Set((Array.isArray(threads) ? threads : []).map(function (item) {
+    return text(item && item.usuario_nome);
+  }).filter(Boolean))).sort();
+}
+
+function buildSupportApiQuery() {
+  const params = new URLSearchParams();
+  params.set("limit", String(BETA_SUPPORT_LIMIT));
+  if (betaSupportFilters.status) params.set("status", String(betaSupportFilters.status));
+  if (betaSupportFilters.categoria) params.set("categoria", String(betaSupportFilters.categoria));
+  if (betaSupportFilters.usuario) params.set("usuario", String(betaSupportFilters.usuario));
+  if (betaSupportFilters.q) params.set("q", String(betaSupportFilters.q));
+  if (getSupportScopeValue() !== "all") params.set("mine_only", "true");
+  return params.toString();
+}
+
+async function refreshBetaSupportMessagesFromApi(forceRender, threadId) {
+  const id = Number(threadId || betaSupportSelectedThreadId || 0);
+  if (!id || !canUseSupportApi()) {
+    betaSupportMessages = [];
+    betaSupportMessagesError = "";
+    betaSupportMessagesLoading = false;
+    if (forceRender) renderBetaWorkspace(getFiltered());
+    return;
+  }
+  betaSupportMessagesLoading = true;
+  if (forceRender) renderBetaWorkspace(getFiltered());
+  try {
+    const rows = await apiRequest("GET", "/support/threads/" + String(id) + "/messages", undefined, "UI", { handleAuthFailure: false });
+    betaSupportMessages = Array.isArray(rows) ? rows : [];
+    betaSupportMessagesError = "";
+  } catch (err) {
+    betaSupportMessagesError = extractApiError(err, "Falha ao carregar mensagens do suporte.");
+  } finally {
+    betaSupportMessagesLoading = false;
+    if (forceRender) renderBetaWorkspace(getFiltered());
+  }
+}
+
+async function refreshBetaSupportFromApi(forceRender) {
+  if (!canUseSupportApi()) {
+    betaSupportThreads = [];
+    betaSupportMessages = [];
+    betaSupportError = isApiEnabled() ? "Sessao necessaria para usar suporte." : "Suporte exige API ativa.";
+    betaSupportLoading = false;
+    if (forceRender) renderBetaWorkspace(getFiltered());
+    return;
+  }
+  if (betaSupportLoading) return;
+
+  betaSupportLoading = true;
+  if (forceRender) renderBetaWorkspace(getFiltered());
+  try {
+    const rows = await apiRequest("GET", "/support/threads?" + buildSupportApiQuery(), undefined, "UI", { handleAuthFailure: false });
+    betaSupportThreads = Array.isArray(rows) ? rows : [];
+    betaSupportError = "";
+    betaSupportLastSyncAt = isoNow();
+    const stillSelected = betaSupportThreads.some(function (item) {
+      return Number(item && item.id ? item.id : 0) === Number(betaSupportSelectedThreadId || 0);
+    });
+    if (!stillSelected) {
+      betaSupportSelectedThreadId = betaSupportThreads.length ? Number(betaSupportThreads[0].id || 0) : 0;
+    }
+    if (betaSupportSelectedThreadId) {
+      await refreshBetaSupportMessagesFromApi(false, betaSupportSelectedThreadId);
+    } else {
+      betaSupportMessages = [];
+      betaSupportMessagesError = "";
+    }
+  } catch (err) {
+    betaSupportError = extractApiError(err, "Falha ao carregar chamados de suporte.");
+  } finally {
+    betaSupportLoading = false;
+    if (forceRender) renderBetaWorkspace(getFiltered());
+    syncBetaSupportPolling();
+  }
+}
+
+function renderBetaSupportPanel(target, filteredRows) {
+  clearNodeChildren(target);
+
+  const intro = document.createElement("div");
+  intro.className = "beta-panel-card";
+  const title = document.createElement("h4");
+  title.textContent = "Ajuda e suporte";
+  const note = document.createElement("p");
+  note.className = "muted small";
+  note.textContent = isSupportManagerUser()
+    ? "Inbox central de suporte. Voce pode acompanhar todos os chamados, responder e fechar quando a orientacao estiver resolvida."
+    : "Abra um chamado com contexto da operacao. O historico do atendimento fica vinculado ao seu usuario.";
+  intro.appendChild(title);
+  intro.appendChild(note);
+  target.appendChild(intro);
+
+  if (!canUseSupportApi()) {
+    const empty = document.createElement("p");
+    empty.className = "beta-empty";
+    empty.textContent = isApiEnabled() ? "Faca login para usar o suporte." : "Suporte exige API ativa.";
+    target.appendChild(empty);
+    return;
+  }
+
+  const toolbar = document.createElement("div");
+  toolbar.className = "beta-head-actions";
+  const badge = document.createElement("span");
+  badge.className = "beta-source-badge";
+  badge.textContent = "Chamados: " + String(betaSupportThreads.length) + " | Escopo: " + (getSupportScopeValue() === "all" ? "todos" : "meus");
+  toolbar.appendChild(badge);
+  const refreshBtn = document.createElement("button");
+  refreshBtn.className = "btn";
+  refreshBtn.type = "button";
+  refreshBtn.textContent = betaSupportLoading ? "Atualizando..." : "Atualizar suporte";
+  refreshBtn.disabled = betaSupportLoading;
+  refreshBtn.addEventListener("click", function () {
+    refreshBetaSupportFromApi(true).catch(function () { /* no-op */ });
+  });
+  toolbar.appendChild(refreshBtn);
+  target.appendChild(toolbar);
+
+  const composer = document.createElement("div");
+  composer.className = "beta-panel-card";
+  const composerTitle = document.createElement("h4");
+  composerTitle.textContent = "Abrir chamado";
+  composer.appendChild(composerTitle);
+
+  const composerGrid = document.createElement("div");
+  composerGrid.className = "filters beta-support-compose-grid";
+
+  function addField(labelText, control, grow) {
+    const field = document.createElement("div");
+    field.className = "field" + (grow ? " grow" : "");
+    const label = document.createElement("label");
+    label.textContent = labelText;
+    field.appendChild(label);
+    field.appendChild(control);
+    composerGrid.appendChild(field);
+    return control;
+  }
+
+  const subjectInput = addField("Assunto", document.createElement("input"), true);
+  subjectInput.type = "text";
+  subjectInput.placeholder = "Ex.: duvida no status da emenda";
+
+  const categorySelect = addField("Categoria", document.createElement("select"));
+  setSelectOptions(categorySelect, SUPPORT_CATEGORIES.map(function (value) {
+    return { label: value, value: value };
+  }), "OPERACAO");
+
+  const emendaSelect = addField("Emenda relacionada", document.createElement("select"));
+  const emendaOptions = [{ label: "Nenhuma", value: "" }].concat((Array.isArray(filteredRows) ? filteredRows : []).slice(0, 120).map(function (rec) {
+    const backendId = getBackendIdForRecord(rec);
+    return {
+      label: String(rec.id || "-") + " | " + text(rec.identificacao || "-"),
+      value: backendId ? String(backendId) : ""
+    };
+  }).filter(function (item) { return !!item.value; }));
+  setSelectOptions(emendaSelect, emendaOptions, "");
+
+  const bodyField = document.createElement("div");
+  bodyField.className = "field grow beta-support-message-field";
+  const bodyLabel = document.createElement("label");
+  bodyLabel.textContent = "Mensagem";
+  const bodyInput = document.createElement("textarea");
+  bodyInput.className = "kv-textarea";
+  bodyInput.placeholder = "Descreva o problema, o contexto e o que voce esperava que acontecesse.";
+  bodyField.appendChild(bodyLabel);
+  bodyField.appendChild(bodyInput);
+  composerGrid.appendChild(bodyField);
+
+  const composerActions = document.createElement("div");
+  composerActions.className = "beta-history-filter-actions";
+  const openBtn = document.createElement("button");
+  openBtn.className = "btn primary";
+  openBtn.type = "button";
+  openBtn.textContent = "Enviar chamado";
+  const clearComposerBtn = document.createElement("button");
+  clearComposerBtn.className = "btn";
+  clearComposerBtn.type = "button";
+  clearComposerBtn.textContent = "Limpar";
+  composerActions.appendChild(openBtn);
+  composerActions.appendChild(clearComposerBtn);
+  bodyField.appendChild(composerActions);
+
+  const composerFeedback = document.createElement("p");
+  composerFeedback.className = "muted small";
+  composerFeedback.style.marginTop = "8px";
+  composer.appendChild(composerGrid);
+  composer.appendChild(composerFeedback);
+  target.appendChild(composer);
+
+  clearComposerBtn.addEventListener("click", function () {
+    subjectInput.value = "";
+    categorySelect.value = "OPERACAO";
+    emendaSelect.value = "";
+    bodyInput.value = "";
+    composerFeedback.textContent = "";
+  });
+
+  openBtn.addEventListener("click", async function () {
+    const payload = {
+      subject: String(subjectInput.value || "").trim(),
+      categoria: String(categorySelect.value || "OUTRO"),
+      emenda_id: toInt(emendaSelect.value) || undefined,
+      mensagem: String(bodyInput.value || "").trim()
+    };
+    if (!payload.subject || !payload.mensagem) {
+      composerFeedback.style.color = "#b4233d";
+      composerFeedback.textContent = "Informe assunto e mensagem para abrir o chamado.";
+      return;
+    }
+    composerFeedback.style.color = "";
+    composerFeedback.textContent = "Enviando chamado...";
+    try {
+      const created = await apiRequest("POST", "/support/threads", payload, "UI");
+      betaSupportSelectedThreadId = Number(created && created.id ? created.id : 0);
+      subjectInput.value = "";
+      categorySelect.value = "OPERACAO";
+      emendaSelect.value = "";
+      bodyInput.value = "";
+      composerFeedback.textContent = "Chamado enviado com sucesso.";
+      await refreshBetaSupportFromApi(true);
+    } catch (err) {
+      composerFeedback.style.color = "#b4233d";
+      composerFeedback.textContent = extractApiError(err, "Falha ao abrir chamado.");
+    }
+  });
+
+  const filterWrap = document.createElement("div");
+  filterWrap.className = "filters beta-support-filter-grid";
+  const statusSelect = document.createElement("select");
+  const categoryFilterSelect = document.createElement("select");
+  const userSelect = document.createElement("select");
+  const scopeSelect = document.createElement("select");
+  const searchInput = document.createElement("input");
+  searchInput.type = "text";
+  searchInput.placeholder = "assunto, usuario, ultima mensagem...";
+  searchInput.value = betaSupportFilters.q || "";
+
+  function appendFilterField(parent, labelText, control, grow) {
+    const field = document.createElement("div");
+    field.className = "field" + (grow ? " grow" : "");
+    const label = document.createElement("label");
+    label.textContent = labelText;
+    field.appendChild(label);
+    field.appendChild(control);
+    parent.appendChild(field);
+    return control;
+  }
+
+  setSelectOptions(statusSelect, [{ label: "Todos", value: "" }].concat(SUPPORT_THREAD_STATUS.map(function (value) {
+    return { label: value, value: value };
+  })), betaSupportFilters.status || "");
+  setSelectOptions(categoryFilterSelect, [{ label: "Todas", value: "" }].concat(SUPPORT_CATEGORIES.map(function (value) {
+    return { label: value, value: value };
+  })), betaSupportFilters.categoria || "");
+  setSelectOptions(userSelect, [{ label: "Todos", value: "" }].concat(buildSupportUserOptions(betaSupportThreads).map(function (value) {
+    return { label: value, value: value };
+  })), betaSupportFilters.usuario || "");
+  setSelectOptions(scopeSelect, [
+    { label: "Meus chamados", value: "mine" },
+    { label: "Todos os chamados", value: "all" }
+  ], getSupportScopeValue());
+
+  appendFilterField(filterWrap, "Status", statusSelect);
+  appendFilterField(filterWrap, "Categoria", categoryFilterSelect);
+  if (isSupportManagerUser()) appendFilterField(filterWrap, "Escopo", scopeSelect);
+  if (isSupportManagerUser()) appendFilterField(filterWrap, "Usuario", userSelect);
+  appendFilterField(filterWrap, "Busca", searchInput, true);
+  const filterActions = document.createElement("div");
+  filterActions.className = "field";
+  const filterActionsLabel = document.createElement("label");
+  filterActionsLabel.textContent = "Acoes";
+  const filterActionsWrap = document.createElement("div");
+  filterActionsWrap.className = "beta-history-filter-actions";
+  const applyFilterBtn = document.createElement("button");
+  applyFilterBtn.className = "btn primary";
+  applyFilterBtn.type = "button";
+  applyFilterBtn.textContent = "Aplicar";
+  const clearFilterBtn = document.createElement("button");
+  clearFilterBtn.className = "btn";
+  clearFilterBtn.type = "button";
+  clearFilterBtn.textContent = "Limpar";
+  filterActionsWrap.appendChild(applyFilterBtn);
+  filterActionsWrap.appendChild(clearFilterBtn);
+  filterActions.appendChild(filterActionsLabel);
+  filterActions.appendChild(filterActionsWrap);
+  filterWrap.appendChild(filterActions);
+  target.appendChild(filterWrap);
+
+  applyFilterBtn.addEventListener("click", function () {
+    betaSupportFilters = {
+      status: String(statusSelect.value || ""),
+      categoria: String(categoryFilterSelect.value || ""),
+      usuario: String(userSelect.value || ""),
+      q: String(searchInput.value || "").trim(),
+      scope: isSupportManagerUser() ? String(scopeSelect.value || "mine") : "mine"
+    };
+    refreshBetaSupportFromApi(true).catch(function () { /* no-op */ });
+  });
+
+  clearFilterBtn.addEventListener("click", function () {
+    betaSupportFilters = Object.assign({}, BETA_SUPPORT_FILTER_DEFAULTS, {
+      scope: isSupportManagerUser() ? "all" : "mine"
+    });
+    refreshBetaSupportFromApi(true).catch(function () { /* no-op */ });
+  });
+
+  searchInput.addEventListener("keydown", function (event) {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    applyFilterBtn.click();
+  });
+
+  const layout = document.createElement("div");
+  layout.className = "beta-support-layout";
+  const listCard = document.createElement("div");
+  listCard.className = "beta-panel-card beta-support-list-card";
+  const detailCard = document.createElement("div");
+  detailCard.className = "beta-panel-card beta-support-detail-card";
+  layout.appendChild(listCard);
+  layout.appendChild(detailCard);
+  target.appendChild(layout);
+
+  const listTitle = document.createElement("h4");
+  listTitle.textContent = "Chamados";
+  listCard.appendChild(listTitle);
+
+  const listInfo = document.createElement("p");
+  listInfo.className = "muted small";
+  listInfo.textContent = "Ultima leitura: " + (betaSupportLastSyncAt ? fmtDateTime(betaSupportLastSyncAt) : "-");
+  listCard.appendChild(listInfo);
+  if (betaSupportError) {
+    const err = document.createElement("p");
+    err.className = "muted small";
+    err.style.color = "#b4233d";
+    err.textContent = betaSupportError;
+    listCard.appendChild(err);
+  }
+
+  const threadList = document.createElement("div");
+  threadList.className = "beta-support-thread-list";
+  listCard.appendChild(threadList);
+
+  if (betaSupportLoading && !betaSupportThreads.length) {
+    const loading = document.createElement("p");
+    loading.className = "beta-empty";
+    loading.textContent = "Carregando chamados...";
+    threadList.appendChild(loading);
+  } else if (!betaSupportThreads.length) {
+    const empty = document.createElement("p");
+    empty.className = "beta-empty";
+    empty.textContent = "Nenhum chamado encontrado para o filtro atual.";
+    threadList.appendChild(empty);
+  } else {
+    betaSupportThreads.forEach(function (thread) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "beta-support-thread-item" + (Number(thread.id || 0) === Number(betaSupportSelectedThreadId || 0) ? " active" : "");
+      const head = document.createElement("div");
+      head.className = "beta-support-thread-head";
+      const subject = document.createElement("strong");
+      subject.textContent = text(thread.subject || "Chamado sem titulo");
+      const statusBadge = document.createElement("span");
+      statusBadge.className = "beta-support-status beta-support-status-" + normalizeLooseText(thread.status || "ABERTO").replace(/\s+/g, "-");
+      statusBadge.textContent = text(thread.status || "ABERTO");
+      head.appendChild(subject);
+      head.appendChild(statusBadge);
+      button.appendChild(head);
+
+      const meta = document.createElement("div");
+      meta.className = "beta-history-meta";
+      meta.textContent = text(thread.usuario_nome || "-") + " | " + text(thread.setor || "-") + " | " + text(thread.categoria || "OUTRO");
+      button.appendChild(meta);
+
+      const preview = document.createElement("div");
+      preview.className = "beta-support-thread-preview";
+      preview.textContent = text(thread.last_message_preview || "-");
+      button.appendChild(preview);
+
+      const extra = document.createElement("div");
+      extra.className = "muted small";
+      const emendaLabel = getSupportThreadEmendaLabel(thread);
+      extra.textContent = (emendaLabel ? (emendaLabel + " | ") : "") + fmtDateTime(thread.last_message_at || thread.updated_at || thread.created_at);
+      button.appendChild(extra);
+
+      button.addEventListener("click", function () {
+        betaSupportSelectedThreadId = Number(thread.id || 0);
+        refreshBetaSupportMessagesFromApi(true, betaSupportSelectedThreadId).catch(function () { /* no-op */ });
+      });
+
+      threadList.appendChild(button);
+    });
+  }
+
+  const selectedThread = betaSupportThreads.find(function (item) {
+    return Number(item && item.id ? item.id : 0) === Number(betaSupportSelectedThreadId || 0);
+  }) || null;
+
+  const detailTitle = document.createElement("h4");
+  detailTitle.textContent = selectedThread ? ("Chamado #" + String(selectedThread.id)) : "Detalhe do chamado";
+  detailCard.appendChild(detailTitle);
+
+  if (!selectedThread) {
+    const emptyDetail = document.createElement("p");
+    emptyDetail.className = "beta-empty";
+    emptyDetail.textContent = "Selecione um chamado para acompanhar a conversa.";
+    detailCard.appendChild(emptyDetail);
+    return;
+  }
+
+  const detailMeta = document.createElement("div");
+  detailMeta.className = "beta-metric-stack";
+  [
+    "Assunto: " + text(selectedThread.subject || "-"),
+    "Solicitante: " + text(selectedThread.usuario_nome || "-") + " | " + text(selectedThread.setor || "-"),
+    "Categoria: " + text(selectedThread.categoria || "-"),
+    "Status: " + text(selectedThread.status || "-"),
+    "Emenda relacionada: " + (getSupportThreadEmendaLabel(selectedThread) || "Nao vinculada")
+  ].forEach(function (line) {
+    const item = document.createElement("div");
+    item.className = "beta-metric-line";
+    item.textContent = line;
+    detailMeta.appendChild(item);
+  });
+  detailCard.appendChild(detailMeta);
+
+  if (isSupportManagerUser()) {
+    const statusBar = document.createElement("div");
+    statusBar.className = "beta-history-filter-actions";
+    statusBar.style.marginTop = "10px";
+    const statusUpdateSelect = document.createElement("select");
+    setSelectOptions(statusUpdateSelect, SUPPORT_THREAD_STATUS.map(function (value) {
+      return { label: value, value: value };
+    }), text(selectedThread.status || "ABERTO"));
+    const statusUpdateBtn = document.createElement("button");
+    statusUpdateBtn.className = "btn";
+    statusUpdateBtn.type = "button";
+    statusUpdateBtn.textContent = "Atualizar status";
+    statusUpdateBtn.addEventListener("click", async function () {
+      try {
+        await apiRequest("PATCH", "/support/threads/" + String(selectedThread.id) + "/status", {
+          status: String(statusUpdateSelect.value || "ABERTO")
+        }, "UI");
+        await refreshBetaSupportFromApi(true);
+      } catch (err) {
+        betaSupportMessagesError = extractApiError(err, "Falha ao atualizar status do chamado.");
+        renderBetaWorkspace(getFiltered());
+      }
+    });
+    statusBar.appendChild(statusUpdateSelect);
+    statusBar.appendChild(statusUpdateBtn);
+    detailCard.appendChild(statusBar);
+  }
+
+  if (betaSupportMessagesError) {
+    const err = document.createElement("p");
+    err.className = "muted small";
+    err.style.color = "#b4233d";
+    err.style.marginTop = "8px";
+    err.textContent = betaSupportMessagesError;
+    detailCard.appendChild(err);
+  }
+
+  const messageWrap = document.createElement("div");
+  messageWrap.className = "beta-support-message-list";
+  if (betaSupportMessagesLoading && !betaSupportMessages.length) {
+    const loading = document.createElement("p");
+    loading.className = "beta-empty";
+    loading.textContent = "Carregando conversa...";
+    messageWrap.appendChild(loading);
+  } else if (!betaSupportMessages.length) {
+    const empty = document.createElement("p");
+    empty.className = "beta-empty";
+    empty.textContent = "Sem mensagens neste chamado.";
+    messageWrap.appendChild(empty);
+  } else {
+    betaSupportMessages.forEach(function (message) {
+      const bubble = document.createElement("div");
+      const isSupportBubble = text(message && message.origem) === "SUPORTE";
+      bubble.className = "beta-support-message" + (isSupportBubble ? " support" : " user");
+      const top = document.createElement("div");
+      top.className = "beta-support-message-top";
+      top.textContent = text(message.usuario_nome || "-") + " | " + text(message.setor || "-") + " | " + fmtDateTime(message.created_at);
+      const body = document.createElement("div");
+      body.className = "beta-support-message-body";
+      body.textContent = text(message.mensagem || "");
+      bubble.appendChild(top);
+      bubble.appendChild(body);
+      messageWrap.appendChild(bubble);
+    });
+  }
+  detailCard.appendChild(messageWrap);
+
+  const replyField = document.createElement("div");
+  replyField.className = "field beta-support-reply-field";
+  const replyLabel = document.createElement("label");
+  replyLabel.textContent = "Responder";
+  const replyInput = document.createElement("textarea");
+  replyInput.className = "kv-textarea";
+  replyInput.placeholder = isSupportManagerUser()
+    ? "Resposta de suporte / orientacao operacional..."
+    : "Complementar contexto, anexo logico, retorno do teste...";
+  const replyActions = document.createElement("div");
+  replyActions.className = "beta-history-filter-actions";
+  const replyBtn = document.createElement("button");
+  replyBtn.className = "btn primary";
+  replyBtn.type = "button";
+  replyBtn.textContent = isSupportManagerUser() ? "Enviar resposta" : "Enviar complemento";
+  const reloadMessagesBtn = document.createElement("button");
+  reloadMessagesBtn.className = "btn";
+  reloadMessagesBtn.type = "button";
+  reloadMessagesBtn.textContent = "Atualizar conversa";
+  replyActions.appendChild(replyBtn);
+  replyActions.appendChild(reloadMessagesBtn);
+  replyField.appendChild(replyLabel);
+  replyField.appendChild(replyInput);
+  replyField.appendChild(replyActions);
+  detailCard.appendChild(replyField);
+
+  const replyFeedback = document.createElement("p");
+  replyFeedback.className = "muted small";
+  detailCard.appendChild(replyFeedback);
+
+  reloadMessagesBtn.addEventListener("click", function () {
+    refreshBetaSupportMessagesFromApi(true, selectedThread.id).catch(function () { /* no-op */ });
+  });
+
+  replyBtn.addEventListener("click", async function () {
+    const message = String(replyInput.value || "").trim();
+    if (!message) {
+      replyFeedback.style.color = "#b4233d";
+      replyFeedback.textContent = "Informe a mensagem antes de enviar.";
+      return;
+    }
+    replyFeedback.style.color = "";
+    replyFeedback.textContent = "Enviando resposta...";
+    try {
+      await apiRequest("POST", "/support/threads/" + String(selectedThread.id) + "/messages", {
+        mensagem: message
+      }, "UI");
+      replyInput.value = "";
+      replyFeedback.textContent = "Mensagem enviada.";
+      await refreshBetaSupportFromApi(true);
+    } catch (err) {
+      replyFeedback.style.color = "#b4233d";
+      replyFeedback.textContent = extractApiError(err, "Falha ao enviar mensagem.");
+    }
+  });
+}
+
+function renderBetaHistoryPanel(target, filteredRows) {
+  clearNodeChildren(target);
+
+  const auditState = getVisibleAuditRows(filteredRows);
+  const rows = Array.isArray(auditState.rows) ? auditState.rows.slice(0, BETA_AUDIT_LIMIT) : [];
+  const optionSourceRows = canViewGlobalAuditApi() && betaAuditRows.length
+    ? betaAuditRows
+    : flattenLocalAuditRows(filteredRows);
+  const filterOptions = buildBetaAuditFilterOptions(optionSourceRows);
+  const toolbar = document.createElement("div");
+  toolbar.className = "beta-head-actions";
+
+  const sourceBadge = document.createElement("span");
+  sourceBadge.className = "beta-source-badge";
+  sourceBadge.textContent = auditState.source === "API" ? "Historico global da API" : "Historico local do navegador";
+  toolbar.appendChild(sourceBadge);
+
+  if (canViewGlobalAuditApi()) {
+    const refreshBtn = document.createElement("button");
+    refreshBtn.className = "btn";
+    refreshBtn.type = "button";
+    refreshBtn.textContent = betaAuditLoading ? "Atualizando..." : "Atualizar historico";
+    refreshBtn.disabled = betaAuditLoading;
+    refreshBtn.addEventListener("click", function () {
+      refreshBetaAuditFromApi(true).catch(function () { /* no-op */ });
+    });
+    toolbar.appendChild(refreshBtn);
+  }
+
+  target.appendChild(toolbar);
+
+  const filterWrap = document.createElement("div");
+  filterWrap.className = "filters beta-history-filters";
+
+  const yearField = document.createElement("div");
+  yearField.className = "field";
+  const yearLabel = document.createElement("label");
+  yearLabel.textContent = "Ano do historico";
+  const yearSelect = document.createElement("select");
+  setSelectOptions(yearSelect, [{ label: "Todos", value: "" }].concat(filterOptions.years.map(function (value) {
+    return { label: value, value: value };
+  })), betaAuditFilters.ano || "");
+  yearField.appendChild(yearLabel);
+  yearField.appendChild(yearSelect);
+  filterWrap.appendChild(yearField);
+
+  const monthField = document.createElement("div");
+  monthField.className = "field";
+  const monthLabel = document.createElement("label");
+  monthLabel.textContent = "Mes";
+  const monthSelect = document.createElement("select");
+  const monthOptions = [{ label: "Todos", value: "" }].concat(filterOptions.months);
+  setSelectOptions(monthSelect, monthOptions, betaAuditFilters.mes || "");
+  monthField.appendChild(monthLabel);
+  monthField.appendChild(monthSelect);
+  filterWrap.appendChild(monthField);
+
+  const userField = document.createElement("div");
+  userField.className = "field";
+  const userLabel = document.createElement("label");
+  userLabel.textContent = "Usuario";
+  const userSelect = document.createElement("select");
+  setSelectOptions(userSelect, [{ label: "Todos", value: "" }].concat(filterOptions.users.map(function (value) {
+    return { label: value, value: value };
+  })), betaAuditFilters.usuario || "");
+  userField.appendChild(userLabel);
+  userField.appendChild(userSelect);
+  filterWrap.appendChild(userField);
+
+  const roleField = document.createElement("div");
+  roleField.className = "field";
+  const roleLabel = document.createElement("label");
+  roleLabel.textContent = "Perfil";
+  const roleSelect = document.createElement("select");
+  setSelectOptions(roleSelect, [{ label: "Todos", value: "" }].concat(filterOptions.roles.map(function (value) {
+    return { label: value, value: value };
+  })), betaAuditFilters.setor || "");
+  roleField.appendChild(roleLabel);
+  roleField.appendChild(roleSelect);
+  filterWrap.appendChild(roleField);
+
+  const eventField = document.createElement("div");
+  eventField.className = "field";
+  const eventLabel = document.createElement("label");
+  eventLabel.textContent = "Tipo de evento";
+  const eventSelect = document.createElement("select");
+  setSelectOptions(eventSelect, [{ label: "Todos", value: "" }].concat(filterOptions.eventTypes.map(function (value) {
+    return { label: value, value: value };
+  })), betaAuditFilters.tipo_evento || "");
+  eventField.appendChild(eventLabel);
+  eventField.appendChild(eventSelect);
+  filterWrap.appendChild(eventField);
+
+  const originField = document.createElement("div");
+  originField.className = "field";
+  const originLabel = document.createElement("label");
+  originLabel.textContent = "Origem";
+  const originSelect = document.createElement("select");
+  setSelectOptions(originSelect, [{ label: "Todas", value: "" }].concat(filterOptions.origins.map(function (value) {
+    return { label: value, value: value };
+  })), betaAuditFilters.origem_evento || "");
+  originField.appendChild(originLabel);
+  originField.appendChild(originSelect);
+  filterWrap.appendChild(originField);
+
+  const searchField = document.createElement("div");
+  searchField.className = "field grow";
+  const searchLabel = document.createElement("label");
+  searchLabel.textContent = "Busca no historico";
+  const searchInput = document.createElement("input");
+  searchInput.type = "text";
+  searchInput.placeholder = "usuario, motivo, campo, valor, emenda...";
+  searchInput.value = betaAuditFilters.q || "";
+  searchField.appendChild(searchLabel);
+  searchField.appendChild(searchInput);
+  filterWrap.appendChild(searchField);
+
+  const actionField = document.createElement("div");
+  actionField.className = "field";
+  const actionLabel = document.createElement("label");
+  actionLabel.textContent = "Acoes";
+  const actionWrap = document.createElement("div");
+  actionWrap.className = "beta-history-filter-actions";
+  const applyBtn = document.createElement("button");
+  applyBtn.className = "btn primary";
+  applyBtn.type = "button";
+  applyBtn.textContent = "Aplicar";
+  const clearBtn = document.createElement("button");
+  clearBtn.className = "btn";
+  clearBtn.type = "button";
+  clearBtn.textContent = "Limpar";
+  actionWrap.appendChild(applyBtn);
+  actionWrap.appendChild(clearBtn);
+  actionField.appendChild(actionLabel);
+  actionField.appendChild(actionWrap);
+  filterWrap.appendChild(actionField);
+
+  if (!isExecutiveRole) {
+    deputadoSelect.disabled = true;
+    municipioSelect.disabled = true;
+    statusSelect.disabled = true;
+    searchInput.disabled = true;
+    applyBtn.disabled = true;
+    clearBtn.disabled = true;
+  }
+
+  yearSelect.addEventListener("change", function () {
+    const nextMonths = [{ label: "Todos", value: "" }].concat(buildAuditMonthOptions(optionSourceRows, yearSelect.value || ""));
+    const preferredMonth = nextMonths.some(function (item) { return item.value === monthSelect.value; }) ? monthSelect.value : "";
+    setSelectOptions(monthSelect, nextMonths, preferredMonth);
+  });
+
+  searchInput.addEventListener("keydown", function (event) {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    applyBtn.click();
+  });
+
+  applyBtn.addEventListener("click", function () {
+    betaAuditFilters = {
+      ano: String(yearSelect.value || ""),
+      mes: String(monthSelect.value || ""),
+      usuario: String(userSelect.value || ""),
+      setor: String(roleSelect.value || ""),
+      tipo_evento: String(eventSelect.value || ""),
+      origem_evento: String(originSelect.value || ""),
+      q: String(searchInput.value || "").trim()
+    };
+    if (canViewGlobalAuditApi()) {
+      refreshBetaAuditFromApi(true).catch(function () { /* no-op */ });
+      return;
+    }
+    renderBetaWorkspace(getFiltered());
+  });
+
+  clearBtn.addEventListener("click", function () {
+    betaAuditFilters = Object.assign({}, BETA_AUDIT_FILTER_DEFAULTS);
+    if (canViewGlobalAuditApi()) {
+      refreshBetaAuditFromApi(true).catch(function () { /* no-op */ });
+      return;
+    }
+    renderBetaWorkspace(getFiltered());
+  });
+
+  target.appendChild(filterWrap);
+
+  const info = document.createElement("p");
+  info.className = "muted small";
+  info.style.marginTop = "10px";
+  const filterInfo = "Filtro atual: " + String(Array.isArray(filteredRows) ? filteredRows.length : 0) + " emendas visiveis. Eventos retornados: " + String(rows.length) + ".";
+  const syncInfo = betaAuditLastSyncAt ? (" Ultima leitura da API: " + fmtDateTime(betaAuditLastSyncAt) + ".") : "";
+  info.textContent = filterInfo + syncInfo;
+  target.appendChild(info);
+
+  if (betaAuditError) {
+    const error = document.createElement("p");
+    error.className = "muted small";
+    error.style.color = "#b4233d";
+    error.style.marginTop = "8px";
+    error.textContent = betaAuditError;
+    target.appendChild(error);
+  }
+
+  if (!rows.length) {
+    const empty = document.createElement("p");
+    empty.className = "beta-empty";
+    empty.style.marginTop = "12px";
+    empty.textContent = betaAuditLoading
+      ? "Carregando historico operacional..."
+      : "Sem eventos para o filtro atual.";
+    target.appendChild(empty);
+    return;
+  }
+
+  const list = document.createElement("div");
+  list.className = "recent-list beta-history-list";
+
+  rows.forEach(function (row) {
+    const meta = getAuditRecordMeta(row);
+    const item = document.createElement("div");
+    item.className = "recent-item";
+
+    const top = document.createElement("div");
+    top.className = "recent-item-top";
+
+    const left = document.createElement("div");
+    const badge = document.createElement("span");
+    badge.className = "badge";
+    badge.textContent = text(row.tipo_evento || "EVENTO");
+    left.appendChild(badge);
+
+    const targetLine = document.createElement("div");
+    targetLine.className = "recent-item-target";
+    targetLine.textContent = meta.code + " | " + meta.detail;
+    left.appendChild(targetLine);
+    top.appendChild(left);
+
+    const right = document.createElement("div");
+    right.className = "muted small";
+    right.textContent = fmtDateTime(row.data_hora);
+    top.appendChild(right);
+    item.appendChild(top);
+
+    const action = document.createElement("div");
+    action.className = "recent-item-action";
+    action.textContent = row.source === "API" ? describeApiAuditRow(row) : describeEventForPanel({
+      type: row.tipo_evento,
+      from: row.valor_antigo,
+      to: row.valor_novo,
+      field: row.campo_alterado
+    });
+    item.appendChild(action);
+
+    const auditMeta = document.createElement("div");
+    auditMeta.className = "beta-history-meta";
+    auditMeta.textContent = "Usuario: " + text(row.usuario_nome || "-")
+      + " | Perfil: " + text(row.setor || "-")
+      + " | Origem: " + text(row.origem_evento || row.source || "-");
+    item.appendChild(auditMeta);
+
+    if (text(row.motivo)) {
+      const note = document.createElement("div");
+      note.className = "beta-history-note";
+      note.textContent = "Obs.: " + text(row.motivo);
+      item.appendChild(note);
+    }
+
+    list.appendChild(item);
+  });
+
+  target.appendChild(list);
+}
+
+function buildPowerBiFilterOptions(rows) {
+  const source = Array.isArray(rows) ? rows : [];
+  const deputados = Array.from(new Set(source.map(function (rec) { return text(rec && rec.deputado) || "-"; }).filter(Boolean))).sort();
+  const municipios = Array.from(new Set(source.map(function (rec) { return text(rec && rec.municipio) || "-"; }).filter(Boolean))).sort();
+  const statuses = Array.from(new Set(source.map(function (rec) { return getRecordCurrentStatus(rec) || "-"; }).filter(Boolean))).sort();
+  return {
+    deputados: deputados,
+    municipios: municipios,
+    statuses: statuses
+  };
+}
+
+function applyPowerBiDashboardFilters(rows) {
+  const source = Array.isArray(rows) ? rows : [];
+  return source.filter(function (rec) {
+    const deputado = text(rec && rec.deputado) || "-";
+    const municipio = text(rec && rec.municipio) || "-";
+    const statusAtual = getRecordCurrentStatus(rec) || "-";
+    if (betaPowerBiFilters.deputado && deputado !== betaPowerBiFilters.deputado) return false;
+    if (betaPowerBiFilters.municipio && municipio !== betaPowerBiFilters.municipio) return false;
+    if (betaPowerBiFilters.status && statusAtual !== betaPowerBiFilters.status) return false;
+    if (betaPowerBiFilters.q) {
+      const blob = normalizeLooseText([
+        text(rec && rec.id),
+        text(rec && rec.identificacao),
+        deputado,
+        municipio,
+        text(rec && rec.cod_acao),
+        text(rec && rec.descricao_acao),
+        text(rec && rec.plan_a),
+        text(rec && rec.plan_b),
+        statusAtual
+      ].join(" "));
+      if (!blob.includes(normalizeLooseText(betaPowerBiFilters.q))) return false;
+    }
+    return true;
+  });
+}
+
+function getDeputadoAvatarLetters(name) {
+  const src = text(name || "").trim();
+  if (!src) return "DP";
+  const parts = src.split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function getDeputadoPhotoUrl(record) {
+  if (!record || typeof record !== "object") return "";
+  const allFields = record.all_fields && typeof record.all_fields === "object" ? record.all_fields : {};
+  const candidates = [
+    record.foto_deputado_url,
+    record.foto_url,
+    allFields.foto_deputado_url,
+    allFields.foto_url,
+    allFields.foto,
+    allFields.imagem,
+    allFields.image_url
+  ];
+  for (let i = 0; i < candidates.length; i += 1) {
+    const value = text(candidates[i]);
+    if (!value) continue;
+    if (/^(https?:)?\/\//i.test(value) || value.startsWith("/")) return value;
+  }
+  return "";
+}
+
+function getScopedAuditRowsForRecords(rows) {
+  if (!Array.isArray(betaAuditRows) || !betaAuditRows.length) return [];
+  const ids = {};
+  (Array.isArray(rows) ? rows : []).forEach(function (rec) {
+    const backendId = getBackendIdForRecord(rec);
+    if (backendId) ids[String(backendId)] = true;
+  });
+  return betaAuditRows.filter(function (row) {
+    return !!ids[String(Number(row && row.emenda_id ? row.emenda_id : 0))];
+  });
+}
+
+function buildPowerBiDashboardData(filteredRows) {
+  const sourceRows = Array.isArray(filteredRows) ? filteredRows : [];
+  const filterOptions = buildPowerBiFilterOptions(sourceRows);
+  const rows = applyPowerBiDashboardFilters(sourceRows);
+  const scopedAuditRows = getScopedAuditRowsForRecords(rows);
+  const isExecutiveRole = ["SUPERVISAO", "POWERBI", "PROGRAMADOR"].indexOf(CURRENT_ROLE) >= 0;
+
+  const summary = {
+    total: rows.length,
+    valorTotal: 0,
+    done: 0,
+    attention: 0,
+    deputados: new Set(),
+    municipios: new Set(),
+    latestUpdate: ""
+  };
+  const byDeputado = {};
+  const byMunicipio = {};
+  const byStatus = {};
+  const byUser = {};
+  const recordDeputadoMap = {};
+
+  rows.forEach(function (rec) {
+    const users = getActiveUsersWithLastMark(rec);
+    const global = getGlobalProgressState(users);
+    const deputado = text(rec && rec.deputado) || "-";
+    const municipio = text(rec && rec.municipio) || "-";
+    const valor = toNumber(rec && rec.valor_atual);
+    const statusAtual = getRecordCurrentStatus(rec) || "-";
+    const updatedAt = text(rec && rec.updated_at);
+    const backendId = getBackendIdForRecord(rec);
+
+    summary.valorTotal += valor;
+    summary.deputados.add(deputado);
+    summary.municipios.add(municipio);
+    if (updatedAt && (!summary.latestUpdate || updatedAt > summary.latestUpdate)) summary.latestUpdate = updatedAt;
+    if (global && global.code === "done") summary.done += 1;
+    if (global && global.code === "attention") summary.attention += 1;
+
+    if (backendId) recordDeputadoMap[String(backendId)] = deputado;
+
+    if (!byDeputado[deputado]) {
+      byDeputado[deputado] = {
+        label: deputado,
+        total: 0,
+        valor: 0,
+        done: 0,
+        attention: 0,
+        statusMap: {},
+        municipios: new Set(),
+        latestUpdate: "",
+        latestStatus: "",
+        latestAction: "",
+        latestActor: "",
+        auditEvents: 0,
+        actors: new Set(),
+        photoUrl: getDeputadoPhotoUrl(rec)
+      };
+    }
+    byDeputado[deputado].total += 1;
+    byDeputado[deputado].valor += valor;
+    byDeputado[deputado].municipios.add(municipio);
+    byDeputado[deputado].statusMap[statusAtual] = (byDeputado[deputado].statusMap[statusAtual] || 0) + 1;
+    if (updatedAt && (!byDeputado[deputado].latestUpdate || updatedAt > byDeputado[deputado].latestUpdate)) {
+      byDeputado[deputado].latestUpdate = updatedAt;
+      byDeputado[deputado].latestStatus = statusAtual;
+    }
+    if (global && global.code === "done") byDeputado[deputado].done += 1;
+    if (global && global.code === "attention") byDeputado[deputado].attention += 1;
+
+    if (!byMunicipio[municipio]) byMunicipio[municipio] = { label: municipio, total: 0, valor: 0, attention: 0 };
+    byMunicipio[municipio].total += 1;
+    byMunicipio[municipio].valor += valor;
+    if (global && global.code === "attention") byMunicipio[municipio].attention += 1;
+
+    byStatus[statusAtual] = (byStatus[statusAtual] || 0) + 1;
+  });
+
+  scopedAuditRows.forEach(function (row) {
+    const deputado = recordDeputadoMap[String(Number(row && row.emenda_id ? row.emenda_id : 0))];
+    const actorName = text(row && row.usuario_nome) || "sistema";
+    const eventType = text(row && row.tipo_evento) || "EVENTO";
+    if (actorName) {
+      byUser[actorName] = byUser[actorName] || { label: actorName, total: 0, perfil: text(row && row.setor) || "-", lastAt: "", lastEvent: "" };
+      byUser[actorName].total += 1;
+      if (text(row && row.data_hora) && (!byUser[actorName].lastAt || text(row.data_hora) > byUser[actorName].lastAt)) {
+        byUser[actorName].lastAt = text(row.data_hora);
+        byUser[actorName].lastEvent = eventType;
+      }
+    }
+    if (!deputado || !byDeputado[deputado]) return;
+    byDeputado[deputado].auditEvents += 1;
+    byDeputado[deputado].actors.add(actorName);
+    if (text(row && row.data_hora) && (!byDeputado[deputado].latestAction || text(row.data_hora) > byDeputado[deputado].latestAction)) {
+      byDeputado[deputado].latestAction = text(row.data_hora);
+      byDeputado[deputado].latestActor = actorName;
+    }
+  });
+
+  return {
+    sourceRows: sourceRows,
+    filterOptions: filterOptions,
+    rows: rows,
+    scopedAuditRows: scopedAuditRows,
+    isExecutiveRole: isExecutiveRole,
+    summary: summary,
+    byDeputado: byDeputado,
+    byMunicipio: byMunicipio,
+    byStatus: byStatus,
+    byUser: byUser
+  };
+}
+
+function buildExecutiveSummaryAoa(model) {
+  const summary = model && model.summary ? model.summary : {};
+  const statusRows = Object.keys(model && model.byStatus ? model.byStatus : {}).map(function (key) {
+    return [key, model.byStatus[key] || 0];
+  }).sort(function (a, b) { return b[1] - a[1]; });
+
+  return [
+    ["Relatorio executivo - Visao Power BI"],
+    ["Gerado em", isoNow()],
+    ["Perfil gerador", CURRENT_ROLE],
+    ["Usuario gerador", CURRENT_USER],
+    ["Filtro deputado", betaPowerBiFilters.deputado || "Todos"],
+    ["Filtro municipio", betaPowerBiFilters.municipio || "Todos"],
+    ["Filtro status", betaPowerBiFilters.status || "Todos"],
+    ["Busca", betaPowerBiFilters.q || "-"],
+    [],
+    ["Indicador", "Valor"],
+    ["Emendas no dashboard", Number(summary.total || 0)],
+    ["Valor atual total", Number(summary.valorTotal || 0)],
+    ["Deputados monitorados", summary.deputados ? summary.deputados.size : 0],
+    ["Municipios cobertos", summary.municipios ? summary.municipios.size : 0],
+    ["Concluidas", Number(summary.done || 0)],
+    ["Em atencao", Number(summary.attention || 0)],
+    ["Ultima atualizacao", summary.latestUpdate ? fmtDateTime(summary.latestUpdate) : "-"],
+    [],
+    ["Status atual", "Quantidade"]
+  ].concat(statusRows);
+}
+
+function buildExecutiveDeputadosAoa(model) {
+  const deputados = Object.keys(model && model.byDeputado ? model.byDeputado : {}).map(function (key) {
+    return model.byDeputado[key];
+  }).sort(function (a, b) {
+    if (b.total !== a.total) return b.total - a.total;
+    return b.valor - a.valor;
+  });
+  const rows = deputados.map(function (item) {
+    const dominantStatus = Object.keys(item.statusMap || {}).sort(function (a, b) {
+      return (item.statusMap[b] || 0) - (item.statusMap[a] || 0);
+    })[0] || "-";
+    return [
+      item.label,
+      item.total,
+      item.municipios ? item.municipios.size : 0,
+      Number(item.valor || 0),
+      item.done || 0,
+      item.attention || 0,
+      item.auditEvents || 0,
+      dominantStatus,
+      item.latestUpdate ? fmtDateTime(item.latestUpdate) : "-",
+      item.latestAction ? fmtDateTime(item.latestAction) : "-",
+      item.latestActor || "-"
+    ];
+  });
+  return [["Deputado", "Emendas", "Municipios", "Valor Atual", "Concluidas", "Em atencao", "Eventos", "Status dominante", "Ultima atualizacao", "Ultima acao", "Ultimo ator"]].concat(rows);
+}
+
+function buildExecutiveMunicipiosAoa(model) {
+  const municipios = Object.keys(model && model.byMunicipio ? model.byMunicipio : {}).map(function (key) {
+    return model.byMunicipio[key];
+  }).sort(function (a, b) {
+    if (b.total !== a.total) return b.total - a.total;
+    return b.valor - a.valor;
+  });
+  return [["Municipio", "Emendas", "Valor Atual", "Em atencao"]].concat(municipios.map(function (item) {
+    return [item.label, item.total || 0, Number(item.valor || 0), item.attention || 0];
+  }));
+}
+
+function buildExecutiveUsersAoa(model) {
+  const users = Object.keys(model && model.byUser ? model.byUser : {}).map(function (key) {
+    return model.byUser[key];
+  }).sort(function (a, b) {
+    if (b.total !== a.total) return b.total - a.total;
+    return String(b.lastAt || "").localeCompare(String(a.lastAt || ""));
+  });
+  return [["Usuario", "Perfil", "Eventos", "Ultima acao", "Tipo ultimo evento"]].concat(users.map(function (item) {
+    return [item.label, item.perfil || "-", item.total || 0, item.lastAt ? fmtDateTime(item.lastAt) : "-", item.lastEvent || "-"];
+  }));
+}
+
+async function exportExecutiveDashboardReport(filteredRows) {
+  const model = buildPowerBiDashboardData(filteredRows);
+  if (!model.isExecutiveRole) {
+    alert("A exportacao executiva fica liberada apenas para SUPERVISAO, POWERBI e PROGRAMADOR.");
+    return false;
+  }
+  const xlsxApi = getXlsxApi();
+  if (!xlsxApi) {
+    alert("Biblioteca XLSX nao carregada.");
+    return false;
+  }
+
+  const filename = "relatorio_executivo_" + dateStamp() + ".xlsx";
+  const baseTable = buildExportTableData(model.rows, { useOriginalHeaders: false });
+  const baseAoa = [baseTable.headers].concat(baseTable.rows.map(function (rowObj) {
+    return baseTable.headers.map(function (header) {
+      return rowObj && rowObj[header] != null ? rowObj[header] : "";
+    });
+  }));
+
+  const wb = xlsxApi.utils.book_new();
+  xlsxApi.utils.book_append_sheet(wb, xlsxApi.utils.aoa_to_sheet(buildExecutiveSummaryAoa(model)), "Resumo Executivo");
+  xlsxApi.utils.book_append_sheet(wb, xlsxApi.utils.aoa_to_sheet(buildExecutiveDeputadosAoa(model)), "Deputados");
+  xlsxApi.utils.book_append_sheet(wb, xlsxApi.utils.aoa_to_sheet(buildExecutiveMunicipiosAoa(model)), "Municipios");
+  xlsxApi.utils.book_append_sheet(wb, xlsxApi.utils.aoa_to_sheet(buildExecutiveUsersAoa(model)), "Usuarios");
+  xlsxApi.utils.book_append_sheet(wb, xlsxApi.utils.aoa_to_sheet(baseAoa), "Base Filtrada");
+  xlsxApi.writeFile(wb, filename);
+
+  latestExportReport = {
+    escopo: EXPORT_SCOPE.PERSONALIZADO,
+    arquivoNome: filename,
+    quantidadeRegistros: model.rows.length,
+    filtros: {
+      dashboard: "powerbi_executivo",
+      deputado: betaPowerBiFilters.deputado || "",
+      municipio: betaPowerBiFilters.municipio || "",
+      status: betaPowerBiFilters.status || "",
+      q: betaPowerBiFilters.q || ""
+    },
+    geradoEm: isoNow()
+  };
+  renderImportDashboard();
+
+  await syncExportLogToApi({
+    formato: "XLSX",
+    arquivoNome: filename,
+    quantidadeRegistros: model.rows.length,
+    quantidadeEventos: model.scopedAuditRows.length,
+    filtros: {
+      dashboard: "powerbi_executivo",
+      deputado: betaPowerBiFilters.deputado || "",
+      municipio: betaPowerBiFilters.municipio || "",
+      status: betaPowerBiFilters.status || "",
+      q: betaPowerBiFilters.q || ""
+    },
+    modoHeaders: "executivo_dashboard",
+    escopoExportacao: EXPORT_SCOPE.PERSONALIZADO,
+    roundTripOk: null,
+    roundTripIssues: []
+  });
+  return true;
+}
+
+function renderBetaPowerBiPanel(target, filteredRows) {
+  clearNodeChildren(target);
+
+  const model = buildPowerBiDashboardData(filteredRows);
+  const sourceRows = model.sourceRows;
+  const filterOptions = model.filterOptions;
+  const rows = model.rows;
+  const scopedAuditRows = model.scopedAuditRows;
+  const isExecutiveRole = model.isExecutiveRole;
+  const summary = model.summary;
+  const byDeputado = model.byDeputado;
+  const byMunicipio = model.byMunicipio;
+  const byStatus = model.byStatus;
+  const byUser = model.byUser;
+
+  const intro = document.createElement("div");
+  intro.className = "beta-panel-card";
+  const introTitle = document.createElement("h4");
+  introTitle.textContent = "Dashboard executivo da operacao";
+  const introText = document.createElement("p");
+  introText.className = "muted small";
+  introText.textContent = isExecutiveRole
+    ? "Leitura executiva habilitada para supervisao, Power BI e dono. Acoes sensiveis continuam sob governanca do PROGRAMADOR."
+    : "Visao compartilhada em leitura. O detalhamento executivo e a governanca operacional continuam centralizados em SUPERVISAO, POWERBI e PROGRAMADOR.";
+  intro.appendChild(introTitle);
+  intro.appendChild(introText);
+  if (isExecutiveRole) {
+    const executiveActions = document.createElement("div");
+    executiveActions.className = "beta-history-filter-actions";
+    executiveActions.style.marginTop = "10px";
+    const exportBtn = document.createElement("button");
+    exportBtn.className = "btn primary";
+    exportBtn.type = "button";
+    exportBtn.textContent = "Exportar relatorio executivo";
+    exportBtn.addEventListener("click", function () {
+      exportExecutiveDashboardReport(filteredRows).catch(function (err) {
+        alert(extractApiError(err, "Falha ao exportar relatorio executivo."));
+      });
+    });
+    executiveActions.appendChild(exportBtn);
+    intro.appendChild(executiveActions);
+  }
+  target.appendChild(intro);
+
+  const filterWrap = document.createElement("div");
+  filterWrap.className = "filters beta-dashboard-filters";
+
+  function appendSelectField(labelText, items, currentValue) {
+    const field = document.createElement("div");
+    field.className = "field";
+    const label = document.createElement("label");
+    label.textContent = labelText;
+    const select = document.createElement("select");
+    setSelectOptions(select, [{ label: "Todos", value: "" }].concat(items.map(function (value) {
+      return { label: value, value: value };
+    })), currentValue || "");
+    field.appendChild(label);
+    field.appendChild(select);
+    filterWrap.appendChild(field);
+    return select;
+  }
+
+  const deputadoSelect = appendSelectField("Deputado", filterOptions.deputados, betaPowerBiFilters.deputado);
+  const municipioSelect = appendSelectField("Municipio", filterOptions.municipios, betaPowerBiFilters.municipio);
+  const statusSelect = appendSelectField("Status atual", filterOptions.statuses, betaPowerBiFilters.status);
+
+  const searchField = document.createElement("div");
+  searchField.className = "field grow";
+  const searchLabel = document.createElement("label");
+  searchLabel.textContent = "Busca no dashboard";
+  const searchInput = document.createElement("input");
+  searchInput.type = "text";
+  searchInput.placeholder = "emenda, deputado, municipio, acao, plano...";
+  searchInput.value = betaPowerBiFilters.q || "";
+  searchField.appendChild(searchLabel);
+  searchField.appendChild(searchInput);
+  filterWrap.appendChild(searchField);
+
+  const actionField = document.createElement("div");
+  actionField.className = "field";
+  const actionLabel = document.createElement("label");
+  actionLabel.textContent = "Acoes";
+  const actionWrap = document.createElement("div");
+  actionWrap.className = "beta-history-filter-actions";
+  const applyBtn = document.createElement("button");
+  applyBtn.className = "btn primary";
+  applyBtn.type = "button";
+  applyBtn.textContent = "Aplicar";
+  const clearBtn = document.createElement("button");
+  clearBtn.className = "btn";
+  clearBtn.type = "button";
+  clearBtn.textContent = "Limpar";
+  actionWrap.appendChild(applyBtn);
+  actionWrap.appendChild(clearBtn);
+  actionField.appendChild(actionLabel);
+  actionField.appendChild(actionWrap);
+  filterWrap.appendChild(actionField);
+
+  applyBtn.addEventListener("click", function () {
+    betaPowerBiFilters = {
+      deputado: String(deputadoSelect.value || ""),
+      municipio: String(municipioSelect.value || ""),
+      status: String(statusSelect.value || ""),
+      q: String(searchInput.value || "").trim()
+    };
+    renderBetaWorkspace(getFiltered());
+  });
+
+  clearBtn.addEventListener("click", function () {
+    betaPowerBiFilters = Object.assign({}, BETA_POWERBI_FILTER_DEFAULTS);
+    renderBetaWorkspace(getFiltered());
+  });
+
+  searchInput.addEventListener("keydown", function (event) {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    applyBtn.click();
+  });
+
+  target.appendChild(filterWrap);
+
+  if (!isExecutiveRole) {
+    const sharedViewNote = document.createElement("p");
+    sharedViewNote.className = "muted small";
+    sharedViewNote.style.marginTop = "8px";
+    sharedViewNote.textContent = "Leitura compartilhada liberada. Controles executivos do dashboard ficam ativos apenas para SUPERVISAO, POWERBI e PROGRAMADOR.";
+    target.appendChild(sharedViewNote);
+  }
+
+  const kpiGrid = document.createElement("div");
+  kpiGrid.className = "beta-kpi-grid";
+
+  function addKpi(label, value) {
+    const card = document.createElement("div");
+    card.className = "beta-kpi-card";
+    const title = document.createElement("div");
+    title.className = "beta-kpi-label";
+    title.textContent = label;
+    const content = document.createElement("div");
+    content.className = "beta-kpi-value";
+    content.textContent = value;
+    card.appendChild(title);
+    card.appendChild(content);
+    kpiGrid.appendChild(card);
+  }
+
+  addKpi("Emendas no dashboard", String(summary.total));
+  addKpi("Valor atual total", "R$ " + fmtMoney(summary.valorTotal));
+  addKpi("Deputados monitorados", String(summary.deputados.size));
+  addKpi("Municipios cobertos", String(summary.municipios.size));
+  addKpi("Concluidas", String(summary.done));
+  addKpi("Em atencao", String(summary.attention));
+  target.appendChild(kpiGrid);
+
+  const controlGrid = document.createElement("div");
+  controlGrid.className = "beta-split-grid";
+
+  function appendSummaryTable(titleText, headers, items, renderRow) {
+    const card = document.createElement("div");
+    card.className = "beta-panel-card table-wrap";
+    const title = document.createElement("h4");
+    title.textContent = titleText;
+    card.appendChild(title);
+
+    if (!items.length) {
+      const empty = document.createElement("p");
+      empty.className = "beta-empty";
+      empty.textContent = "Sem dados para o filtro atual.";
+      card.appendChild(empty);
+      controlGrid.appendChild(card);
+      return;
+    }
+
+    const table = document.createElement("table");
+    table.className = "table";
+    const thead = document.createElement("thead");
+    const trH = document.createElement("tr");
+    headers.forEach(function (label) {
+      const th = document.createElement("th");
+      th.textContent = label;
+      trH.appendChild(th);
+    });
+    thead.appendChild(trH);
+    table.appendChild(thead);
+
+    const tbodyEl = document.createElement("tbody");
+    items.forEach(function (item) {
+      const tr = document.createElement("tr");
+      renderRow(tr, item);
+      tbodyEl.appendChild(tr);
+    });
+    table.appendChild(tbodyEl);
+    card.appendChild(table);
+    controlGrid.appendChild(card);
+  }
+
+  const statusRows = Object.keys(byStatus).map(function (key) {
+    return { label: key, total: byStatus[key] || 0 };
+  }).sort(function (a, b) {
+    return b.total - a.total;
+  });
+
+  const municipios = Object.keys(byMunicipio).map(function (key) { return byMunicipio[key]; }).sort(function (a, b) {
+    if (b.total !== a.total) return b.total - a.total;
+    return b.valor - a.valor;
+  }).slice(0, 10);
+
+  const users = Object.keys(byUser).map(function (key) { return byUser[key]; }).sort(function (a, b) {
+    if (b.total !== a.total) return b.total - a.total;
+    return String(b.lastAt || "").localeCompare(String(a.lastAt || ""));
+  }).slice(0, 8);
+
+  appendSummaryTable("Controle por status", ["Status", "Total"], statusRows, function (tr, item) {
+    [item.label, String(item.total)].forEach(function (value) {
+      const td = document.createElement("td");
+      td.textContent = value;
+      tr.appendChild(td);
+    });
+  });
+
+  appendSummaryTable("Controle por municipio", ["Municipio", "Emendas", "Valor atual", "Atencao"], municipios, function (tr, item) {
+    [item.label, String(item.total), "R$ " + fmtMoney(item.valor), String(item.attention)].forEach(function (value) {
+      const td = document.createElement("td");
+      td.textContent = value;
+      tr.appendChild(td);
+    });
+  });
+
+  if (users.length) {
+    appendSummaryTable("Atividade de usuarios", ["Usuario", "Perfil", "Eventos", "Ultima acao"], users, function (tr, item) {
+      [item.label, item.perfil, String(item.total), item.lastAt ? (item.lastEvent + " | " + fmtDateTime(item.lastAt)) : "-"].forEach(function (value) {
+        const td = document.createElement("td");
+        td.textContent = value;
+        tr.appendChild(td);
+      });
+    });
+  }
+
+  const controlCard = document.createElement("div");
+  controlCard.className = "beta-panel-card";
+  const controlTitle = document.createElement("h4");
+  controlTitle.textContent = "Controle da base atual";
+  const controlList = document.createElement("div");
+  controlList.className = "beta-metric-stack";
+  [
+    "Ultima atualizacao: " + (summary.latestUpdate ? fmtDateTime(summary.latestUpdate) : "-"),
+    "Filtro superior aplicado sobre " + String(sourceRows.length) + " emendas.",
+    "Filtro interno do dashboard retornou " + String(rows.length) + " emendas.",
+    "Todos podem visualizar o dashboard; a leitura executiva e a governanca continuam centralizadas em SUPERVISAO, POWERBI e PROGRAMADOR."
+  ].forEach(function (line) {
+    const item = document.createElement("div");
+    item.className = "beta-metric-line";
+    item.textContent = line;
+    controlList.appendChild(item);
+  });
+  controlCard.appendChild(controlTitle);
+  controlCard.appendChild(controlList);
+  controlGrid.appendChild(controlCard);
+
+  target.appendChild(controlGrid);
+
+  const deputyTitle = document.createElement("h4");
+  deputyTitle.style.marginTop = "14px";
+  deputyTitle.textContent = "Perfil de emendas por deputado";
+  target.appendChild(deputyTitle);
+
+  const deputyGrid = document.createElement("div");
+  deputyGrid.className = "beta-deputy-grid";
+  const deputados = Object.keys(byDeputado).map(function (key) { return byDeputado[key]; }).sort(function (a, b) {
+    if (b.total !== a.total) return b.total - a.total;
+    return b.valor - a.valor;
+  }).slice(0, betaPowerBiFilters.deputado ? 12 : 8);
+
+  if (!deputados.length) {
+    const empty = document.createElement("p");
+    empty.className = "beta-empty";
+    empty.textContent = "Sem deputados para o filtro atual.";
+    target.appendChild(empty);
+    return;
+  }
+
+  deputados.forEach(function (item) {
+    const card = document.createElement("article");
+    card.className = "beta-deputy-card";
+
+    const head = document.createElement("div");
+    head.className = "beta-deputy-head";
+
+    const avatar = document.createElement(item.photoUrl ? "img" : "div");
+    avatar.className = "beta-deputy-avatar";
+    if (item.photoUrl) {
+      avatar.src = item.photoUrl;
+      avatar.alt = "Foto de " + item.label;
+    } else {
+      avatar.textContent = getDeputadoAvatarLetters(item.label);
+      avatar.title = "Foto oficial pendente de fonte estruturada";
+    }
+    head.appendChild(avatar);
+
+    const identity = document.createElement("div");
+    const name = document.createElement("h5");
+    name.textContent = item.label;
+    const sub = document.createElement("p");
+    sub.className = "muted small";
+    sub.textContent = String(item.total) + " emendas | " + String(item.municipios.size) + " municipios";
+    identity.appendChild(name);
+    identity.appendChild(sub);
+    head.appendChild(identity);
+    card.appendChild(head);
+
+    const metricGrid = document.createElement("div");
+    metricGrid.className = "beta-deputy-metrics";
+    [
+      { label: "Valor atual", value: "R$ " + fmtMoney(item.valor) },
+      { label: "Concluidas", value: String(item.done) },
+      { label: "Em atencao", value: String(item.attention) },
+      { label: "Eventos", value: String(item.auditEvents) }
+    ].forEach(function (metric) {
+      const box = document.createElement("div");
+      box.className = "beta-deputy-metric";
+      const label = document.createElement("div");
+      label.className = "beta-kpi-label";
+      label.textContent = metric.label;
+      const value = document.createElement("div");
+      value.className = "beta-kpi-value beta-kpi-value-sm";
+      value.textContent = metric.value;
+      box.appendChild(label);
+      box.appendChild(value);
+      metricGrid.appendChild(box);
+    });
+    card.appendChild(metricGrid);
+
+    const dominantStatus = Object.keys(item.statusMap).sort(function (a, b) {
+      return (item.statusMap[b] || 0) - (item.statusMap[a] || 0);
+    })[0] || "-";
+    const diag = document.createElement("div");
+    diag.className = "beta-metric-stack";
+    [
+      "Status dominante: " + dominantStatus,
+      "Principais lugares: " + Array.from(item.municipios).slice(0, 3).join(", "),
+      "Ultima atualizacao: " + (item.latestUpdate ? fmtDateTime(item.latestUpdate) : "-"),
+      "Ultima acao registrada: " + (item.latestAction ? (fmtDateTime(item.latestAction) + " por " + (item.latestActor || "sistema")) : "-")
+    ].forEach(function (line) {
+      const row = document.createElement("div");
+      row.className = "beta-metric-line";
+      row.textContent = line;
+      diag.appendChild(row);
+    });
+    card.appendChild(diag);
+
+    deputyGrid.appendChild(card);
+  });
+
+  target.appendChild(deputyGrid);
+}
+
+function renderBetaWorkspace(filteredRows) {
+  if (!betaWorkspace) return;
+  clearNodeChildren(betaWorkspace);
+
+  const activeTab = getActiveBetaWorkspaceTab();
+  const head = document.createElement("div");
+  head.className = "beta-head";
+
+  const intro = document.createElement("div");
+  const title = document.createElement("h3");
+  title.textContent = "Central beta operacional";
+  const subtitle = document.createElement("p");
+  subtitle.className = "muted small";
+  subtitle.textContent = "Historico recente, visao consolidada e suporte operacional para homologacao da empresa.";
+  intro.appendChild(title);
+  intro.appendChild(subtitle);
+  head.appendChild(intro);
+
+  const headActions = document.createElement("div");
+  headActions.className = "beta-head-actions";
+  const mode = document.createElement("span");
+  mode.className = "beta-source-badge";
+  mode.textContent = canViewGlobalAuditApi() ? "API ligada para historico" : "Historico em fallback local";
+  headActions.appendChild(mode);
+  head.appendChild(headActions);
+  betaWorkspace.appendChild(head);
+
+  const tabs = document.createElement("div");
+  tabs.className = "beta-tabs";
+  [
+    { key: "history", label: "Historico operacional" },
+    { key: "powerbi", label: "Visao Power BI" },
+    { key: "support", label: "Ajuda e suporte" }
+  ].forEach(function (tab) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "beta-tab-btn" + (activeTab === tab.key ? " active" : "");
+    btn.textContent = tab.label;
+    btn.addEventListener("click", function () {
+      setBetaWorkspaceTab(tab.key);
+    });
+    tabs.appendChild(btn);
+  });
+  betaWorkspace.appendChild(tabs);
+
+  const panel = document.createElement("div");
+  panel.className = "beta-tab-panel";
+  betaWorkspace.appendChild(panel);
+
+  if (activeTab === "powerbi") {
+    renderBetaPowerBiPanel(panel, filteredRows);
+  } else if (activeTab === "support") {
+    renderBetaSupportPanel(panel, filteredRows);
+  } else {
+    renderBetaHistoryPanel(panel, filteredRows);
   }
 }
 
@@ -3576,11 +5998,12 @@ function renderSupervisorQuickPanel(prefilteredRows) {
 function applyAccessProfile() {
   const isOwner = CURRENT_ROLE === "PROGRAMADOR";
   const isSupervisor = isSupervisorUser();
+  const readOnlyMeta = getReadOnlyRoleMeta();
   const canManageData = isOwner || CURRENT_ROLE === "APG";
   const canCreateProfiles = isOwner;
   const apiTag = apiOnline ? "API online" : "modo local";
   const storageTag = getStorageMode() === STORAGE_MODE_LOCAL ? "persistencia local" : "sessao";
-  const viewTag = isOwner ? " (dono)" : (isSupervisor ? " (supervisao)" : "");
+  const viewTag = isOwner ? " (dono)" : (readOnlyMeta ? readOnlyMeta.viewTag : "");
 
   if (currentUserInfo) {
     currentUserInfo.textContent = "Usuario: " + CURRENT_USER + " / " + CURRENT_ROLE + viewTag + " | " + apiTag + " | " + storageTag;
@@ -3599,6 +6022,8 @@ function applyAccessProfile() {
   renderRoleNotice();
   renderSupervisorQuickPanel();
   applyModalAccessProfile();
+  syncBetaAuditPolling();
+  syncBetaSupportPolling();
   refreshProfileModal();
 }
 
@@ -3703,6 +6128,8 @@ async function refreshPendingUsersModal() {
   try {
     const users = await apiRequest("GET", "/users?include_inactive=true", undefined, "UI");
     const pending = (Array.isArray(users) ? users : []).filter(function (u) {
+      const registrationStatus = String(u && u.status_cadastro ? u.status_cadastro : "").trim().toUpperCase();
+      if (registrationStatus) return registrationStatus === "EM_ANALISE";
       if (u && u.ativo) return false;
       const lastLogin = u && u.ultimo_login ? String(u.ultimo_login).trim() : "";
       return lastLogin === "";
@@ -3729,10 +6156,33 @@ async function approvePendingUser(userId) {
   setPendingUsersFeedback("Aprovando usuario #" + String(userId) + "...");
   await apiRequest("PATCH", "/users/" + String(userId) + "/status", {
     ativo: true,
-    perfil: selectedRole
+    perfil: selectedRole,
+    status_cadastro: "APROVADO"
   }, "UI");
 
   setPendingUsersFeedback("Usuario aprovado com sucesso.");
+  await refreshPendingUsersModal();
+}
+
+async function rejectPendingUser(userId) {
+  if (!userId) return;
+  if (!isOwnerUser()) {
+    setPendingUsersFeedback("Apenas PROGRAMADOR pode recusar cadastros.", true);
+    return;
+  }
+  const roleSelect = pendingUsersTableWrap ? pendingUsersTableWrap.querySelector("select[data-pending-role='" + String(userId) + "']") : null;
+  const selectedRole = normalizeUserRole(roleSelect ? roleSelect.value : "CONTABIL");
+  const confirmed = confirm("Deseja realmente recusar o cadastro #" + String(userId) + "?");
+  if (!confirmed) return;
+
+  setPendingUsersFeedback("Recusando usuario #" + String(userId) + "...");
+  await apiRequest("PATCH", "/users/" + String(userId) + "/status", {
+    ativo: false,
+    perfil: selectedRole,
+    status_cadastro: "RECUSADO"
+  }, "UI");
+
+  setPendingUsersFeedback("Usuario recusado com sucesso.");
   await refreshPendingUsersModal();
 }
 
@@ -3749,6 +6199,18 @@ function openPendingUsersModal() {
 async function bootstrapApiIntegration() {
   if (!isApiEnabled()) {
     closeApiSocket();
+    clearBetaAuditPolling();
+    clearBetaSupportPolling();
+    clearApiStatePolling();
+    betaAuditRows = [];
+    betaAuditError = "";
+    betaAuditLoading = false;
+    betaSupportThreads = [];
+    betaSupportMessages = [];
+    betaSupportError = "";
+    betaSupportMessagesError = "";
+    betaSupportLoading = false;
+    betaSupportMessagesLoading = false;
     apiOnline = false;
     applyAccessProfile();
     return;
@@ -3764,6 +6226,11 @@ async function bootstrapApiIntegration() {
     apiOnline = false;
     apiLastError = err && err.message ? String(err.message) : "falha de conexao";
     closeApiSocket();
+    clearBetaAuditPolling();
+    clearBetaSupportPolling();
+    clearApiStatePolling();
+    betaAuditRows = [];
+    betaSupportThreads = [];
     console.warn("API indisponivel, mantendo modo local:", apiLastError);
   }
 
@@ -3771,6 +6238,11 @@ async function bootstrapApiIntegration() {
   syncYearFilter();
   applyAccessProfile();
   render();
+  if (apiOnline) {
+    refreshBetaAuditFromApi(false).catch(function () { /* no-op */ });
+    refreshBetaSupportFromApi(false).catch(function () { /* no-op */ });
+  }
+  syncApiStatePolling();
 }
 
 
@@ -3889,6 +6361,7 @@ async function syncOfficialStatusToApi(rec, nextStatus, motivo) {
   apiOnline = true;
   apiLastError = "";
   applyAccessProfile();
+  refreshBetaAuditFromApi(false).catch(function () { /* no-op */ });
 }
 
 // Envia evento generico (nota, marcacao, edicao) para backend.
@@ -3903,6 +6376,7 @@ async function syncGenericEventToApi(rec, payload) {
   apiOnline = true;
   apiLastError = "";
   applyAccessProfile();
+  refreshBetaAuditFromApi(false).catch(function () { /* no-op */ });
 }
 
 // Garante que o registro local tenha ID correspondente no backend.
@@ -4901,7 +7375,7 @@ function getExportTemplateContext() {
     importAliases: IMPORT_ALIASES,
     rawPreferredHeaders: RAW_PREFERRED_HEADERS,
     normalizeHeader: normalizeHeader,
-    canonicalKeys: TEMPLATE_CANONICAL_KEYS,
+    canonicalKeys: getTemplateCanonicalKeys(),
     toNumber: toNumber,
     normalizeCompareValue: normalizeCompareValue,
     xlsxApi: getXlsxApi(),
@@ -4910,6 +7384,7 @@ function getExportTemplateContext() {
 }
 
 function getUiRenderContext() {
+  const readOnlyMeta = getReadOnlyRoleMeta();
   return {
     fmtMoney: fmtMoney,
     fmtDateTime: fmtDateTime,
@@ -4933,7 +7408,12 @@ function getUiRenderContext() {
       if (recId) openModal(recId);
     },
     roles: USER_ROLE_OPTIONS,
-    normalizeUserRole: normalizeUserRole
+    normalizeUserRole: normalizeUserRole,
+    isReadOnlyRole: !!readOnlyMeta,
+    roleNoticeTitle: readOnlyMeta ? readOnlyMeta.noticeTitle : "",
+    roleNoticeDescription: readOnlyMeta ? readOnlyMeta.noticeDescription : "",
+    readOnlyRoleMessage: readOnlyMeta ? readOnlyMeta.modalReadOnlyMessage : "",
+    readOnlyLockLabel: readOnlyMeta ? readOnlyMeta.lockModeLabel : ""
   };
 }
 
@@ -5982,7 +8462,7 @@ function exportRecordsToTemplateXlsx(records, filename, options, xlsxApi) {
       resolveTemplateTargetSheets: resolveTemplateTargetSheets,
       detectHeaderRow: detectHeaderRow,
       buildCanonicalColumnMap: buildCanonicalColumnMap,
-      templateCanonicalKeys: TEMPLATE_CANONICAL_KEYS,
+      templateCanonicalKeys: getTemplateCanonicalKeys(),
       getRecordValueForTemplate: getRecordValueForTemplate,
       setWorksheetCellValue: setWorksheetCellValue,
       runTemplateRoundTripCheck: runTemplateRoundTripCheck,
@@ -6025,7 +8505,8 @@ function exportRecordsToTemplateXlsx(records, filename, options, xlsxApi) {
     if (!detected) return;
 
     const columnByCanonical = buildCanonicalColumnMap(detected.headers);
-    const missingCols = TEMPLATE_CANONICAL_KEYS.filter(function (key) { return columnByCanonical[key] == null; });
+    const templateCanonicalKeys = getTemplateCanonicalKeys();
+    const missingCols = templateCanonicalKeys.filter(function (key) { return columnByCanonical[key] == null; });
     if (missingCols.length) {
       summary.missingColumns.push(sheetName + ": " + missingCols.join(", "));
     }
@@ -6041,7 +8522,7 @@ function exportRecordsToTemplateXlsx(records, filename, options, xlsxApi) {
       }
 
       let changedAny = false;
-      TEMPLATE_CANONICAL_KEYS.forEach(function (key) {
+      templateCanonicalKeys.forEach(function (key) {
         const colIndex = columnByCanonical[key];
         if (colIndex == null) return;
 
@@ -6114,26 +8595,6 @@ function resolveTemplateTargetSheets(workbook, records) {
   const out = workbook.SheetNames.filter(function (name) { return used.has(name); });
   return out.length ? out : workbook.SheetNames.slice();
 }
-
-const TEMPLATE_CANONICAL_KEYS = Array.isArray(getExportTemplateValue("templateCanonicalKeys"))
-  ? getExportTemplateValue("templateCanonicalKeys").slice(0)
-  : [
-    "identificacao",
-    "cod_subfonte",
-    "deputado",
-    "cod_uo",
-    "sigla_uo",
-    "cod_orgao",
-    "cod_acao",
-    "descricao_acao",
-    "plan_a",
-    "plan_b",
-    "municipio",
-    "valor_inicial",
-    "valor_atual",
-    "processo_sei",
-    "status_oficial"
-  ];
 
 function buildCanonicalColumnMap(headers) {
   const ctx = getExportTemplateContext();
