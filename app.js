@@ -83,6 +83,7 @@ const auxModalsUtils = SEC_FRONTEND.auxModalsUtils || null;
 const importReportUtils = SEC_FRONTEND.importReportUtils || null;
 const modalSectionsUtils = SEC_FRONTEND.modalSectionsUtils || null;
 const modalDraftStateUtils = SEC_FRONTEND.modalDraftStateUtils || null;
+const modalShellUtils = SEC_FRONTEND.modalShellUtils || null;
 const appBindingsUtils = SEC_FRONTEND.appBindingsUtils || null;
 const pendingUsersUtils = SEC_FRONTEND.pendingUsersUtils || null;
 const betaHistoryUtils = SEC_FRONTEND.betaHistoryUtils || null;
@@ -685,6 +686,12 @@ function getModalSectionsUtil(methodName) {
 function getModalDraftStateUtil(methodName) {
   if (!modalDraftStateUtils) return null;
   const method = modalDraftStateUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getModalShellUtil(methodName) {
+  if (!modalShellUtils) return null;
+  const method = modalShellUtils[methodName];
   return typeof method === "function" ? method : null;
 }
 
@@ -1624,11 +1631,19 @@ function refreshModalSectionsForRecord(rec) {
 }
 
 function refreshOpenModalAfterSave(rec) {
+  const moduleFn = getModalShellUtil("refreshOpenModalAfterSave");
+  if (moduleFn) {
+    return moduleFn(rec, getModalShellContext());
+  }
   if (!rec || !modal || !modal.classList.contains("show") || selectedId !== rec.id) return;
   refreshModalSectionsForRecord(rec);
 }
 
 function shouldRefreshOpenModalFromRemote(rec) {
+  const moduleFn = getModalShellUtil("shouldRefreshOpenModalFromRemote");
+  if (moduleFn) {
+    return moduleFn(rec, getModalShellContext());
+  }
   if (!rec || !modal || !modal.classList.contains("show") || selectedId !== rec.id) return false;
   if (!canMutateRecords()) return true;
   if (isEmendaLockReadOnly()) return true;
@@ -1636,6 +1651,10 @@ function shouldRefreshOpenModalFromRemote(rec) {
 }
 
 function refreshOpenModalAfterRemoteSync() {
+  const moduleFn = getModalShellUtil("refreshOpenModalAfterRemoteSync");
+  if (moduleFn) {
+    return moduleFn(getModalShellContext());
+  }
   const rec = getSelected();
   if (!shouldRefreshOpenModalFromRemote(rec)) return;
   refreshOpenModalAfterSave(rec);
@@ -1902,6 +1921,10 @@ async function saveModalDraftChanges(keepOpenOrOptions) {
   }
 }
 function discardModalDraftChanges(keepOpen) {
+  const moduleFn = getModalShellUtil("discardModalDraftChanges");
+  if (moduleFn) {
+    return moduleFn(keepOpen, getModalShellContext());
+  }
   clearModalAutosaveTimer();
   if (keepOpen) {
     const rec = getSelected();
@@ -1917,6 +1940,10 @@ function discardModalDraftChanges(keepOpen) {
 
 // Fecha modal com confirmacao quando existe alteracao pendente.
 async function requestCloseModal() {
+  const moduleFn = getModalShellUtil("requestCloseModal");
+  if (moduleFn) {
+    return await moduleFn(getModalShellContext());
+  }
   if (modalCloseInProgress) return;
   modalCloseInProgress = true;
   try {
@@ -1955,6 +1982,10 @@ async function requestCloseModal() {
 }
 // Abre modal de detalhe da emenda selecionada.
 function openModal(id, keepReasons) {
+  const moduleFn = getModalShellUtil("openModal");
+  if (moduleFn) {
+    return moduleFn(id, keepReasons, getModalShellContext());
+  }
   clearModalAutoCloseTimer();
   clearModalAutosaveTimer();
   clearModalSaveFeedback();
@@ -2362,6 +2393,10 @@ function closeModal() {
 }
 
 function forceCloseModal() {
+  const moduleFn = getModalShellUtil("forceCloseModal");
+  if (moduleFn) {
+    return moduleFn(getModalShellContext());
+  }
   const activeRec = getSelected();
   if (activeRec) {
     announcePresenceForRecord(activeRec, "leave");
@@ -4804,6 +4839,67 @@ function getModalDraftStateContext() {
     isoNow: isoNow,
     clearModalSaveFeedback: clearModalSaveFeedback,
     scheduleModalAutosave: scheduleModalAutosave
+  };
+}
+
+function getModalShellContext() {
+  return {
+    state: state,
+    modal: modal,
+    modalClose: modalClose,
+    modalTitle: modalTitle,
+    modalSub: modalSub,
+    modalAccessState: modalAccessState,
+    markStatus: markStatus,
+    markReason: markReason,
+    syncModalRecordHeader: getUiRenderUtil("syncModalRecordHeader"),
+    getSelectedId: function () {
+      return selectedId;
+    },
+    setSelectedId: function (nextId) {
+      selectedId = nextId;
+    },
+    getSelected: getSelected,
+    getLastFocusedElement: function () {
+      return lastFocusedElement;
+    },
+    setLastFocusedElement: function (nextEl) {
+      lastFocusedElement = nextEl;
+    },
+    getModalCloseInProgress: function () {
+      return modalCloseInProgress;
+    },
+    setModalCloseInProgress: function (nextValue) {
+      modalCloseInProgress = !!nextValue;
+    },
+    setModalDraftState: function (nextState) {
+      modalDraftState = nextState;
+    },
+    canMutateRecords: canMutateRecords,
+    isEmendaLockReadOnly: isEmendaLockReadOnly,
+    hasPendingModalDraft: hasPendingModalDraft,
+    canSaveDraftNow: canSaveDraftNow,
+    saveModalDraftChanges: saveModalDraftChanges,
+    clearPersistedModalDraft: clearPersistedModalDraft,
+    flushModalAutosave: flushModalAutosave,
+    clearModalAutoCloseTimer: clearModalAutoCloseTimer,
+    clearModalAutosaveTimer: clearModalAutosaveTimer,
+    clearModalSaveFeedback: clearModalSaveFeedback,
+    clearModalStatusDraftInputs: clearModalStatusDraftInputs,
+    clearEmendaLockTimer: clearEmendaLockTimer,
+    setEmendaLockState: setEmendaLockState,
+    setEmendaLockReadOnly: setEmendaLockReadOnly,
+    initModalDraftForRecord: initModalDraftForRecord,
+    renderKvEditor: renderKvEditor,
+    refreshModalSectionsForRecord: refreshModalSectionsForRecord,
+    renderEmendaLockInfo: renderEmendaLockInfo,
+    syncModalEmendaLock: syncModalEmendaLock,
+    announcePresenceForRecord: announcePresenceForRecord,
+    releaseEmendaLock: releaseEmendaLock,
+    setAuxModalVisibility: setAuxModalVisibility,
+    showModalSaveFeedback: showModalSaveFeedback,
+    focusIfPossible: focusIfPossible,
+    updateModalDraftUi: updateModalDraftUi
   };
 }
 
