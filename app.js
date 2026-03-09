@@ -86,6 +86,7 @@ const modalDraftStateUtils = SEC_FRONTEND.modalDraftStateUtils || null;
 const modalShellUtils = SEC_FRONTEND.modalShellUtils || null;
 const importControlsUtils = SEC_FRONTEND.importControlsUtils || null;
 const appBindingsUtils = SEC_FRONTEND.appBindingsUtils || null;
+const appLifecycleUtils = SEC_FRONTEND.appLifecycleUtils || null;
 const pendingUsersUtils = SEC_FRONTEND.pendingUsersUtils || null;
 const betaHistoryUtils = SEC_FRONTEND.betaHistoryUtils || null;
 const betaPowerBiUtils = SEC_FRONTEND.betaPowerBiUtils || null;
@@ -448,11 +449,16 @@ const authRegisterPassword = document.getElementById("authRegisterPassword");
 const authRegisterPassword2 = document.getElementById("authRegisterPassword2");
 const authMsg = document.getElementById("authMsg");
 
-initSelects();
-setupAuthUi();
-setupCrossTabSync();
-render();
-initializeAuthFlow();
+const bootstrapAppUiUtil = getAppLifecycleUtil("bootstrapAppUi");
+if (bootstrapAppUiUtil) {
+  bootstrapAppUiUtil(getAppLifecycleContext());
+} else {
+  initSelects();
+  setupAuthUi();
+  setupCrossTabSync();
+  render();
+  initializeAuthFlow();
+}
 
 function getFilterUtil(methodName) {
   if (!filterUtils) return null;
@@ -712,6 +718,12 @@ function getAuthUiUtil(methodName) {
 function getAppBindingsUtil(methodName) {
   if (!appBindingsUtils) return null;
   const method = appBindingsUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getAppLifecycleUtil(methodName) {
+  if (!appLifecycleUtils) return null;
+  const method = appLifecycleUtils[methodName];
   return typeof method === "function" ? method : null;
 }
 
@@ -4908,6 +4920,20 @@ function getAuthUiContext() {
   };
 }
 
+function getAppLifecycleContext() {
+  return {
+    stateChannel: stateChannel,
+    STORAGE_KEY: STORAGE_KEY,
+    CROSS_TAB_PING_KEY: CROSS_TAB_PING_KEY,
+    LOCAL_TAB_ID: LOCAL_TAB_ID,
+    refreshStateFromStorage: refreshStateFromStorage,
+    initSelects: initSelects,
+    setupAuthUi: setupAuthUi,
+    render: render,
+    initializeAuthFlow: initializeAuthFlow
+  };
+}
+
 function getApiStateSyncContext() {
   return {
     isApiEnabled: isApiEnabled,
@@ -6474,6 +6500,10 @@ function deriveStatusForBackend(rec) {
 
 // Sincroniza alteracoes entre abas via BroadcastChannel/storage event.
 function setupCrossTabSync() {
+  const moduleFn = getAppLifecycleUtil("setupCrossTabSync");
+  if (moduleFn) {
+    return moduleFn(getAppLifecycleContext());
+  }
   if (stateChannel) {
     stateChannel.onmessage = function (evt) {
       const data = evt && evt.data ? evt.data : null;
