@@ -75,6 +75,7 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Extrair os modais auxiliares para `frontend/js/ui/auxModals.js`, deixando `app.js` com estado e callbacks dos modais de perfil/export.
 - [DONE] Extrair a orquestracao de polling e refresh do historico/suporte beta para `frontend/js/ui/betaSync.js`, deixando `app.js` com wrappers e contextos de estado.
 - [DONE] Extrair o bootstrap e a sincronizacao de estado da API para `frontend/js/api/stateSync.js`, deixando `app.js` com wrappers, timers e contextos de merge.
+- [DONE] Extrair a sincronizacao das secoes do modal principal para `frontend/js/ui/modalSections.js`, deixando `app.js` com abertura/refresh do modal e wrappers de estado.
 
-Active: ID-FE-71
+Active: ID-FE-72
 Risks: validar comportamento em dispositivos com storage bloqueado.

@@ -81,6 +81,7 @@ const exportDataUtils = SEC_FRONTEND.exportDataUtils || null;
 const exportExecutiveUtils = SEC_FRONTEND.exportExecutiveUtils || null;
 const auxModalsUtils = SEC_FRONTEND.auxModalsUtils || null;
 const importReportUtils = SEC_FRONTEND.importReportUtils || null;
+const modalSectionsUtils = SEC_FRONTEND.modalSectionsUtils || null;
 const pendingUsersUtils = SEC_FRONTEND.pendingUsersUtils || null;
 const betaHistoryUtils = SEC_FRONTEND.betaHistoryUtils || null;
 const betaPowerBiUtils = SEC_FRONTEND.betaPowerBiUtils || null;
@@ -670,6 +671,12 @@ function getExportExecutiveUtil(methodName) {
 function getAuxModalUtil(methodName) {
   if (!auxModalsUtils) return null;
   const method = auxModalsUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getModalSectionsUtil(methodName) {
+  if (!modalSectionsUtils) return null;
+  const method = modalSectionsUtils[methodName];
   return typeof method === "function" ? method : null;
 }
 
@@ -1608,6 +1615,12 @@ function onModalFieldInput(e) {
 }
 
 function syncModalReadonlyFieldValues(rec) {
+  const moduleFn = getModalSectionsUtil("syncModalReadonlyFieldValues");
+  if (moduleFn) {
+    return moduleFn(rec, {
+      kv: kv
+    });
+  }
   if (!kv || !rec) return;
   const readonlyFields = kv.querySelectorAll("[data-kv-readonly-field]");
   readonlyFields.forEach(function (el) {
@@ -1617,6 +1630,14 @@ function syncModalReadonlyFieldValues(rec) {
 }
 
 function refreshModalRecordHeader(rec) {
+  const moduleFn = getModalSectionsUtil("refreshModalRecordHeader");
+  if (moduleFn) {
+    return moduleFn(rec, {
+      titleEl: modalTitle,
+      subtitleEl: modalSub,
+      syncModalRecordHeader: getUiRenderUtil("syncModalRecordHeader")
+    });
+  }
   if (!rec) return;
   const syncModalRecordHeaderUtil = getUiRenderUtil("syncModalRecordHeader");
   if (syncModalRecordHeaderUtil) {
@@ -1627,8 +1648,11 @@ function refreshModalRecordHeader(rec) {
   modalSub.textContent = rec.identificacao + " | " + rec.municipio + " | " + rec.deputado;
 }
 
-function refreshOpenModalAfterSave(rec) {
-  if (!rec || !modal || !modal.classList.contains("show") || selectedId !== rec.id) return;
+function refreshModalSectionsForRecord(rec) {
+  const moduleFn = getModalSectionsUtil("refreshModalSections");
+  if (moduleFn) {
+    return moduleFn(rec, getModalSectionsContext());
+  }
   refreshModalRecordHeader(rec);
   syncModalReadonlyFieldValues(rec);
 
@@ -1661,6 +1685,11 @@ function refreshOpenModalAfterSave(rec) {
 
   renderHistoryFallback(rec);
   applyModalAccessProfile();
+}
+
+function refreshOpenModalAfterSave(rec) {
+  if (!rec || !modal || !modal.classList.contains("show") || selectedId !== rec.id) return;
+  refreshModalSectionsForRecord(rec);
 }
 
 function shouldRefreshOpenModalFromRemote(rec) {
@@ -2018,39 +2047,9 @@ function openModal(id, keepReasons) {
 
   const restoredDraft = initModalDraftForRecord(rec);
   renderKvEditor(rec);
-
-  const users = getActiveUsersWithLastMark(rec);
-  const progress = calcProgress(users);
-  const delays = whoIsDelaying(users);
-  const attentionIssues = getAttentionIssues(users);
-
-  const lastMarks = getLastMarksByUser(rec);
-  renderMarksSummary(lastMarks);
-  renderRawFields(rec);
-
-  if (REALTIME_USER_PANEL_ENABLED && userProgressBox) {
-    renderUserProgressBox(userProgressBox, progress, delays, {
-      renderProgressBar: renderProgressBar,
-      renderMemberChips: renderMemberChips,
-      users: users
-    });
-  }
-
-  const renderConflictStateUtil = getUiRenderUtil("renderConflictState");
-  if (renderConflictStateUtil) {
-    renderConflictStateUtil(conflictBox, conflictText, attentionIssues);
-  } else if (attentionIssues.length) {
-    conflictBox.classList.remove("hidden");
-    conflictText.textContent = attentionIssues.join(" | ");
-  } else {
-    conflictBox.classList.add("hidden");
-    conflictText.textContent = "";
-  }
-
-  renderHistoryFallback(rec);
+  refreshModalSectionsForRecord(rec);
 
   setAuxModalVisibility(modal, true);
-  applyModalAccessProfile();
   renderEmendaLockInfo(rec);
   syncModalEmendaLock(rec).catch(function (_err) {
     renderEmendaLockInfo(rec);
@@ -2155,6 +2154,16 @@ function renderMarksSummary(lastMarks) {
 }
 
 function renderHistoryFallback(rec) {
+  const moduleFn = getModalSectionsUtil("renderHistoryFallback");
+  if (moduleFn) {
+    return moduleFn(rec, {
+      historyEl: historyEl,
+      renderHistoryToContainer: getUiRenderUtil("renderHistoryToContainer"),
+      getEventsSorted: getEventsSorted,
+      clearNodeChildren: clearNodeChildren,
+      uiCtx: getUiRenderContext()
+    });
+  }
   if (!historyEl) return;
   const uiCtx = getUiRenderContext();
   const renderHistoryToContainerUtil = getUiRenderUtil("renderHistoryToContainer");
@@ -4790,6 +4799,37 @@ function getBetaSupportContext() {
     setMessagesError: function (message) {
       betaSupportMessagesError = String(message || "");
     }
+  };
+}
+
+function getModalSectionsContext() {
+  return {
+    titleEl: modalTitle,
+    subtitleEl: modalSub,
+    kv: kv,
+    historyEl: historyEl,
+    conflictBox: conflictBox,
+    conflictText: conflictText,
+    userProgressBox: userProgressBox,
+    realTimeUserPanelEnabled: REALTIME_USER_PANEL_ENABLED,
+    syncModalRecordHeader: getUiRenderUtil("syncModalRecordHeader"),
+    renderHistoryToContainer: getUiRenderUtil("renderHistoryToContainer"),
+    getEventsSorted: getEventsSorted,
+    clearNodeChildren: clearNodeChildren,
+    uiCtx: getUiRenderContext(),
+    getActiveUsersWithLastMark: getActiveUsersWithLastMark,
+    calcProgress: calcProgress,
+    whoIsDelaying: whoIsDelaying,
+    getAttentionIssues: getAttentionIssues,
+    getLastMarksByUser: getLastMarksByUser,
+    renderMarksSummary: renderMarksSummary,
+    renderRawFields: renderRawFields,
+    renderUserProgressBox: renderUserProgressBox,
+    renderConflictState: getUiRenderUtil("renderConflictState"),
+    renderHistory: renderHistoryFallback,
+    applyModalAccessProfile: applyModalAccessProfile,
+    renderProgressBar: renderProgressBar,
+    renderMemberChips: renderMemberChips
   };
 }
 
