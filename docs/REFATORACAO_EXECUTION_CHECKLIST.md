@@ -85,6 +85,7 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Extrair o fluxo de sessao/autenticacao para `frontend/js/auth/authFlow.js`, deixando `app.js` com wrappers para login bem-sucedido, logout, bootstrap da sessao e fallback local.
 - [DONE] Extrair a persistencia e sincronizacao de estado local para `frontend/js/utils/localState.js`, deixando `app.js` com wrappers e contexto de storage/cross-tab.
 - [DONE] Extrair a camada de sessao/UI do auth para `frontend/js/auth/authSession.js`, deixando `app.js` com wrappers para mensagem, gate, redirecionamento e token.
+- [DONE] Extrair os helpers de dados do historico/suporte beta para `frontend/js/ui/betaData.js`, deixando `app.js` com wrappers e contexto de filtros/lookup.
 
-Active: ID-FE-81
+Active: ID-FE-82
 Risks: validar comportamento em dispositivos com storage bloqueado.

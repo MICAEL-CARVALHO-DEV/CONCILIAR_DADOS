@@ -92,6 +92,7 @@ const pendingUsersUtils = SEC_FRONTEND.pendingUsersUtils || null;
 const betaHistoryUtils = SEC_FRONTEND.betaHistoryUtils || null;
 const betaPowerBiUtils = SEC_FRONTEND.betaPowerBiUtils || null;
 const betaSupportUtils = SEC_FRONTEND.betaSupportUtils || null;
+const betaDataUtils = SEC_FRONTEND.betaDataUtils || null;
 const betaSyncUtils = SEC_FRONTEND.betaSyncUtils || null;
 const betaWorkspaceUtils = SEC_FRONTEND.betaWorkspaceUtils || null;
 const authStore = SEC_FRONTEND.authStore || null;
@@ -667,6 +668,12 @@ function getEscapeUtil(methodName) {
 function getBetaSupportUtil(methodName) {
   if (!betaSupportUtils) return null;
   const method = betaSupportUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getBetaDataUtil(methodName) {
+  if (!betaDataUtils) return null;
+  const method = betaDataUtils[methodName];
   return typeof method === "function" ? method : null;
 }
 
@@ -4329,6 +4336,10 @@ function describeApiAuditRow(row) {
 }
 
 function flattenLocalAuditRows(records) {
+  const moduleFn = getBetaDataUtil("flattenLocalAuditRows");
+  if (moduleFn) {
+    return moduleFn(records, getBetaDataContext());
+  }
   const out = [];
   (Array.isArray(records) ? records : []).forEach(function (rec) {
     (Array.isArray(rec && rec.eventos) ? rec.eventos : []).forEach(function (ev, idx) {
@@ -4394,6 +4405,10 @@ function buildAuditSearchBlob(row) {
 }
 
 function buildAuditMonthOptions(rows, yearValue) {
+  const moduleFn = getBetaDataUtil("buildAuditMonthOptions");
+  if (moduleFn) {
+    return moduleFn(rows, yearValue, getBetaDataContext());
+  }
   const source = Array.isArray(rows) ? rows : [];
   const selectedYear = String(yearValue || "");
   const monthMap = {};
@@ -4427,6 +4442,10 @@ function buildAuditMonthOptions(rows, yearValue) {
 }
 
 function applyBetaAuditFilters(rows) {
+  const moduleFn = getBetaDataUtil("applyBetaAuditFilters");
+  if (moduleFn) {
+    return moduleFn(rows, getBetaDataContext());
+  }
   const source = Array.isArray(rows) ? rows : [];
   return source.filter(function (row) {
     if (betaAuditFilters.ano && getAuditYearValue(row) !== String(betaAuditFilters.ano)) return false;
@@ -4484,6 +4503,10 @@ function buildBetaAuditApiQuery() {
 }
 
 function getVisibleAuditRows(filteredRows) {
+  const moduleFn = getBetaDataUtil("getVisibleAuditRows");
+  if (moduleFn) {
+    return moduleFn(filteredRows, getBetaDataContext());
+  }
   const rows = Array.isArray(filteredRows) ? filteredRows : [];
   if (canViewGlobalAuditApi() && betaAuditRows.length) {
     return {
@@ -4498,6 +4521,10 @@ function getVisibleAuditRows(filteredRows) {
 }
 
 function getAuditRecordMeta(row) {
+  const moduleFn = getBetaDataUtil("getAuditRecordMeta");
+  if (moduleFn) {
+    return moduleFn(row, getBetaDataContext());
+  }
   if (!row) return { code: "-", detail: "-" };
   if (row.emenda_ref) {
     return {
@@ -4573,11 +4600,19 @@ async function refreshBetaAuditFromApi(forceRender) {
 }
 
 function getSupportScopeValue() {
+  const moduleFn = getBetaDataUtil("getSupportScopeValue");
+  if (moduleFn) {
+    return moduleFn(getBetaDataContext());
+  }
   if (!isSupportManagerUser()) return "mine";
   return betaSupportFilters.scope === "mine" ? "mine" : "all";
 }
 
 function getSupportThreadEmendaLabel(thread) {
+  const moduleFn = getBetaDataUtil("getSupportThreadEmendaLabel");
+  if (moduleFn) {
+    return moduleFn(thread, getBetaDataContext());
+  }
   const backendId = Number(thread && thread.emenda_id ? thread.emenda_id : 0);
   if (!backendId) return "";
   const rec = state.records.find(function (item) {
@@ -4588,6 +4623,10 @@ function getSupportThreadEmendaLabel(thread) {
 }
 
 function buildSupportUserOptions(threads) {
+  const betaDataModuleFn = getBetaDataUtil("buildSupportUserOptions");
+  if (betaDataModuleFn) {
+    return betaDataModuleFn(threads, getBetaDataContext());
+  }
   const moduleFn = getBetaSupportUtil("buildSupportUserOptions");
   if (moduleFn) return moduleFn(threads, text);
   return Array.from(new Set((Array.isArray(threads) ? threads : []).map(function (item) {
@@ -4596,6 +4635,10 @@ function buildSupportUserOptions(threads) {
 }
 
 function buildSupportApiQuery() {
+  const moduleFn = getBetaDataUtil("buildSupportApiQuery");
+  if (moduleFn) {
+    return moduleFn(getBetaDataContext());
+  }
   const params = new URLSearchParams();
   params.set("limit", String(BETA_SUPPORT_LIMIT));
   if (betaSupportFilters.status) params.set("status", String(betaSupportFilters.status));
@@ -4800,6 +4843,29 @@ function getBetaSupportContext() {
     },
     setMessagesError: function (message) {
       betaSupportMessagesError = String(message || "");
+    }
+  };
+}
+
+function getBetaDataContext() {
+  return {
+    filters: betaAuditFilters,
+    supportLimit: BETA_SUPPORT_LIMIT,
+    text: text,
+    normalizeLooseText: normalizeLooseText,
+    getBackendIdForRecord: getBackendIdForRecord,
+    canViewGlobalAuditApi: canViewGlobalAuditApi,
+    getBetaAuditRows: function () {
+      return betaAuditRows;
+    },
+    findRecordByBackendId: function (backendId) {
+      return state.records.find(function (item) {
+        return Number(item && item.backend_id ? item.backend_id : 0) === Number(backendId || 0);
+      });
+    },
+    isSupportManagerUser: isSupportManagerUser,
+    getSupportFilters: function () {
+      return betaSupportFilters;
     }
   };
 }
