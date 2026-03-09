@@ -63,6 +63,7 @@ const domUtils = SEC_FRONTEND.domUtils || null;
 const escapeUtils = SEC_FRONTEND.escapeUtils || null;
 const formatUtils = SEC_FRONTEND.formatUtils || null;
 const normalizeUtils = SEC_FRONTEND.normalizeUtils || null;
+const localStateUtils = SEC_FRONTEND.localStateUtils || null;
 const importNormalizationUtils = SEC_FRONTEND.importNormalizationUtils || null;
 const importValidationUtils = SEC_FRONTEND.importValidationUtils || null;
 const importPipelineUtils = SEC_FRONTEND.importPipelineUtils || null;
@@ -482,6 +483,12 @@ function getProgressUtil(methodName) {
 function getFormatUtil(methodName) {
   if (!formatUtils) return null;
   const method = formatUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getLocalStateUtil(methodName) {
+  if (!localStateUtils) return null;
+  const method = localStateUtils[methodName];
   return typeof method === "function" ? method : null;
 }
 
@@ -4947,6 +4954,34 @@ function getAuthUiContext() {
   };
 }
 
+function getLocalStateContext() {
+  return {
+    storageKey: STORAGE_KEY,
+    legacyStorageKeys: LEGACY_STORAGE_KEYS,
+    crossTabPingKey: CROSS_TAB_PING_KEY,
+    localTabId: LOCAL_TAB_ID,
+    stateChannel: stateChannel,
+    demoRecords: DEMO,
+    getPrimaryStorage: getPrimaryStorage,
+    getSecondaryStorage: getSecondaryStorage,
+    readStorageValue: readStorageValue,
+    writeStorageValue: writeStorageValue,
+    deepClone: deepClone,
+    normalizeRecordShape: normalizeRecordShape,
+    migrateLegacyStatusRecords: migrateLegacyStatusRecords,
+    syncReferenceKeys: syncReferenceKeys,
+    syncYearFilter: syncYearFilter,
+    render: render,
+    getState: function () {
+      return state;
+    },
+    setState: function (nextState) {
+      state = nextState;
+    },
+    getActiveUsersWithLastMark: getActiveUsersWithLastMark
+  };
+}
+
 function getAuthFlowContext() {
   return {
     authLoginPage: AUTH_LOGIN_PAGE,
@@ -6638,6 +6673,10 @@ function setupCrossTabSync() {
 
 // Notifica outras abas que o estado local mudou.
 function notifyStateUpdated() {
+  const moduleFn = getLocalStateUtil("notifyStateUpdated");
+  if (moduleFn) {
+    return moduleFn(getLocalStateContext());
+  }
   if (stateChannel) {
     stateChannel.postMessage({ type: "state_updated", at: Date.now(), tabId: LOCAL_TAB_ID });
   }
@@ -6646,6 +6685,10 @@ function notifyStateUpdated() {
 
 // Recarrega estado salvo e redesenha interface.
 function refreshStateFromStorage() {
+  const moduleFn = getLocalStateUtil("refreshStateFromStorage");
+  if (moduleFn) {
+    return moduleFn(getLocalStateContext());
+  }
   const loaded = loadState();
   state = { records: (loaded.records || []).map(normalizeRecordShape) };
   migrateLegacyStatusRecords(state.records);
@@ -6655,6 +6698,10 @@ function refreshStateFromStorage() {
 }
 // Carrega estado persistido (storage atual, fallback e legado).
 function loadState() {
+  const moduleFn = getLocalStateUtil("loadState");
+  if (moduleFn) {
+    return moduleFn(getLocalStateContext());
+  }
   try {
     const primary = getPrimaryStorage();
     const secondary = getSecondaryStorage();
@@ -6685,6 +6732,10 @@ function loadState() {
 
 // Persiste estado e opcionalmente propaga sincronizacao cross-tab.
 function saveState(silentSync) {
+  const moduleFn = getLocalStateUtil("saveState");
+  if (moduleFn) {
+    return moduleFn(silentSync, getLocalStateContext());
+  }
   syncActiveUsersCache(state.records || []);
   const data = JSON.stringify(state);
   const primary = getPrimaryStorage();
@@ -6696,6 +6747,10 @@ function saveState(silentSync) {
 
 
 function syncActiveUsersCache(records) {
+  const moduleFn = getLocalStateUtil("syncActiveUsersCache");
+  if (moduleFn) {
+    return moduleFn(records, getLocalStateContext());
+  }
   (records || []).forEach(function (rec) {
     rec.active_users = getActiveUsersWithLastMark(rec).map(function (u) {
       return {

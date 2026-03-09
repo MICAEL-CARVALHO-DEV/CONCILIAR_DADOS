@@ -83,6 +83,7 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Extrair o auth gate (`setupAuthUi`, `syncRegisterRoles`, `switchAuthMode`) para `frontend/js/auth/authUi.js`, deixando `app.js` com wrappers e mensagens locais.
 - [DONE] Extrair o lifecycle inicial e a sincronizacao cross-tab para `frontend/js/ui/appLifecycle.js`, deixando `app.js` com wrappers e contexto de bootstrap.
 - [DONE] Extrair o fluxo de sessao/autenticacao para `frontend/js/auth/authFlow.js`, deixando `app.js` com wrappers para login bem-sucedido, logout, bootstrap da sessao e fallback local.
+- [DONE] Extrair a persistencia e sincronizacao de estado local para `frontend/js/utils/localState.js`, deixando `app.js` com wrappers e contexto de storage/cross-tab.
 
-Active: ID-FE-79
+Active: ID-FE-80
 Risks: validar comportamento em dispositivos com storage bloqueado.
