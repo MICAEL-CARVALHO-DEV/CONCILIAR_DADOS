@@ -3160,111 +3160,38 @@ function generateRandomMultiUserDemo() {
 
 // Configura eventos de login/cadastro do auth-gate interno da pagina principal.
 function setupAuthUi() {
-  const moduleFn = getAuthUiUtil("setupAuthUi");
-  if (moduleFn) {
-    return moduleFn(getAuthUiContext());
-  }
-  if (!authGate) return;
+  return requireModuleFunction(getAuthUiUtil, "setupAuthUi", "authUiUtils")(getAuthUiContext());
 }
 
 // Carrega papeis permitidos no cadastro publico do auth-gate.
 function syncRegisterRoles() {
-  const moduleFn = getAuthUiUtil("syncRegisterRoles");
-  if (moduleFn) {
-    return moduleFn(getAuthUiContext());
-  }
-  if (!authRegisterRole) return;
-  clearNodeChildren(authRegisterRole);
-  PUBLIC_SELF_REGISTER_ROLE_OPTIONS.forEach(function (role) {
-    const opt = document.createElement("option");
-    opt.value = role;
-    opt.textContent = role;
-    authRegisterRole.appendChild(opt);
-  });
+  return requireModuleFunction(getAuthUiUtil, "syncRegisterRoles", "authUiUtils")(getAuthUiContext());
 }
 
 // Alterna entre formularios de login e cadastro no auth-gate.
 function switchAuthMode(mode) {
-  const moduleFn = getAuthUiUtil("switchAuthMode");
-  if (moduleFn) {
-    return moduleFn(mode, getAuthUiContext());
-  }
-  if (!authLoginForm || !authRegisterForm || !authTabLogin || !authTabRegister) return;
-  const register = mode === "register";
-  authLoginForm.classList.toggle("hidden", register);
-  authRegisterForm.classList.toggle("hidden", !register);
-  authTabLogin.classList.toggle("active", !register);
-  authTabRegister.classList.toggle("active", register);
-  setAuthMessage("");
+  return requireModuleFunction(getAuthUiUtil, "switchAuthMode", "authUiUtils")(mode, getAuthUiContext());
 }
 
 function setAuthMessage(msg, isError) {
-  const moduleFn = getAuthSessionUtil("setAuthMessage");
-  if (moduleFn) {
-    return moduleFn(msg, isError, getAuthSessionContext());
-  }
-  if (!authMsg) return;
-  authMsg.textContent = msg || "";
-  authMsg.style.color = isError ? "#b4233d" : "";
+  return requireModuleFunction(getAuthSessionUtil, "setAuthMessage", "authSessionUtils")(msg, isError, getAuthSessionContext());
 }
 
 function showAuthGate(msg) {
-  const moduleFn = getAuthSessionUtil("showAuthGate");
-  if (moduleFn) {
-    return moduleFn(msg, getAuthSessionContext());
-  }
-  const q = msg ? "msg=" + encodeURIComponent(msg) : "";
-  redirectToAuth(AUTH_LOGIN_PAGE, q);
+  return requireModuleFunction(getAuthSessionUtil, "showAuthGate", "authSessionUtils")(msg, getAuthSessionContext());
 }
 
 function hideAuthGate() {
-  const moduleFn = getAuthSessionUtil("hideAuthGate");
-  if (moduleFn) {
-    return moduleFn(getAuthSessionContext());
-  }
-  if (!authGate) return;
-  authGate.classList.add("hidden");
-  authGate.setAttribute("aria-hidden", "true");
-  setAuthMessage("");
+  return requireModuleFunction(getAuthSessionUtil, "hideAuthGate", "authSessionUtils")(getAuthSessionContext());
 }
 
 function extractApiError(err, fallback) {
-  const moduleFn = getAuthSessionUtil("extractApiError");
-  if (moduleFn) {
-    return moduleFn(err, fallback, getAuthSessionContext());
-  }
-  const extractApiErrorUtil = getFormatUtil("extractApiError");
-  if (extractApiErrorUtil) {
-    return extractApiErrorUtil(err, fallback);
-  }
-  const msg = err && err.message ? String(err.message) : "";
-  if (!msg) return fallback;
-  const mark = "::";
-  if (msg.indexOf(mark) >= 0) return msg.split(mark)[1] || fallback;
-  return msg;
+  return requireModuleFunction(getAuthSessionUtil, "extractApiError", "authSessionUtils")(err, fallback, getAuthSessionContext());
 }
 
 // Trata sucesso de autenticacao: grava sessao, libera UI e sincroniza API.
 function onAuthSuccess(resp) {
-  const moduleFn = getAuthFlowUtil("onAuthSuccess");
-  if (moduleFn) {
-    return moduleFn(resp, getAuthFlowContext());
-  }
-  const token = resp && resp.token ? String(resp.token) : "";
-  const usuario = resp && resp.usuario ? resp.usuario : null;
-  if (!token || !usuario) {
-    setAuthMessage("Resposta de autenticacao invalida.", true);
-    return;
-  }
-
-  writeStoredSessionToken(token);
-  setAuthenticatedUser(usuario);
-  hideAuthGate();
-  applyAccessProfile();
-  bootstrapApiIntegration().finally(function () {
-    connectApiSocket();
-  });
-  render();
+  return requireModuleFunction(getAuthFlowUtil, "onAuthSuccess", "authFlowUtils")(resp, getAuthFlowContext());
 }
 
 function readStorageValue(store, key) {
@@ -3307,298 +3234,43 @@ function removeStorageValue(store, key) {
 
 // Persiste usuario autenticado no contexto local da UI.
 function setAuthenticatedUser(usuario) {
-  const moduleFn = getAuthSessionUtil("setAuthenticatedUser");
-  if (moduleFn) {
-    return moduleFn(usuario, getAuthSessionContext());
-  }
-  CURRENT_USER = String(usuario.nome || CURRENT_USER).trim() || CURRENT_USER;
-  CURRENT_ROLE = normalizeUserRole(usuario.perfil || CURRENT_ROLE);
-  betaWorkspaceTabTouched = false;
-  betaWorkspaceTab = getPreferredBetaWorkspaceTab();
-  const writeAuthenticatedProfileUtil = getAuthStoreUtil("writeAuthenticatedProfile");
-  if (writeAuthenticatedProfileUtil) {
-    writeAuthenticatedProfileUtil({
-      name: CURRENT_USER,
-      role: CURRENT_ROLE
-    }, AUTH_KEYS);
-  }
+  return requireModuleFunction(getAuthSessionUtil, "setAuthenticatedUser", "authSessionUtils")(usuario, getAuthSessionContext());
 }
 
 // Redireciona para login/cadastro preservando pagina de retorno.
 function redirectToAuth(page, query) {
-  const moduleFn = getAuthSessionUtil("redirectToAuth");
-  if (moduleFn) {
-    return moduleFn(page, query, getAuthSessionContext());
-  }
-  const redirectToAuthUtil = getAuthStoreUtil("redirectToAuth");
-  if (redirectToAuthUtil) {
-    redirectToAuthUtil(page || AUTH_LOGIN_PAGE, query, "index.html");
-    return;
-  }
-  const target = page || AUTH_LOGIN_PAGE;
-  const suffix = query ? (String(query).startsWith("?") ? String(query) : "?" + String(query)) : "";
-  const next = encodeURIComponent("index.html");
-  const hasQ = suffix.indexOf("?") >= 0;
-  const finalUrl = target + suffix + (hasQ ? "&" : "?") + "next=" + next;
-  if (!window.location.pathname.toLowerCase().endsWith("/" + target.toLowerCase())) {
-    window.location.href = finalUrl;
-  }
+  return requireModuleFunction(getAuthSessionUtil, "redirectToAuth", "authSessionUtils")(page, query, getAuthSessionContext());
 }
 // Encerra sessao local e tenta logout remoto na API.
 async function logoutCurrentUser() {
-  const moduleFn = getAuthFlowUtil("logoutCurrentUser");
-  if (moduleFn) {
-    return moduleFn(getAuthFlowContext());
-  }
-  const token = readStoredSessionToken();
-  if (token && isApiEnabled()) {
-    try {
-      await apiRequest("POST", "/auth/logout", {});
-    } catch (_err) {
-      // ignora erro de logout remoto
-    }
-  }
-  const clearSessionAndProfileUtil = getAuthStoreUtil("clearSessionAndProfile");
-  if (clearSessionAndProfileUtil) {
-    clearSessionAndProfileUtil(AUTH_KEYS);
-  } else {
-    clearStoredSessionToken();
-  }
-  closeApiSocket();
-  clearBetaAuditPolling();
-  clearBetaSupportPolling();
-  betaAuditRows = [];
-  betaAuditError = "";
-  betaAuditLoading = false;
-  betaSupportThreads = [];
-  betaSupportMessages = [];
-  betaSupportError = "";
-  betaSupportMessagesError = "";
-  betaSupportLoading = false;
-  betaSupportMessagesLoading = false;
+  return requireModuleFunction(getAuthFlowUtil, "logoutCurrentUser", "authFlowUtils")(getAuthFlowContext());
 }
 
 function isLocalFrontendContext() {
-  const moduleFn = getAuthFlowUtil("isLocalFrontendContext");
-  if (moduleFn) {
-    return moduleFn(getAuthFlowContext());
-  }
-  const isLocalFrontendContextUtil = getAuthGuardUtil("isLocalFrontendContext");
-  if (isLocalFrontendContextUtil) {
-    return isLocalFrontendContextUtil();
-  }
-  const host = (typeof window !== "undefined" && window.location && window.location.hostname)
-    ? String(window.location.hostname)
-    : "";
-  return !host || host === "localhost" || host === "127.0.0.1";
+  return requireModuleFunction(getAuthFlowUtil, "isLocalFrontendContext", "authFlowUtils")(getAuthFlowContext());
 }
 
 function readStoredSessionToken() {
-  const moduleFn = getAuthSessionUtil("readStoredSessionToken");
-  if (moduleFn) {
-    return moduleFn(getAuthSessionContext());
-  }
-  const readStoredSessionTokenUtil = getAuthStoreUtil("readStoredSessionToken");
-  if (readStoredSessionTokenUtil) {
-    return readStoredSessionTokenUtil(AUTH_KEYS);
-  }
-  var cfg = (AUTH_KEYS && typeof AUTH_KEYS === "object") ? AUTH_KEYS : {};
-  var tokenKey = cfg.sessionToken || "SEC_SESSION_TOKEN";
-  var backupTokenKey = cfg.sessionTokenBackup || "SEC_SESSION_TOKEN_BKP";
-  const readSessionTokenUtil = getStorageUtil("readSessionToken");
-  if (readSessionTokenUtil) {
-    return readSessionTokenUtil(tokenKey, backupTokenKey);
-  }
-  try {
-    if (typeof sessionStorage !== "undefined") {
-      var sessionToken = String(sessionStorage.getItem(tokenKey) || "").trim();
-      if (sessionToken) {
-        if (typeof localStorage !== "undefined") {
-          localStorage.setItem(backupTokenKey, sessionToken);
-        }
-        return sessionToken;
-      }
-    }
-    if (typeof localStorage !== "undefined") {
-      var backupToken = String(localStorage.getItem(backupTokenKey) || "").trim();
-      if (backupToken && typeof sessionStorage !== "undefined") {
-        sessionStorage.setItem(tokenKey, backupToken);
-      }
-      return backupToken;
-    }
-  } catch (_err) {
-    return "";
-  }
-  return "";
+  return requireModuleFunction(getAuthSessionUtil, "readStoredSessionToken", "authSessionUtils")(getAuthSessionContext());
 }
 
 function writeStoredSessionToken(token) {
-  const moduleFn = getAuthSessionUtil("writeStoredSessionToken");
-  if (moduleFn) {
-    return moduleFn(token, getAuthSessionContext());
-  }
-  const writeStoredSessionTokenUtil = getAuthStoreUtil("writeStoredSessionToken");
-  if (writeStoredSessionTokenUtil) {
-    writeStoredSessionTokenUtil(token, AUTH_KEYS);
-    return;
-  }
-  var cfg = (AUTH_KEYS && typeof AUTH_KEYS === "object") ? AUTH_KEYS : {};
-  var tokenKey = cfg.sessionToken || "SEC_SESSION_TOKEN";
-  var backupTokenKey = cfg.sessionTokenBackup || "SEC_SESSION_TOKEN_BKP";
-  const writeSessionTokenUtil = getStorageUtil("writeSessionToken");
-  if (writeSessionTokenUtil) {
-    writeSessionTokenUtil(token, tokenKey, backupTokenKey);
-    return;
-  }
-  var raw = String(token == null ? "" : token).trim();
-  if (!raw) {
-    clearStoredSessionToken();
-    return;
-  }
-  try {
-    if (typeof sessionStorage !== "undefined") {
-      sessionStorage.setItem(tokenKey, raw);
-    }
-    if (typeof localStorage !== "undefined") {
-      localStorage.setItem(backupTokenKey, raw);
-    }
-  } catch (_err) {
-    // sem persistencia persistente, mantém sessão em memória apenas neste fluxo.
-  }
+  return requireModuleFunction(getAuthSessionUtil, "writeStoredSessionToken", "authSessionUtils")(token, getAuthSessionContext());
 }
 
 function clearStoredSessionToken() {
-  const moduleFn = getAuthSessionUtil("clearStoredSessionToken");
-  if (moduleFn) {
-    return moduleFn(getAuthSessionContext());
-  }
-  const clearStoredSessionTokenUtil = getAuthStoreUtil("clearStoredSessionToken");
-  if (clearStoredSessionTokenUtil) {
-    clearStoredSessionTokenUtil(AUTH_KEYS);
-    return;
-  }
-  var cfg = (AUTH_KEYS && typeof AUTH_KEYS === "object") ? AUTH_KEYS : {};
-  var tokenKey = cfg.sessionToken || "SEC_SESSION_TOKEN";
-  var backupTokenKey = cfg.sessionTokenBackup || "SEC_SESSION_TOKEN_BKP";
-  const clearSessionTokenUtil = getStorageUtil("clearSessionToken");
-  if (clearSessionTokenUtil) {
-    clearSessionTokenUtil(tokenKey, backupTokenKey);
-    return;
-  }
-  try {
-    if (typeof sessionStorage !== "undefined") {
-      sessionStorage.removeItem(tokenKey);
-    }
-    if (typeof localStorage !== "undefined") {
-      localStorage.removeItem(backupTokenKey);
-    }
-  } catch (_err) {
-    // sem persistência, apenas ignora.
-  }
+  return requireModuleFunction(getAuthSessionUtil, "clearStoredSessionToken", "authSessionUtils")(getAuthSessionContext());
 }
 
 // Ponto de entrada da autenticacao ao abrir index.html.
 async function initializeAuthFlow() {
-  const moduleFn = getAuthFlowUtil("initializeAuthFlow");
-  if (moduleFn) {
-    return moduleFn(getAuthFlowContext());
-  }
-  if (!isApiEnabled()) {
-    closeApiSocket();
-    loadUserConfig(false);
-    applyAccessProfile();
-    bootstrapApiIntegration();
-    return;
-  }
-
-  const token = readStoredSessionToken();
-  if (!token) {
-    closeApiSocket();
-    redirectToAuth(AUTH_LOGIN_PAGE, "msg=" + encodeURIComponent("Entre para continuar."));
-    return;
-  }
-
-  let me = null;
-  try {
-    me = await apiRequest("GET", "/auth/me");
-  } catch (authErr) {
-    // Fallback robusto para ambiente local:
-    // se houver base antiga/instavel, fixa em 127.0.0.1:8000 e revalida token 1 vez.
-    if (isLocalFrontendContext()) {
-      try {
-        writeStorageValue(localStorage, API_BASE_URL_KEY, "http://127.0.0.1:8000");
-        // apiRequest pode limpar token em 401; restaura para a tentativa direta.
-        writeStoredSessionToken(token);
-        const probe = await apiRequest("GET", "/auth/me", undefined, "INIT", { handleAuthFailure: false });
-        me = probe;
-      } catch (_fallbackErr) {
-        // segue fluxo padrao de expiracao abaixo
-      }
-    }
-    if (!me) {
-      clearStoredSessionToken();
-      closeApiSocket();
-      redirectToAuth(AUTH_LOGIN_PAGE, "msg=" + encodeURIComponent("Sessao expirada. Faca login novamente."));
-      return;
-    }
-    console.warn("auth/me falhou na API principal, seguindo com fallback local.", authErr);
-  }
-
-  try {
-    setAuthenticatedUser(me);
-    hideAuthGate();
-    applyAccessProfile();
-    await bootstrapApiIntegration();
-    connectApiSocket();
-  } catch (uiErr) {
-    // Erros de interface nao devem derrubar a sessao valida.
-    console.error("Falha ao inicializar UI apos autenticacao:", uiErr);
-  }
+  return requireModuleFunction(getAuthFlowUtil, "initializeAuthFlow", "authFlowUtils")(getAuthFlowContext());
 }
 
 
 // Carrega configuracao de usuario local (fallback quando API esta desativada).
 function loadUserConfig(forcePrompt) {
-  const moduleFn = getAuthFlowUtil("loadUserConfig");
-  if (moduleFn) {
-    return moduleFn(forcePrompt, getAuthFlowContext());
-  }
-  const readAuthenticatedProfileUtil = getAuthStoreUtil("readAuthenticatedProfile");
-  const savedAuthUser = readAuthenticatedProfileUtil
-    ? readAuthenticatedProfileUtil(AUTH_KEYS)
-    : null;
-  const readLegacyAuthenticatedProfileUtil = getAuthStoreUtil("readLegacyAuthenticatedProfile");
-  const legacyAuthUser = readLegacyAuthenticatedProfileUtil
-    ? readLegacyAuthenticatedProfileUtil(AUTH_KEYS)
-    : null;
-  const savedUser = (savedAuthUser && savedAuthUser.name) || (legacyAuthUser && legacyAuthUser.name);
-  const savedRole = savedAuthUser && savedAuthUser.role;
-
-  if (savedUser) CURRENT_USER = String(savedUser).trim() || CURRENT_USER;
-  if (savedRole) {
-    CURRENT_ROLE = normalizeUserRole(savedRole);
-    betaWorkspaceTabTouched = false;
-    betaWorkspaceTab = getPreferredBetaWorkspaceTab();
-  }
-
-  if (isApiEnabled()) return;
-
-  if (forcePrompt || !savedUser || !savedRole) {
-    const nameInput = prompt("Informe seu nome (ex.: Miguel):", savedUser || CURRENT_USER) || CURRENT_USER;
-    const roleInput = prompt("Informe seu setor (APG | SUPERVISAO | CONTABIL | POWERBI | PROGRAMADOR):", savedRole || CURRENT_ROLE) || CURRENT_ROLE;
-
-    CURRENT_USER = String(nameInput).trim() || CURRENT_USER;
-    CURRENT_ROLE = normalizeUserRole(roleInput);
-    betaWorkspaceTabTouched = false;
-    betaWorkspaceTab = getPreferredBetaWorkspaceTab();
-    const writeAuthenticatedProfileUtil = getAuthStoreUtil("writeAuthenticatedProfile");
-    if (writeAuthenticatedProfileUtil) {
-      writeAuthenticatedProfileUtil({
-        name: CURRENT_USER,
-        role: CURRENT_ROLE
-      }, AUTH_KEYS);
-    }
-  }
+  return requireModuleFunction(getAuthFlowUtil, "loadUserConfig", "authFlowUtils")(forcePrompt, getAuthFlowContext());
 }
 
 function isSupervisorUser() {
@@ -6874,118 +6546,31 @@ function deriveStatusForBackend(rec) {
 
 // Sincroniza alteracoes entre abas via BroadcastChannel/storage event.
 function setupCrossTabSync() {
-  const moduleFn = getAppLifecycleUtil("setupCrossTabSync");
-  if (moduleFn) {
-    return moduleFn(getAppLifecycleContext());
-  }
-  if (stateChannel) {
-    stateChannel.onmessage = function (evt) {
-      const data = evt && evt.data ? evt.data : null;
-      if (!data || data.type !== "state_updated") return;
-      if (data.tabId && data.tabId === LOCAL_TAB_ID) return;
-      refreshStateFromStorage();
-    };
-  }
-
-  if (typeof window !== "undefined") {
-    window.addEventListener("storage", function (e) {
-      if (!e) return;
-      if (e.key !== STORAGE_KEY && e.key !== CROSS_TAB_PING_KEY) return;
-      refreshStateFromStorage();
-    });
-  }
+  return requireModuleFunction(getAppLifecycleUtil, "setupCrossTabSync", "appLifecycleUtils")(getAppLifecycleContext());
 }
 
 // Notifica outras abas que o estado local mudou.
 function notifyStateUpdated() {
-  const moduleFn = getLocalStateUtil("notifyStateUpdated");
-  if (moduleFn) {
-    return moduleFn(getLocalStateContext());
-  }
-  if (stateChannel) {
-    stateChannel.postMessage({ type: "state_updated", at: Date.now(), tabId: LOCAL_TAB_ID });
-  }
-  writeStorageValue(localStorage, CROSS_TAB_PING_KEY, String(Date.now()));
+  return requireModuleFunction(getLocalStateUtil, "notifyStateUpdated", "localStateUtils")(getLocalStateContext());
 }
 
 // Recarrega estado salvo e redesenha interface.
 function refreshStateFromStorage() {
-  const moduleFn = getLocalStateUtil("refreshStateFromStorage");
-  if (moduleFn) {
-    return moduleFn(getLocalStateContext());
-  }
-  const loaded = loadState();
-  state = { records: (loaded.records || []).map(normalizeRecordShape) };
-  migrateLegacyStatusRecords(state.records);
-  syncReferenceKeys(state.records);
-  syncYearFilter();
-  render();
+  return requireModuleFunction(getLocalStateUtil, "refreshStateFromStorage", "localStateUtils")(getLocalStateContext());
 }
 // Carrega estado persistido (storage atual, fallback e legado).
 function loadState() {
-  const moduleFn = getLocalStateUtil("loadState");
-  if (moduleFn) {
-    return moduleFn(getLocalStateContext());
-  }
-  try {
-    const primary = getPrimaryStorage();
-    const secondary = getSecondaryStorage();
-    const raw = readStorageValue(primary, STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed && Array.isArray(parsed.records)) return parsed;
-    }
-
-    const rawSecondary = readStorageValue(secondary, STORAGE_KEY);
-    if (rawSecondary) {
-      const parsedSecondary = JSON.parse(rawSecondary);
-      if (parsedSecondary && Array.isArray(parsedSecondary.records)) return parsedSecondary;
-    }
-
-    for (let i = 0; i < LEGACY_STORAGE_KEYS.length; i += 1) {
-      const legacyRaw = readStorageValue(localStorage, LEGACY_STORAGE_KEYS[i]);
-      if (!legacyRaw) continue;
-      const parsedLegacy = JSON.parse(legacyRaw);
-      if (parsedLegacy && Array.isArray(parsedLegacy.records)) return { records: parsedLegacy.records };
-    }
-
-    return { records: deepClone(DEMO) };
-  } catch (_err) {
-    return { records: deepClone(DEMO) };
-  }
+  return requireModuleFunction(getLocalStateUtil, "loadState", "localStateUtils")(getLocalStateContext());
 }
 
 // Persiste estado e opcionalmente propaga sincronizacao cross-tab.
 function saveState(silentSync) {
-  const moduleFn = getLocalStateUtil("saveState");
-  if (moduleFn) {
-    return moduleFn(silentSync, getLocalStateContext());
-  }
-  syncActiveUsersCache(state.records || []);
-  const data = JSON.stringify(state);
-  const primary = getPrimaryStorage();
-  const secondary = getSecondaryStorage();
-  primary.setItem(STORAGE_KEY, data);
-  secondary.removeItem(STORAGE_KEY);
-  if (!silentSync) notifyStateUpdated();
+  return requireModuleFunction(getLocalStateUtil, "saveState", "localStateUtils")(silentSync, getLocalStateContext());
 }
 
 
 function syncActiveUsersCache(records) {
-  const moduleFn = getLocalStateUtil("syncActiveUsersCache");
-  if (moduleFn) {
-    return moduleFn(records, getLocalStateContext());
-  }
-  (records || []).forEach(function (rec) {
-    rec.active_users = getActiveUsersWithLastMark(rec).map(function (u) {
-      return {
-        name: u.name,
-        role: u.role,
-        lastStatus: u.lastStatus,
-        lastAt: u.lastAt
-      };
-    });
-  });
+  return requireModuleFunction(getLocalStateUtil, "syncActiveUsersCache", "localStateUtils")(records, getLocalStateContext());
 }
 function buildIdCounters(records) {
   const buildIdCountersUtil = getIdUtil("buildIdCounters");
@@ -8903,6 +8488,12 @@ function getOptionFunction(options, key) {
   if (!options) return null;
   const candidate = options[key];
   return typeof candidate === "function" ? candidate : null;
+}
+
+function requireModuleFunction(getter, methodName, moduleLabel) {
+  const candidate = getter(methodName);
+  if (typeof candidate === "function") return candidate;
+  throw new Error("Modulo obrigatorio indisponivel: " + moduleLabel + "." + methodName);
 }
 
 function clearNodeChildren(node) {

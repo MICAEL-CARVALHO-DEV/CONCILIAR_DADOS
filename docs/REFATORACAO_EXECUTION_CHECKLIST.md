@@ -92,6 +92,7 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Extrair as operacoes de sincronizacao com a API para `frontend/js/api/apiSyncOps.js`, deixando `app.js` com wrappers curtos para status, eventos, importacao e logs de exportacao.
 - [DONE] Extrair o bootstrap residual da aplicacao para `frontend/js/ui/appStartup.js`, deixando `app.js` com contextos de startup e fallback minimo.
 - [DONE] Extrair o modelo de registro da emenda para `frontend/js/utils/recordModel.js`, deixando `app.js` com wrappers curtos para evento, normalizacao e deteccao de demo.
+- [DONE] Remover fallbacks inline de auth e estado local do `app.js`, promovendo `authUi/authSession/authFlow/appLifecycle/localState` a modulos obrigatorios e reduzindo o arquivo principal.
 
-Active: ID-FE-88
+Active: ID-FE-89
 Risks: validar comportamento em dispositivos com storage bloqueado.
