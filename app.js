@@ -79,6 +79,7 @@ const exportTemplateUtils = SEC_FRONTEND.exportTemplateUtils || null;
 const exportTemplateWriterUtils = SEC_FRONTEND.exportTemplateWriterUtils || null;
 const exportDataUtils = SEC_FRONTEND.exportDataUtils || null;
 const importReportUtils = SEC_FRONTEND.importReportUtils || null;
+const betaHistoryUtils = SEC_FRONTEND.betaHistoryUtils || null;
 const betaSupportUtils = SEC_FRONTEND.betaSupportUtils || null;
 const authStore = SEC_FRONTEND.authStore || null;
 const authGuard = SEC_FRONTEND.authGuard || null;
@@ -620,6 +621,12 @@ function getEscapeUtil(methodName) {
 function getBetaSupportUtil(methodName) {
   if (!betaSupportUtils) return null;
   const method = betaSupportUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getBetaHistoryUtil(methodName) {
+  if (!betaHistoryUtils) return null;
+  const method = betaHistoryUtils[methodName];
   return typeof method === "function" ? method : null;
 }
 
@@ -4283,6 +4290,15 @@ function applyBetaAuditFilters(rows) {
 }
 
 function buildBetaAuditFilterOptions(rows) {
+  const moduleFn = getBetaHistoryUtil("buildBetaAuditFilterOptions");
+  if (moduleFn) {
+    return moduleFn(rows, {
+      getAuditYearValue: getAuditYearValue,
+      buildAuditMonthOptions: buildAuditMonthOptions,
+      text: text,
+      filters: betaAuditFilters
+    });
+  }
   const source = Array.isArray(rows) ? rows : [];
   const years = Array.from(new Set(source.map(getAuditYearValue).filter(Boolean))).sort().reverse();
   const users = Array.from(new Set(source.map(function (row) { return text(row && row.usuario_nome); }).filter(Boolean))).sort();
@@ -4539,6 +4555,37 @@ function getBetaSupportContext() {
   };
 }
 
+function getBetaHistoryContext() {
+  return {
+    filters: betaAuditFilters,
+    auditRows: betaAuditRows,
+    loading: betaAuditLoading,
+    error: betaAuditError,
+    lastSyncAt: betaAuditLastSyncAt,
+    auditLimit: BETA_AUDIT_LIMIT,
+    auditFilterDefaults: BETA_AUDIT_FILTER_DEFAULTS,
+    clearNodeChildren: clearNodeChildren,
+    text: text,
+    fmtDateTime: fmtDateTime,
+    setSelectOptions: setSelectOptions,
+    canViewGlobalAuditApi: canViewGlobalAuditApi,
+    refreshBetaAuditFromApi: refreshBetaAuditFromApi,
+    buildAuditMonthOptions: buildAuditMonthOptions,
+    getVisibleAuditRows: getVisibleAuditRows,
+    flattenLocalAuditRows: flattenLocalAuditRows,
+    getAuditRecordMeta: getAuditRecordMeta,
+    describeApiAuditRow: describeApiAuditRow,
+    describeEventForPanel: describeEventForPanel,
+    getAuditYearValue: getAuditYearValue,
+    rerender: function () {
+      renderBetaWorkspace(getFiltered());
+    },
+    setAuditFilters: function (nextFilters) {
+      betaAuditFilters = nextFilters;
+    }
+  };
+}
+
 function renderBetaSupportPanel(target, filteredRows) {
   const moduleFn = getBetaSupportUtil("renderBetaSupportPanel");
   if (moduleFn) {
@@ -4553,267 +4600,16 @@ function renderBetaSupportPanel(target, filteredRows) {
 }
 
 function renderBetaHistoryPanel(target, filteredRows) {
+  const moduleFn = getBetaHistoryUtil("renderBetaHistoryPanel");
+  if (moduleFn) {
+    return moduleFn(target, filteredRows, getBetaHistoryContext());
+  }
+
   clearNodeChildren(target);
-
-  const auditState = getVisibleAuditRows(filteredRows);
-  const rows = Array.isArray(auditState.rows) ? auditState.rows.slice(0, BETA_AUDIT_LIMIT) : [];
-  const optionSourceRows = canViewGlobalAuditApi() && betaAuditRows.length
-    ? betaAuditRows
-    : flattenLocalAuditRows(filteredRows);
-  const filterOptions = buildBetaAuditFilterOptions(optionSourceRows);
-  const toolbar = document.createElement("div");
-  toolbar.className = "beta-head-actions";
-
-  const sourceBadge = document.createElement("span");
-  sourceBadge.className = "beta-source-badge";
-  sourceBadge.textContent = auditState.source === "API" ? "Historico global da API" : "Historico local do navegador";
-  toolbar.appendChild(sourceBadge);
-
-  if (canViewGlobalAuditApi()) {
-    const refreshBtn = document.createElement("button");
-    refreshBtn.className = "btn";
-    refreshBtn.type = "button";
-    refreshBtn.textContent = betaAuditLoading ? "Atualizando..." : "Atualizar historico";
-    refreshBtn.disabled = betaAuditLoading;
-    refreshBtn.addEventListener("click", function () {
-      refreshBetaAuditFromApi(true).catch(function () { /* no-op */ });
-    });
-    toolbar.appendChild(refreshBtn);
-  }
-
-  target.appendChild(toolbar);
-
-  const filterWrap = document.createElement("div");
-  filterWrap.className = "filters beta-history-filters";
-
-  const yearField = document.createElement("div");
-  yearField.className = "field";
-  const yearLabel = document.createElement("label");
-  yearLabel.textContent = "Ano do historico";
-  const yearSelect = document.createElement("select");
-  setSelectOptions(yearSelect, [{ label: "Todos", value: "" }].concat(filterOptions.years.map(function (value) {
-    return { label: value, value: value };
-  })), betaAuditFilters.ano || "");
-  yearField.appendChild(yearLabel);
-  yearField.appendChild(yearSelect);
-  filterWrap.appendChild(yearField);
-
-  const monthField = document.createElement("div");
-  monthField.className = "field";
-  const monthLabel = document.createElement("label");
-  monthLabel.textContent = "Mes";
-  const monthSelect = document.createElement("select");
-  const monthOptions = [{ label: "Todos", value: "" }].concat(filterOptions.months);
-  setSelectOptions(monthSelect, monthOptions, betaAuditFilters.mes || "");
-  monthField.appendChild(monthLabel);
-  monthField.appendChild(monthSelect);
-  filterWrap.appendChild(monthField);
-
-  const userField = document.createElement("div");
-  userField.className = "field";
-  const userLabel = document.createElement("label");
-  userLabel.textContent = "Usuario";
-  const userSelect = document.createElement("select");
-  setSelectOptions(userSelect, [{ label: "Todos", value: "" }].concat(filterOptions.users.map(function (value) {
-    return { label: value, value: value };
-  })), betaAuditFilters.usuario || "");
-  userField.appendChild(userLabel);
-  userField.appendChild(userSelect);
-  filterWrap.appendChild(userField);
-
-  const roleField = document.createElement("div");
-  roleField.className = "field";
-  const roleLabel = document.createElement("label");
-  roleLabel.textContent = "Perfil";
-  const roleSelect = document.createElement("select");
-  setSelectOptions(roleSelect, [{ label: "Todos", value: "" }].concat(filterOptions.roles.map(function (value) {
-    return { label: value, value: value };
-  })), betaAuditFilters.setor || "");
-  roleField.appendChild(roleLabel);
-  roleField.appendChild(roleSelect);
-  filterWrap.appendChild(roleField);
-
-  const eventField = document.createElement("div");
-  eventField.className = "field";
-  const eventLabel = document.createElement("label");
-  eventLabel.textContent = "Tipo de evento";
-  const eventSelect = document.createElement("select");
-  setSelectOptions(eventSelect, [{ label: "Todos", value: "" }].concat(filterOptions.eventTypes.map(function (value) {
-    return { label: value, value: value };
-  })), betaAuditFilters.tipo_evento || "");
-  eventField.appendChild(eventLabel);
-  eventField.appendChild(eventSelect);
-  filterWrap.appendChild(eventField);
-
-  const originField = document.createElement("div");
-  originField.className = "field";
-  const originLabel = document.createElement("label");
-  originLabel.textContent = "Origem";
-  const originSelect = document.createElement("select");
-  setSelectOptions(originSelect, [{ label: "Todas", value: "" }].concat(filterOptions.origins.map(function (value) {
-    return { label: value, value: value };
-  })), betaAuditFilters.origem_evento || "");
-  originField.appendChild(originLabel);
-  originField.appendChild(originSelect);
-  filterWrap.appendChild(originField);
-
-  const searchField = document.createElement("div");
-  searchField.className = "field grow";
-  const searchLabel = document.createElement("label");
-  searchLabel.textContent = "Busca no historico";
-  const searchInput = document.createElement("input");
-  searchInput.type = "text";
-  searchInput.placeholder = "usuario, motivo, campo, valor, emenda...";
-  searchInput.value = betaAuditFilters.q || "";
-  searchField.appendChild(searchLabel);
-  searchField.appendChild(searchInput);
-  filterWrap.appendChild(searchField);
-
-  const actionField = document.createElement("div");
-  actionField.className = "field";
-  const actionLabel = document.createElement("label");
-  actionLabel.textContent = "Acoes";
-  const actionWrap = document.createElement("div");
-  actionWrap.className = "beta-history-filter-actions";
-  const applyBtn = document.createElement("button");
-  applyBtn.className = "btn primary";
-  applyBtn.type = "button";
-  applyBtn.textContent = "Aplicar";
-  const clearBtn = document.createElement("button");
-  clearBtn.className = "btn";
-  clearBtn.type = "button";
-  clearBtn.textContent = "Limpar";
-  actionWrap.appendChild(applyBtn);
-  actionWrap.appendChild(clearBtn);
-  actionField.appendChild(actionLabel);
-  actionField.appendChild(actionWrap);
-  filterWrap.appendChild(actionField);
-
-  yearSelect.addEventListener("change", function () {
-    const nextMonths = [{ label: "Todos", value: "" }].concat(buildAuditMonthOptions(optionSourceRows, yearSelect.value || ""));
-    const preferredMonth = nextMonths.some(function (item) { return item.value === monthSelect.value; }) ? monthSelect.value : "";
-    setSelectOptions(monthSelect, nextMonths, preferredMonth);
-  });
-
-  searchInput.addEventListener("keydown", function (event) {
-    if (event.key !== "Enter") return;
-    event.preventDefault();
-    applyBtn.click();
-  });
-
-  applyBtn.addEventListener("click", function () {
-    betaAuditFilters = {
-      ano: String(yearSelect.value || ""),
-      mes: String(monthSelect.value || ""),
-      usuario: String(userSelect.value || ""),
-      setor: String(roleSelect.value || ""),
-      tipo_evento: String(eventSelect.value || ""),
-      origem_evento: String(originSelect.value || ""),
-      q: String(searchInput.value || "").trim()
-    };
-    if (canViewGlobalAuditApi()) {
-      refreshBetaAuditFromApi(true).catch(function () { /* no-op */ });
-      return;
-    }
-    renderBetaWorkspace(getFiltered());
-  });
-
-  clearBtn.addEventListener("click", function () {
-    betaAuditFilters = Object.assign({}, BETA_AUDIT_FILTER_DEFAULTS);
-    if (canViewGlobalAuditApi()) {
-      refreshBetaAuditFromApi(true).catch(function () { /* no-op */ });
-      return;
-    }
-    renderBetaWorkspace(getFiltered());
-  });
-
-  target.appendChild(filterWrap);
-
-  const info = document.createElement("p");
-  info.className = "muted small";
-  info.style.marginTop = "10px";
-  const filterInfo = "Filtro atual: " + String(Array.isArray(filteredRows) ? filteredRows.length : 0) + " emendas visiveis. Eventos retornados: " + String(rows.length) + ".";
-  const syncInfo = betaAuditLastSyncAt ? (" Ultima leitura da API: " + fmtDateTime(betaAuditLastSyncAt) + ".") : "";
-  info.textContent = filterInfo + syncInfo;
-  target.appendChild(info);
-
-  if (betaAuditError) {
-    const error = document.createElement("p");
-    error.className = "muted small";
-    error.style.color = "#b4233d";
-    error.style.marginTop = "8px";
-    error.textContent = betaAuditError;
-    target.appendChild(error);
-  }
-
-  if (!rows.length) {
-    const empty = document.createElement("p");
-    empty.className = "beta-empty";
-    empty.style.marginTop = "12px";
-    empty.textContent = betaAuditLoading
-      ? "Carregando historico operacional..."
-      : "Sem eventos para o filtro atual.";
-    target.appendChild(empty);
-    return;
-  }
-
-  const list = document.createElement("div");
-  list.className = "recent-list beta-history-list";
-
-  rows.forEach(function (row) {
-    const meta = getAuditRecordMeta(row);
-    const item = document.createElement("div");
-    item.className = "recent-item";
-
-    const top = document.createElement("div");
-    top.className = "recent-item-top";
-
-    const left = document.createElement("div");
-    const badge = document.createElement("span");
-    badge.className = "badge";
-    badge.textContent = text(row.tipo_evento || "EVENTO");
-    left.appendChild(badge);
-
-    const targetLine = document.createElement("div");
-    targetLine.className = "recent-item-target";
-    targetLine.textContent = meta.code + " | " + meta.detail;
-    left.appendChild(targetLine);
-    top.appendChild(left);
-
-    const right = document.createElement("div");
-    right.className = "muted small";
-    right.textContent = fmtDateTime(row.data_hora);
-    top.appendChild(right);
-    item.appendChild(top);
-
-    const action = document.createElement("div");
-    action.className = "recent-item-action";
-    action.textContent = row.source === "API" ? describeApiAuditRow(row) : describeEventForPanel({
-      type: row.tipo_evento,
-      from: row.valor_antigo,
-      to: row.valor_novo,
-      field: row.campo_alterado
-    });
-    item.appendChild(action);
-
-    const auditMeta = document.createElement("div");
-    auditMeta.className = "beta-history-meta";
-    auditMeta.textContent = "Usuario: " + text(row.usuario_nome || "-")
-      + " | Perfil: " + text(row.setor || "-")
-      + " | Origem: " + text(row.origem_evento || row.source || "-");
-    item.appendChild(auditMeta);
-
-    if (text(row.motivo)) {
-      const note = document.createElement("div");
-      note.className = "beta-history-note";
-      note.textContent = "Obs.: " + text(row.motivo);
-      item.appendChild(note);
-    }
-
-    list.appendChild(item);
-  });
-
-  target.appendChild(list);
+  const empty = document.createElement("p");
+  empty.className = "beta-empty";
+  empty.textContent = "Painel de historico indisponivel nesta compilacao.";
+  target.appendChild(empty);
 }
 
 function buildPowerBiFilterOptions(rows) {
