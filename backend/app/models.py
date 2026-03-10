@@ -132,6 +132,13 @@ class ImportLote(Base):
     usuario_id: Mapped[Optional[int]] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
     usuario_nome: Mapped[str] = mapped_column(String(120), default="", nullable=False)
     setor: Mapped[str] = mapped_column(String(40), default="", nullable=False)
+    status_governanca: Mapped[str] = mapped_column(String(20), default="APLICADO", nullable=False)
+    governanca_motivo: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    governado_por_id: Mapped[Optional[int]] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
+    governado_por_nome: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    governado_por_setor: Mapped[str] = mapped_column(String(40), default="", nullable=False)
+    governado_em: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    registros_removidos: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 
@@ -147,6 +154,20 @@ class ImportLinha(Base):
     id_interno: Mapped[str] = mapped_column(String(60), default="", nullable=False)
     ref_key: Mapped[str] = mapped_column(String(255), default="", nullable=False)
     mensagem: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
+class ImportGovernancaLog(Base):
+    __tablename__ = "import_governanca_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    lote_id: Mapped[int] = mapped_column(ForeignKey("lotes_importacao.id"), index=True, nullable=False)
+    acao: Mapped[str] = mapped_column(String(20), nullable=False)
+    motivo: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    usuario_id: Mapped[Optional[int]] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
+    usuario_nome: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    setor: Mapped[str] = mapped_column(String(40), default="", nullable=False)
+    detalhes_json: Mapped[str] = mapped_column(Text, default="", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 

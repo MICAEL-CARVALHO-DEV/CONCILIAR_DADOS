@@ -1,14 +1,17 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, File, Query, UploadFile
 
-from ..core.dependencies import _actor_from_headers, _require_manager, _require_monitor
+from ..core.dependencies import _actor_from_headers, _require_monitor, _require_owner
 from ..db import get_db
 from ..schemas import (
     ExportLogCreate,
     ExportLogOut,
+    ImportGovernanceActionIn,
+    ImportGovernanceLogOut,
     ImportLinhaOut,
     ImportLinhasBulkCreate,
     ImportLoteCreate,
     ImportLoteOut,
+    ImportPreviewOut,
     SupportMessageCreate,
     SupportMessageOut,
     SupportThreadCreate,
@@ -21,10 +24,23 @@ from ..services import audit_service, import_export_service, support_service
 def create_operations_router(resolve_event_origin, utcnow, broadcast_update, mask_history_pair) -> APIRouter:
     router = APIRouter()
 
+    @router.post("/imports/preview-xlsx", response_model=ImportPreviewOut)
+    async def prever_importacao_xlsx(
+        file: UploadFile = File(...),
+        _actor: dict = Depends(_actor_from_headers),
+        db=Depends(get_db),
+    ):
+        file_bytes = await file.read()
+        return import_export_service.preview_import_xlsx_service(
+            file_name=file.filename or "import.xlsx",
+            file_bytes=file_bytes,
+            db=db,
+        )
+
     @router.post("/imports/lotes")
     def criar_lote_importacao(
         payload: ImportLoteCreate,
-        actor: dict = Depends(_require_manager),
+        actor: dict = Depends(_actor_from_headers),
         db=Depends(get_db),
     ):
         return import_export_service.create_import_lot_service(
@@ -39,19 +55,20 @@ def create_operations_router(resolve_event_origin, utcnow, broadcast_update, mas
     @router.get("/imports/lotes", response_model=list[ImportLoteOut])
     def listar_lotes_importacao(
         limit: int = Query(default=50, ge=1, le=500),
-        _actor: dict = Depends(_require_manager),
+        actor: dict = Depends(_actor_from_headers),
         db=Depends(get_db),
     ):
-        return import_export_service.list_import_lots_service(limit=limit, db=db)
+        return import_export_service.list_import_lots_service(limit=limit, actor=actor, db=db)
 
     @router.post("/imports/linhas/bulk")
     def criar_linhas_importacao(
         payload: ImportLinhasBulkCreate,
-        actor: dict = Depends(_require_manager),
+        actor: dict = Depends(_actor_from_headers),
         db=Depends(get_db),
     ):
         return import_export_service.create_import_lines_service(
             payload=payload,
+            actor=actor,
             db=db,
             utcnow=utcnow,
             broadcast_update=broadcast_update,
@@ -61,10 +78,40 @@ def create_operations_router(resolve_event_origin, utcnow, broadcast_update, mas
     def listar_linhas_importacao(
         lote_id: int = Query(..., ge=1),
         limit: int = Query(default=500, ge=1, le=5000),
-        _actor: dict = Depends(_require_manager),
+        actor: dict = Depends(_actor_from_headers),
         db=Depends(get_db),
     ):
-        return import_export_service.list_import_lines_service(lote_id=lote_id, limit=limit, db=db)
+        return import_export_service.list_import_lines_service(lote_id=lote_id, limit=limit, actor=actor, db=db)
+
+    @router.patch("/imports/lotes/{lote_id}/governanca", response_model=ImportLoteOut)
+    def governar_lote_importacao(
+        lote_id: int,
+        payload: ImportGovernanceActionIn,
+        actor: dict = Depends(_require_owner),
+        db=Depends(get_db),
+    ):
+        return import_export_service.govern_import_lot_service(
+            lote_id=lote_id,
+            payload=payload,
+            actor=actor,
+            db=db,
+            utcnow=utcnow,
+            broadcast_update=broadcast_update,
+        )
+
+    @router.get("/imports/lotes/{lote_id}/governanca/logs", response_model=list[ImportGovernanceLogOut])
+    def listar_logs_governanca_importacao(
+        lote_id: int,
+        limit: int = Query(default=50, ge=1, le=500),
+        actor: dict = Depends(_actor_from_headers),
+        db=Depends(get_db),
+    ):
+        return import_export_service.list_import_governance_logs_service(
+            lote_id=lote_id,
+            limit=limit,
+            actor=actor,
+            db=db,
+        )
 
     @router.post("/exports/logs")
     def criar_log_exportacao(
@@ -84,7 +131,7 @@ def create_operations_router(resolve_event_origin, utcnow, broadcast_update, mas
     @router.get("/exports/logs", response_model=list[ExportLogOut])
     def listar_logs_exportacao(
         limit: int = Query(default=50, ge=1, le=500),
-        _actor: dict = Depends(_require_manager),
+        _actor: dict = Depends(_actor_from_headers),
         db=Depends(get_db),
     ):
         return import_export_service.list_export_logs_service(limit=limit, db=db)

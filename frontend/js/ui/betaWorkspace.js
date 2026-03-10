@@ -17,10 +17,12 @@
     var clearNodeChildren = typeof opts.clearNodeChildren === "function" ? opts.clearNodeChildren : clearNode;
     var activeTab = String(opts.activeTab || "history");
     var canViewGlobalAuditApi = typeof opts.canViewGlobalAuditApi === "function" ? opts.canViewGlobalAuditApi : function () { return false; };
+    var showImportGovernance = !!opts.showImportGovernance;
     var setTab = typeof opts.setTab === "function" ? opts.setTab : noop;
     var renderHistory = typeof opts.renderHistory === "function" ? opts.renderHistory : noop;
     var renderPowerBi = typeof opts.renderPowerBi === "function" ? opts.renderPowerBi : noop;
     var renderSupport = typeof opts.renderSupport === "function" ? opts.renderSupport : noop;
+    var renderImports = typeof opts.renderImports === "function" ? opts.renderImports : noop;
 
     clearNodeChildren(target);
 
@@ -48,11 +50,15 @@
 
     var tabs = document.createElement("div");
     tabs.className = "beta-tabs";
-    [
+    var tabsConfig = [
       { key: "history", label: "Historico operacional" },
       { key: "powerbi", label: "Visao Power BI" },
       { key: "support", label: "Ajuda e suporte" }
-    ].forEach(function (tab) {
+    ];
+    if (showImportGovernance) {
+      tabsConfig.push({ key: "imports", label: "Governanca de imports" });
+    }
+    tabsConfig.forEach(function (tab) {
       var btn = document.createElement("button");
       btn.type = "button";
       btn.className = "beta-tab-btn" + (activeTab === tab.key ? " active" : "");
@@ -68,7 +74,9 @@
     panel.className = "beta-tab-panel";
     target.appendChild(panel);
 
-    if (activeTab === "powerbi") {
+    if (activeTab === "imports" && showImportGovernance) {
+      renderImports(panel, filteredRows);
+    } else if (activeTab === "powerbi") {
       renderPowerBi(panel, filteredRows);
     } else if (activeTab === "support") {
       renderSupport(panel, filteredRows);

@@ -10,6 +10,8 @@
   window.SEC_APP_CONFIG = Object.assign({}, window.SEC_APP_CONFIG || {}, {
     // URL publica da API em producao.
     API_BASE_URL: "https://sec-emendas-api.onrender.com",
+    // Mantem a LOA vazia/local ate o inicio oficial da beta.
+    LOA_PRE_BETA_LOCKED: true,
     // Fallback global (usado em hosts sem mapeamento especifico).
     GOOGLE_CLIENT_ID: GOOGLE_CLIENT_ID_PROD,
     API_BASE_URL_BY_HOST: Object.assign(

@@ -55,11 +55,17 @@
       </div>
     </header>
 
+    <section id="workspaceContextBar" class="card workspace-bar"></section>
+
+    <section id="workspaceModeNotice" class="card workspace-mode-notice hidden"></section>
+
+    <section id="workspaceStage" class="card workspace-stage hidden"></section>
+
     <section id="roleNotice" class="card role-notice hidden"></section>
 
     <section id="supervisorQuickPanel" class="card supervisor-panel hidden"></section>
 
-    <section class="filters card">
+    <section id="mainFiltersCard" class="filters card">
       <div class="field">
         <label for="statusFilter">Andamento Global</label>
         <select id="statusFilter"></select>
@@ -80,7 +86,7 @@
 
     <section id="betaWorkspace" class="card beta-workspace"></section>
 
-    <section class="card table-wrap">
+    <section id="mainTableCard" class="card table-wrap">
       <table class="table">
         <thead>
           <tr>
@@ -334,7 +340,9 @@
           "frontend/js/ui/powerBiData.js?v=" + encodeURIComponent(appVer),
           "frontend/js/ui/betaPowerBi.js?v=" + encodeURIComponent(appVer),
           "frontend/js/ui/betaSupport.js?v=" + encodeURIComponent(appVer),
+          "frontend/js/ui/betaImports.js?v=" + encodeURIComponent(appVer),
           "frontend/js/ui/betaWorkspace.js?v=" + encodeURIComponent(appVer),
+          "frontend/js/ui/workspaceContext.js?v=" + encodeURIComponent(appVer),
           "frontend/js/ui/importReport.js?v=" + encodeURIComponent(appVer),
           "frontend/js/utils/export.js?v=" + encodeURIComponent(appVer),
           "frontend/js/utils/exportFlow.js?v=" + encodeURIComponent(appVer),

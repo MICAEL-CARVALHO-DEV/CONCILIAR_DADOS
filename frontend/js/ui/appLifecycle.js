@@ -5,11 +5,16 @@
   globalScope.SEC_FRONTEND = root;
 
   function setupCrossTabSync(ctx) {
+    var getWorkspaceKey = typeof ctx.getWorkspaceKey === "function" ? ctx.getWorkspaceKey : function () { return ctx.workspaceKey; };
+    var getStorageKey = typeof ctx.getStorageKey === "function" ? ctx.getStorageKey : function () { return ctx.STORAGE_KEY; };
+    var getCrossTabPingKey = typeof ctx.getCrossTabPingKey === "function" ? ctx.getCrossTabPingKey : function () { return ctx.CROSS_TAB_PING_KEY; };
+
     if (ctx.stateChannel) {
       ctx.stateChannel.onmessage = function (evt) {
         var data = evt && evt.data ? evt.data : null;
         if (!data || data.type !== "state_updated") return;
         if (data.tabId && data.tabId === ctx.LOCAL_TAB_ID) return;
+        if (data.workspaceKey && getWorkspaceKey() && data.workspaceKey !== getWorkspaceKey()) return;
         ctx.refreshStateFromStorage();
       };
     }
@@ -17,7 +22,7 @@
     if (typeof globalScope.window !== "undefined") {
       globalScope.window.addEventListener("storage", function (e) {
         if (!e) return;
-        if (e.key !== ctx.STORAGE_KEY && e.key !== ctx.CROSS_TAB_PING_KEY) return;
+        if (e.key !== getStorageKey() && e.key !== getCrossTabPingKey()) return;
         ctx.refreshStateFromStorage();
       });
     }

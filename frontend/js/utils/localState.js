@@ -19,13 +19,17 @@
 
   function notifyStateUpdated(ctx) {
     if (ctx.stateChannel) {
-      ctx.stateChannel.postMessage({ type: "state_updated", at: Date.now(), tabId: ctx.localTabId });
+      ctx.stateChannel.postMessage({ type: "state_updated", at: Date.now(), tabId: ctx.localTabId, workspaceKey: ctx.workspaceKey });
     }
     ctx.writeStorageValue(globalScope.localStorage, ctx.crossTabPingKey, String(Date.now()));
   }
 
   function loadState(ctx) {
     try {
+      if (ctx.ignorePersistedState) {
+        return { records: ctx.deepClone(ctx.seedRecords || []) };
+      }
+
       var primary = ctx.getPrimaryStorage();
       var secondary = ctx.getSecondaryStorage();
       var raw = ctx.readStorageValue(primary, ctx.storageKey);
@@ -47,9 +51,9 @@
         if (parsedLegacy && Array.isArray(parsedLegacy.records)) return { records: parsedLegacy.records };
       }
 
-      return { records: ctx.deepClone(ctx.demoRecords) };
+      return { records: ctx.deepClone(ctx.seedRecords || []) };
     } catch (_err) {
-      return { records: ctx.deepClone(ctx.demoRecords) };
+      return { records: ctx.deepClone(ctx.seedRecords || []) };
     }
   }
 
@@ -57,6 +61,7 @@
     var loaded = loadState(ctx);
     var nextState = { records: (loaded.records || []).map(ctx.normalizeRecordShape) };
     ctx.setState(nextState);
+    if (typeof ctx.afterLoadState === "function") ctx.afterLoadState(nextState);
     ctx.migrateLegacyStatusRecords(nextState.records);
     ctx.syncReferenceKeys(nextState.records);
     ctx.syncYearFilter();

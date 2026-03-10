@@ -20,6 +20,8 @@ STATUS = {
 EVENT_ORIGINS = {"UI", "API", "IMPORT", "EXPORT"}
 
 IMPORT_LINE_STATUS = {"CREATED", "UPDATED", "UNCHANGED", "SKIPPED", "CONFLICT"}
+IMPORT_GOVERNANCE_STATUS = {"APLICADO", "CORRIGIDO", "REMOVIDO"}
+IMPORT_GOVERNANCE_ACTIONS = {"CORRIGIR", "REMOVER"}
 
 EVENT_TYPES = {
     "IMPORT",
@@ -358,15 +360,54 @@ class ExportLogCreate(BaseModel):
 class ImportLoteOut(BaseModel):
     id: int
     arquivo_nome: str
+    arquivo_hash: str
     linhas_lidas: int
     linhas_validas: int
     linhas_ignoradas: int
+    registros_criados: int
+    registros_atualizados: int
+    sem_alteracao: int
+    duplicidade_id: int
+    duplicidade_ref: int
+    duplicidade_arquivo: int
+    conflito_id_ref: int
+    abas_lidas: str
+    observacao: str
+    origem_evento: str
     created_at: datetime
+    usuario_id: int | None = None
     usuario_nome: str
     setor: str
+    status_governanca: str
+    governanca_motivo: str
+    governado_por_nome: str
+    governado_por_setor: str
+    governado_em: datetime | None = None
+    registros_removidos: int
 
     class Config:
         from_attributes = True
+
+
+class ImportGovernanceActionIn(BaseModel):
+    acao: str
+    motivo: str = Field(min_length=4, max_length=5000)
+
+    @field_validator("acao")
+    @classmethod
+    def validate_governance_action(cls, value: str) -> str:
+        v = (value or "").strip().upper()
+        if v not in IMPORT_GOVERNANCE_ACTIONS:
+            raise ValueError("acao invalida")
+        return v
+
+    @field_validator("motivo")
+    @classmethod
+    def validate_governance_reason(cls, value: str) -> str:
+        v = (value or "").strip()
+        if not v:
+            raise ValueError("motivo obrigatorio")
+        return v
 
 
 class ExportLogOut(BaseModel):
@@ -417,6 +458,90 @@ class ImportLinhaOut(BaseModel):
     id_interno: str
     ref_key: str
     mensagem: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ImportPreviewSourceRowOut(BaseModel):
+    aba: str
+    linha: int | None = None
+    dados: dict[str, str] = Field(default_factory=dict)
+
+
+class ImportPreviewValidationOut(BaseModel):
+    recognizedHeaders: list[str] = Field(default_factory=list)
+    unrecognizedHeaders: list[str] = Field(default_factory=list)
+    duplicatedHeaders: list[str] = Field(default_factory=list)
+    previewRows: list[ImportPreviewSourceRowOut] = Field(default_factory=list)
+    detectedTypes: dict[str, str] = Field(default_factory=dict)
+    alerts: list[str] = Field(default_factory=list)
+
+
+class ImportPreviewLineOut(BaseModel):
+    ordem: int
+    sheet_name: str
+    row_number: int
+    status_linha: str
+    id_interno: str = ""
+    ref_key: str = ""
+    mensagem: str = ""
+
+    @field_validator("status_linha")
+    @classmethod
+    def validate_preview_line_status(cls, value: str) -> str:
+        v = (value or "UNCHANGED").strip().upper()
+        if v not in IMPORT_LINE_STATUS:
+            raise ValueError("status_linha invalido")
+        return v
+
+
+class ImportPreviewNewRowOut(BaseModel):
+    ordem: int
+    sheet_name: str
+    row_number: int
+    id_interno: str = ""
+    identificacao: str = ""
+    deputado: str = ""
+    municipio: str = ""
+    cod_acao: str = ""
+    status_oficial: str = ""
+    valor_atual: str = ""
+    ref_key: str = ""
+    mensagem: str = ""
+
+
+class ImportPreviewOut(BaseModel):
+    fileName: str
+    fileHash: str = ""
+    totalRows: int = 0
+    consideredRows: int = 0
+    skippedRows: int = 0
+    invalidRows: int = 0
+    created: int = 0
+    updated: int = 0
+    unchanged: int = 0
+    duplicateById: int = 0
+    duplicateByRef: int = 0
+    duplicateInFile: int = 0
+    conflictIdVsRef: int = 0
+    sheetNames: list[str] = Field(default_factory=list)
+    rowDetails: list[ImportPreviewLineOut] = Field(default_factory=list)
+    newRowsPreview: list[ImportPreviewNewRowOut] = Field(default_factory=list)
+    validation: ImportPreviewValidationOut | None = None
+    planilha1Aoa: list[list[str]] | None = None
+
+
+class ImportGovernanceLogOut(BaseModel):
+    id: int
+    lote_id: int
+    acao: str
+    motivo: str
+    usuario_id: int | None = None
+    usuario_nome: str
+    setor: str
+    detalhes_json: str
     created_at: datetime
 
     class Config:

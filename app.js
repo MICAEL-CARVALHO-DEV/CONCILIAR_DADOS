@@ -108,6 +108,7 @@ const betaPowerBiUtils = SEC_FRONTEND.betaPowerBiUtils || null;
 const betaSupportUtils = SEC_FRONTEND.betaSupportUtils || null;
 const betaDataUtils = SEC_FRONTEND.betaDataUtils || null;
 const betaSyncUtils = SEC_FRONTEND.betaSyncUtils || null;
+const betaImportsUtils = SEC_FRONTEND.betaImportsUtils || null;
 const betaWorkspaceUtils = SEC_FRONTEND.betaWorkspaceUtils || null;
 const authStore = SEC_FRONTEND.authStore || null;
 const authSessionUtils = SEC_FRONTEND.authSessionUtils || null;
@@ -137,9 +138,15 @@ const BETA_AUDIT_LIMIT = 150;
 const BETA_AUDIT_POLL_MS = 15000;
 const BETA_SUPPORT_LIMIT = 80;
 const BETA_SUPPORT_POLL_MS = 10000;
+const BETA_IMPORT_LIMIT = 200;
+const BETA_IMPORT_LINE_LIMIT = 500;
+const BETA_IMPORT_LOG_LIMIT = 100;
 const API_STATE_POLL_MS = 5000;
 const API_DEFAULT_EVENT_ORIGIN = "UI";
 const REALTIME_USER_PANEL_ENABLED = false;
+const LOA_PRE_BETA_LOCKED = String(
+  ((RUNTIME_CONFIG && RUNTIME_CONFIG.LOA_PRE_BETA_LOCKED) != null ? RUNTIME_CONFIG.LOA_PRE_BETA_LOCKED : "true")
+).trim().toLowerCase() !== "false";
 const DEMO_MULTI_USERS = [
   { name: "Miguel", role: "APG" },
   { name: "Ana", role: "CONTABIL" },
@@ -187,8 +194,6 @@ const MODAL_FIELD_ORDER = [
   { key: "cod_subfonte", label: "Cod Subfonte", editable: true },
   { key: "cod_acao", label: "Cod Acao", editable: false },
   { key: "descricao_acao", label: "Descricao Acao", editable: false },
-  { key: "plan_a", label: "Plano A", editable: true },
-  { key: "plan_b", label: "Plano B", editable: true },
   { key: "municipio", label: "Municipio", editable: true },
   { key: "deputado", label: "Deputado", editable: false },
   { key: "cod_uo", label: "Cod UO", editable: true },
@@ -255,11 +260,19 @@ let modalAutosaveTimer = null;
 let modalDraftSavePromise = null;
 let betaWorkspaceTab = "history";
 let betaWorkspaceTabTouched = false;
+const WORKSPACE_STORAGE_KEY = "SEC_ACTIVE_WORKSPACE";
+const WORKSPACE_KEYS = {
+  LOA: "LOA_ATUAL",
+  TESTE: "TESTE",
+  FEDERAL: "FEDERAL"
+};
+const PRIVATE_WORKSPACE_OWNER_USERS = new Set(["MICAEL_DEV"]);
 const MODAL_AUTOSAVE_DEBOUNCE_MS = 2000;
 const MODAL_DRAFT_STORAGE_PREFIX = "SEC_MODAL_DRAFT_V1";
 const SUPPORT_CATEGORIES = ["OPERACAO", "IMPORTACAO", "EXPORTACAO", "DASHBOARD", "ACESSO", "ESTRUTURAL", "OUTRO"];
 const SUPPORT_THREAD_STATUS = ["ABERTO", "EM_ANALISE", "RESPONDIDO", "FECHADO"];
 const SUPPORT_MANAGER_ROLES = ["SUPERVISAO", "POWERBI", "PROGRAMADOR"];
+let CURRENT_WORKSPACE = readStoredWorkspaceKey();
 
 const DEMO = [
   mkRecord({
@@ -310,6 +323,8 @@ const DEMO = [
   })
 ];
 
+const stateChannel = (typeof window !== "undefined" && "BroadcastChannel" in window) ? new BroadcastChannel(CROSS_TAB_CHANNEL_NAME) : null;
+
 let state = loadState();
 state.records = (state.records || []).map(normalizeRecordShape);
 migrateLegacyStatusRecords(state.records);
@@ -348,6 +363,17 @@ let betaSupportMessages = [];
 let betaSupportMessagesLoading = false;
 let betaSupportMessagesError = "";
 let betaSupportPollTimer = null;
+let betaImportLots = [];
+let betaImportLotsLoading = false;
+let betaImportLotsError = "";
+let betaImportLotsLastSyncAt = "";
+let betaImportSelectedLotId = 0;
+let betaImportLines = [];
+let betaImportLinesLoading = false;
+let betaImportLinesError = "";
+let betaImportLogs = [];
+let betaImportLogsLoading = false;
+let betaImportLogsError = "";
 let apiStatePollTimer = null;
 const BETA_AUDIT_FILTER_DEFAULTS = Object.freeze({
   ano: "",
@@ -367,6 +393,14 @@ const BETA_SUPPORT_FILTER_DEFAULTS = Object.freeze({
   scope: ""
 });
 let betaSupportFilters = Object.assign({}, BETA_SUPPORT_FILTER_DEFAULTS);
+const BETA_IMPORT_FILTER_DEFAULTS = Object.freeze({
+  status_governanca: "",
+  usuario: "",
+  line_status: "",
+  q: "",
+  scope: ""
+});
+let betaImportFilters = Object.assign({}, BETA_IMPORT_FILTER_DEFAULTS);
 const BETA_POWERBI_FILTER_DEFAULTS = Object.freeze({
   deputado: "",
   municipio: "",
@@ -374,7 +408,6 @@ const BETA_POWERBI_FILTER_DEFAULTS = Object.freeze({
   q: ""
 });
 let betaPowerBiFilters = Object.assign({}, BETA_POWERBI_FILTER_DEFAULTS);
-const stateChannel = (typeof window !== "undefined" && "BroadcastChannel" in window) ? new BroadcastChannel(CROSS_TAB_CHANNEL_NAME) : null;
 assignMissingIds(state.records, idCountersByYear);
 syncReferenceKeys(state.records);
 saveState(true);
@@ -418,10 +451,15 @@ const btnReset = document.getElementById("btnReset");
 const fileCsv = document.getElementById("fileCsv");
 const importReport = document.getElementById("importReport");
 const betaWorkspace = document.getElementById("betaWorkspace");
+const workspaceContextBar = document.getElementById("workspaceContextBar");
+const workspaceModeNotice = document.getElementById("workspaceModeNotice");
+const workspaceStage = document.getElementById("workspaceStage");
 const importLabel = document.querySelector("label[for='fileCsv']");
 const currentUserInfo = document.getElementById("currentUserInfo");
 const roleNotice = document.getElementById("roleNotice");
 const supervisorQuickPanel = document.getElementById("supervisorQuickPanel");
+const mainFiltersCard = document.getElementById("mainFiltersCard");
+const mainTableCard = document.getElementById("mainTableCard");
 const btnProfile = document.getElementById("btnProfile");
 const btnPendingApprovals = document.getElementById("btnPendingApprovals");
 const btnCreateProfile = document.getElementById("btnCreateProfile");
@@ -475,6 +513,12 @@ function getFilterUtil(methodName) {
 function getAccessProfileUtil(methodName) {
   if (!accessProfileUtils) return null;
   const method = accessProfileUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getWorkspaceUtil(methodName) {
+  if (!SEC_FRONTEND.workspaceContextUtils) return null;
+  const method = SEC_FRONTEND.workspaceContextUtils[methodName];
   return typeof method === "function" ? method : null;
 }
 
@@ -721,6 +765,12 @@ function getBetaWorkspaceUtil(methodName) {
   return typeof method === "function" ? method : null;
 }
 
+function getBetaImportsUtil(methodName) {
+  if (!betaImportsUtils) return null;
+  const method = betaImportsUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
 function getBetaSyncUtil(methodName) {
   if (!betaSyncUtils) return null;
   const method = betaSyncUtils[methodName];
@@ -911,6 +961,11 @@ function setSelectOptions(select, options, preferredValue) {
 
 // Render da grade principal de emendas (dados + progresso + acoes).
 function render() {
+  renderWorkspaceContext();
+  const datasetWorkspace = canRenderWorkspaceDataset();
+  applyWorkspaceLayoutMode(datasetWorkspace);
+  if (!datasetWorkspace) return;
+
   const rows = getFiltered();
   const uiCtx = getUiRenderContext();
   while (tbody && tbody.firstChild) {
@@ -1150,6 +1205,8 @@ function getImportControlsContext() {
     btnReset: btnReset,
     fileCsv: fileCsv,
     canMutateRecords: canMutateRecords,
+    canImportData: canImportData,
+    canUseDemoTools: canUseDemoWorkspaceTools,
     getState: function () {
       return state;
     },
@@ -1185,6 +1242,9 @@ function getImportControlsContext() {
     showImportReport: showImportReport,
     syncImportBatchToApi: syncImportBatchToApi,
     syncImportLinesToApi: syncImportLinesToApi,
+    refreshImportLots: function (forceRender) {
+      return refreshBetaImportLotsFromApi(!!forceRender);
+    },
     mkEvent: mkEvent,
     isoNow: isoNow,
     syncCanonicalToAllFields: syncCanonicalToAllFields
@@ -2367,6 +2427,44 @@ function getSelected() {
   });
 }
 
+function findRecordForImportLine(line) {
+  const emendaId = Number(line && line.emenda_id || 0);
+  if (emendaId > 0) {
+    const byId = state.records.find(function (record) {
+      return Number(record && record.id || 0) === emendaId;
+    });
+    if (byId) return byId;
+  }
+  const rawIdInterno = String(line && line.id_interno || "").trim();
+  if (rawIdInterno) {
+    const upperIdInterno = rawIdInterno.toUpperCase();
+    const byInterno = state.records.find(function (record) {
+      return String(record && record.id_interno || "").trim().toUpperCase() === upperIdInterno;
+    });
+    if (byInterno) return byInterno;
+  }
+  const rawRefKey = String(line && line.ref_key || "").trim();
+  if (rawRefKey) {
+    const upperRefKey = rawRefKey.toUpperCase();
+    const byRefKey = state.records.find(function (record) {
+      return String(record && record.ref_key || "").trim().toUpperCase() === upperRefKey;
+    });
+    if (byRefKey) return byRefKey;
+  }
+  return null;
+}
+
+function canOpenImportLineRecord(line) {
+  return !!findRecordForImportLine(line);
+}
+
+function openImportLineRecord(line) {
+  const record = findRecordForImportLine(line);
+  if (!record) return false;
+  openModal(record.id);
+  return true;
+}
+
 // Pipeline de importacao: cria/atualiza registros e gera relatorio consolidado.
 function processImportedRows(sourceRows, fileName) {
   const processImportedRowsUtil = getImportProcessorUtil("processImportedRows");
@@ -3293,7 +3391,12 @@ function getRoleAccessContext() {
     currentRole: CURRENT_ROLE,
     currentUser: CURRENT_USER,
     supportManagerRoles: SUPPORT_MANAGER_ROLES,
-    isApiEnabled: isApiEnabled
+    isApiEnabled: isApiEnabled,
+    workspaceMode: getCurrentWorkspaceDefinition().mode,
+    workspaceKey: getCurrentWorkspaceDefinition().key,
+    workspaceAllowsImport: canImportInCurrentWorkspace(),
+    workspaceAllowsMutation: canMutateInCurrentWorkspace(),
+    workspaceAllowsDemoTools: canUseDemoWorkspaceTools()
   };
 }
 
@@ -3307,6 +3410,10 @@ function isPowerBiUser() {
 
 function isSupportManagerUser() {
   return requireModuleFunction(getRoleAccessUtil, "isSupportManagerUser", "roleAccessUtils")(getRoleAccessContext());
+}
+
+function isProgramadorUser() {
+  return requireModuleFunction(getRoleAccessUtil, "isProgramadorUser", "roleAccessUtils")(getRoleAccessContext());
 }
 
 function getReadOnlyRoleMeta() {
@@ -3337,8 +3444,297 @@ function canUseSupportApi() {
   return requireModuleFunction(getRoleAccessUtil, "canUseSupportApi", "roleAccessUtils")(getRoleAccessContext());
 }
 
+function canImportData() {
+  return requireModuleFunction(getRoleAccessUtil, "canImportData", "roleAccessUtils")(getRoleAccessContext());
+}
+
 function canMutateRecords() {
   return requireModuleFunction(getRoleAccessUtil, "canMutateRecords", "roleAccessUtils")(getRoleAccessContext());
+}
+
+function normalizeWorkspaceKey(value) {
+  return String(value || "").trim().toUpperCase();
+}
+
+function normalizeWorkspaceOwnerUser(value) {
+  return String(value || "").trim().toUpperCase();
+}
+
+function getWorkspaceOwnerIdentity() {
+  const savedProfile = readAuthenticatedProfileFromStore();
+  if (savedProfile && savedProfile.name) {
+    return {
+      user: normalizeWorkspaceOwnerUser(savedProfile.name),
+      role: normalizeWorkspaceOwnerUser(savedProfile.role)
+    };
+  }
+  const legacyProfile = readLegacyAuthenticatedProfileFromStore();
+  if (legacyProfile && legacyProfile.name) {
+    return {
+      user: normalizeWorkspaceOwnerUser(legacyProfile.name),
+      role: normalizeWorkspaceOwnerUser(CURRENT_ROLE)
+    };
+  }
+  return {
+    user: normalizeWorkspaceOwnerUser(CURRENT_USER),
+    role: normalizeWorkspaceOwnerUser(CURRENT_ROLE)
+  };
+}
+
+function isWorkspaceOwnerUser() {
+  const identity = getWorkspaceOwnerIdentity();
+  return identity.role === "PROGRAMADOR" && PRIVATE_WORKSPACE_OWNER_USERS.has(identity.user);
+}
+
+function readStoredWorkspaceKey() {
+  try {
+    return normalizeWorkspaceKey(localStorage.getItem(WORKSPACE_STORAGE_KEY));
+  } catch (_err) {
+    return WORKSPACE_KEYS.LOA;
+  }
+}
+
+function writeStoredWorkspaceKey(value) {
+  try {
+    localStorage.setItem(WORKSPACE_STORAGE_KEY, normalizeWorkspaceKey(value) || WORKSPACE_KEYS.LOA);
+  } catch (_err) {
+    // no-op
+  }
+}
+
+function getWorkspaceDefinitions() {
+  return [
+    {
+      key: WORKSPACE_KEYS.LOA,
+      label: "LOA atual",
+      description: LOA_PRE_BETA_LOCKED
+        ? "Base oficial preparada para a beta. Ela permanece limpa ate a liberacao da operacao real."
+        : "Base oficial em operacao. A logica atual continua rodando aqui sem alteracao.",
+      mode: "operational",
+      datasetVisible: !LOA_PRE_BETA_LOCKED,
+      apiBacked: !LOA_PRE_BETA_LOCKED,
+      importEnabled: !LOA_PRE_BETA_LOCKED,
+      mutateEnabled: !LOA_PRE_BETA_LOCKED,
+      demoTools: false,
+      preBetaLocked: LOA_PRE_BETA_LOCKED,
+      notice: LOA_PRE_BETA_LOCKED
+        ? "A LOA oficial fica vazia e sem integracao ate o inicio da beta com usuarios. Testes e demos ficam restritos a Pagina de teste."
+        : "",
+      stageTitle: "",
+      stageDescription: "",
+      rules: LOA_PRE_BETA_LOCKED
+        ? [
+            "A LOA continua visivel para validacao do layout e do fluxo oficial.",
+            "Importacao, alteracao e sincronizacao oficial ficam bloqueadas ate a liberacao da beta.",
+            "Toda homologacao deve acontecer somente na Pagina de teste."
+          ]
+        : [],
+      nextSteps: LOA_PRE_BETA_LOCKED
+        ? [
+            "Liberar a operacao da LOA quando a beta oficial comecar.",
+            "Reativar a integracao com a API oficial nesse contexto.",
+            "Manter smoke, regressao e demos apenas no workspace TESTE."
+          ]
+        : []
+    },
+    {
+      key: WORKSPACE_KEYS.TESTE,
+      label: "Pagina de teste",
+      description: "Contexto isolado para testar fluxo e dados locais sem tocar na LOA atual.",
+      mode: "sandbox",
+      datasetVisible: true,
+      apiBacked: false,
+      importEnabled: true,
+      mutateEnabled: true,
+      demoTools: true,
+      notice: "A pagina TESTE usa storage proprio e nao envia demo ou reset para a LOA oficial.",
+      stageTitle: "Workspace de teste local",
+      stageDescription: "Use esta base para seus testes. A LOA continua limpa e a API oficial nao recebe dados de homologacao deste contexto.",
+      rules: [
+        "A LOA atual continua intacta e operacional.",
+        "A pagina TESTE fica visivel apenas para MICAEL_DEV.",
+        "Reset Demo e testes locais devem acontecer somente aqui."
+      ],
+      nextSteps: [
+        "Validar importacoes de teste sem contaminar a LOA.",
+        "Usar este mesmo desenho de contexto para a futura base FEDERAL.",
+        "Manter a governanca da LOA separada da homologacao."
+      ]
+    },
+    {
+      key: WORKSPACE_KEYS.FEDERAL,
+      label: "Federal",
+      description: "Placeholder arquitetural para a base FEDERAL, sem impacto na LOA agora.",
+      mode: "future",
+      datasetVisible: false,
+      apiBacked: false,
+      importEnabled: false,
+      mutateEnabled: false,
+      demoTools: false,
+      disabled: true,
+      notice: "A base FEDERAL foi alinhada como proximo contexto do sistema, mas ainda nao esta habilitada nesta fase.",
+      stageTitle: "Base FEDERAL (futuro)",
+      stageDescription: "O sistema ja reconhece a necessidade de uma base FEDERAL, mas a implementacao operacional fica para a proxima etapa.",
+      rules: [
+        "Nao interfere na LOA atual.",
+        "Nao fica disponivel para operacao nesta fase beta.",
+        "Serve como trilha futura da arquitetura por workspace."
+      ],
+      nextSteps: [
+        "Definir regras de negocio especificas da base FEDERAL.",
+        "Criar dataset, historico e dashboard por workspace.",
+        "Ligar permissao por perfil + workspace."
+      ]
+    }
+  ];
+}
+
+function getVisibleWorkspaceDefinitions() {
+  const base = getWorkspaceDefinitions().filter(function (workspace) {
+    if (workspace.key === WORKSPACE_KEYS.LOA) return true;
+    return isWorkspaceOwnerUser();
+  });
+  return base;
+}
+
+function getAccessibleWorkspaceKey(candidate) {
+  const normalized = normalizeWorkspaceKey(candidate);
+  const allowed = getVisibleWorkspaceDefinitions().filter(function (workspace) {
+    return !workspace.disabled;
+  });
+  const found = allowed.find(function (workspace) {
+    return workspace.key === normalized;
+  });
+  return found ? found.key : WORKSPACE_KEYS.LOA;
+}
+
+function syncCurrentWorkspaceAccess() {
+  const nextKey = getAccessibleWorkspaceKey(CURRENT_WORKSPACE || readStoredWorkspaceKey());
+  if (nextKey !== CURRENT_WORKSPACE) {
+    CURRENT_WORKSPACE = nextKey;
+    writeStoredWorkspaceKey(nextKey);
+  }
+  return CURRENT_WORKSPACE;
+}
+
+function getCurrentWorkspaceDefinition() {
+  const currentKey = syncCurrentWorkspaceAccess();
+  const found = getWorkspaceDefinitions().find(function (workspace) {
+    return workspace.key === currentKey;
+  });
+  return found || getWorkspaceDefinitions()[0];
+}
+
+function isOperationalWorkspace() {
+  return getCurrentWorkspaceDefinition().mode === "operational";
+}
+
+function isTestWorkspace() {
+  return getCurrentWorkspaceDefinition().mode === "sandbox";
+}
+
+function canRenderWorkspaceDataset() {
+  return !!getCurrentWorkspaceDefinition().datasetVisible;
+}
+
+function isApiBackedWorkspace() {
+  return !!getCurrentWorkspaceDefinition().apiBacked;
+}
+
+function canImportInCurrentWorkspace() {
+  return !!getCurrentWorkspaceDefinition().importEnabled;
+}
+
+function canMutateInCurrentWorkspace() {
+  return !!getCurrentWorkspaceDefinition().mutateEnabled;
+}
+
+function canUseDemoWorkspaceTools() {
+  return !!getCurrentWorkspaceDefinition().demoTools;
+}
+
+function isLoaPreBetaLocked() {
+  return LOA_PRE_BETA_LOCKED && getCurrentWorkspaceDefinition().key === WORKSPACE_KEYS.LOA;
+}
+
+function getWorkspaceStorageKey() {
+  const base = STORAGE_KEY + "__" + String(getCurrentWorkspaceDefinition().key || WORKSPACE_KEYS.LOA).toLowerCase();
+  return isLoaPreBetaLocked() ? (base + "__prebeta") : base;
+}
+
+function getWorkspaceCrossTabPingKey() {
+  return CROSS_TAB_PING_KEY + "__" + String(getCurrentWorkspaceDefinition().key || WORKSPACE_KEYS.LOA).toLowerCase();
+}
+
+function getWorkspaceLegacyStorageKeys() {
+  return isTestWorkspace() ? LEGACY_STORAGE_KEYS.slice() : [];
+}
+
+function getWorkspaceSeedRecords() {
+  return isTestWorkspace() ? DEMO : [];
+}
+
+function setCurrentWorkspace(nextKey) {
+  const resolved = getAccessibleWorkspaceKey(nextKey);
+  if (!resolved || resolved === CURRENT_WORKSPACE) return;
+  CURRENT_WORKSPACE = resolved;
+  writeStoredWorkspaceKey(resolved);
+  forceCloseModal();
+  selectedId = null;
+  state = loadState();
+  state.records = (state.records || []).map(normalizeRecordShape);
+  migrateLegacyStatusRecords(state.records);
+  syncReferenceKeys(state.records);
+  idCountersByYear = buildIdCounters(state.records);
+  syncYearFilter();
+  if (!isApiBackedWorkspace()) {
+    resetApiLinkedState({
+      apiOnline: false,
+      apiLastError: ""
+    });
+  }
+  applyAccessProfile();
+  render();
+  if (isApiBackedWorkspace()) {
+    Promise.resolve(bootstrapApiIntegration()).catch(function (err) {
+      console.error(err);
+    });
+  }
+}
+
+function setWorkspaceSectionVisibility(sectionEl, visible) {
+  if (!sectionEl) return;
+  sectionEl.classList.toggle("hidden", !visible);
+}
+
+function applyWorkspaceLayoutMode(canUseDataset) {
+  const showBetaPanels = isOperationalWorkspace();
+  setWorkspaceSectionVisibility(mainFiltersCard, canUseDataset);
+  setWorkspaceSectionVisibility(importReport, canUseDataset);
+  setWorkspaceSectionVisibility(betaWorkspace, canUseDataset && showBetaPanels);
+  setWorkspaceSectionVisibility(mainTableCard, canUseDataset);
+  if (!showBetaPanels) {
+    clearBetaAuditPolling();
+    clearBetaSupportPolling();
+    if (roleNotice) roleNotice.classList.add("hidden");
+    if (supervisorQuickPanel) supervisorQuickPanel.classList.add("hidden");
+  }
+}
+
+function getWorkspaceContext() {
+  return {
+    currentWorkspace: getCurrentWorkspaceDefinition(),
+    visibleWorkspaces: getVisibleWorkspaceDefinitions(),
+    canSwitch: getVisibleWorkspaceDefinitions().length > 1,
+    clearNodeChildren: clearNodeChildren,
+    onChange: setCurrentWorkspace
+  };
+}
+
+function renderWorkspaceContext() {
+  const moduleFn = getWorkspaceUtil("renderWorkspaceContext");
+  if (!moduleFn || !workspaceContextBar) return;
+  moduleFn(workspaceContextBar, workspaceModeNotice, workspaceStage, getWorkspaceContext());
 }
 
 function clearEmendaLockTimer() {
@@ -3853,18 +4249,28 @@ function getActiveBetaWorkspaceTab() {
   if (!betaWorkspaceTabTouched) {
     betaWorkspaceTab = getPreferredBetaWorkspaceTab();
   }
-  if (betaWorkspaceTab !== "powerbi" && betaWorkspaceTab !== "history" && betaWorkspaceTab !== "support") {
+  if (betaWorkspaceTab !== "powerbi" && betaWorkspaceTab !== "history" && betaWorkspaceTab !== "support" && betaWorkspaceTab !== "imports") {
     betaWorkspaceTab = getPreferredBetaWorkspaceTab();
   }
+  if (betaWorkspaceTab === "imports" && !isProgramadorUser()) betaWorkspaceTab = getPreferredBetaWorkspaceTab();
   return betaWorkspaceTab;
 }
 
 function setBetaWorkspaceTab(nextTab) {
-  betaWorkspaceTab = nextTab === "powerbi" || nextTab === "support" ? nextTab : "history";
+  if (nextTab === "powerbi" || nextTab === "support") {
+    betaWorkspaceTab = nextTab;
+  } else if (nextTab === "imports" && isProgramadorUser()) {
+    betaWorkspaceTab = "imports";
+  } else {
+    betaWorkspaceTab = "history";
+  }
   betaWorkspaceTabTouched = true;
   syncBetaSupportPolling();
   if (betaWorkspaceTab === "support" && canUseSupportApi() && apiOnline) {
     refreshBetaSupportFromApi(true).catch(function () { /* no-op */ });
+  }
+  if (betaWorkspaceTab === "imports" && isApiEnabled() && isProgramadorUser()) {
+    refreshBetaImportLotsFromApi(true).catch(function () { /* no-op */ });
   }
   render();
 }
@@ -4202,6 +4608,149 @@ function buildSupportApiQuery() {
   if (betaSupportFilters.q) params.set("q", String(betaSupportFilters.q));
   if (getSupportScopeValue() !== "all") params.set("mine_only", "true");
   return params.toString();
+}
+
+function buildBetaImportApiQuery() {
+  const params = new URLSearchParams();
+  params.set("limit", String(BETA_IMPORT_LIMIT));
+  return params.toString();
+}
+
+async function refreshBetaImportLinesFromApi(forceRender, loteId) {
+  if (!isApiEnabled() || !isProgramadorUser()) {
+    betaImportLines = [];
+    betaImportLinesError = isApiEnabled() ? "Painel de governanca disponivel apenas para PROGRAMADOR." : "";
+    betaImportLinesLoading = false;
+    if (forceRender) renderBetaWorkspace(getFiltered());
+    return;
+  }
+  const selectedId = Number(loteId || betaImportSelectedLotId || 0);
+  if (!selectedId) {
+    betaImportLines = [];
+    betaImportLinesError = "";
+    betaImportLinesLoading = false;
+    if (forceRender) renderBetaWorkspace(getFiltered());
+    return;
+  }
+
+  betaImportLinesLoading = true;
+  betaImportLinesError = "";
+  if (forceRender) renderBetaWorkspace(getFiltered());
+  try {
+    const rows = await apiRequest(
+      "GET",
+      "/imports/linhas?lote_id=" + encodeURIComponent(String(selectedId)) + "&limit=" + encodeURIComponent(String(BETA_IMPORT_LINE_LIMIT)),
+      undefined,
+      "UI",
+      { handleAuthFailure: false }
+    );
+    betaImportLines = Array.isArray(rows) ? rows : [];
+  } catch (err) {
+    betaImportLinesError = extractApiError(err, "Falha ao carregar linhas do import.");
+  } finally {
+    betaImportLinesLoading = false;
+    if (forceRender) renderBetaWorkspace(getFiltered());
+  }
+}
+
+async function refreshBetaImportLogsFromApi(forceRender, loteId) {
+  if (!isApiEnabled() || !isProgramadorUser()) {
+    betaImportLogs = [];
+    betaImportLogsError = isApiEnabled() ? "Painel de governanca disponivel apenas para PROGRAMADOR." : "";
+    betaImportLogsLoading = false;
+    if (forceRender) renderBetaWorkspace(getFiltered());
+    return;
+  }
+  const selectedId = Number(loteId || betaImportSelectedLotId || 0);
+  if (!selectedId) {
+    betaImportLogs = [];
+    betaImportLogsError = "";
+    betaImportLogsLoading = false;
+    if (forceRender) renderBetaWorkspace(getFiltered());
+    return;
+  }
+
+  betaImportLogsLoading = true;
+  betaImportLogsError = "";
+  if (forceRender) renderBetaWorkspace(getFiltered());
+  try {
+    const rows = await apiRequest(
+      "GET",
+      "/imports/lotes/" + encodeURIComponent(String(selectedId)) + "/governanca/logs?limit=" + encodeURIComponent(String(BETA_IMPORT_LOG_LIMIT)),
+      undefined,
+      "UI",
+      { handleAuthFailure: false }
+    );
+    betaImportLogs = Array.isArray(rows) ? rows : [];
+  } catch (err) {
+    betaImportLogsError = extractApiError(err, "Falha ao carregar logs de governanca do import.");
+  } finally {
+    betaImportLogsLoading = false;
+    if (forceRender) renderBetaWorkspace(getFiltered());
+  }
+}
+
+async function refreshBetaImportLotsFromApi(forceRender) {
+  if (!isApiEnabled() || !isProgramadorUser()) {
+    betaImportLots = [];
+    betaImportLotsError = isApiEnabled() ? "Painel de governanca disponivel apenas para PROGRAMADOR." : "";
+    betaImportLotsLastSyncAt = "";
+    betaImportLotsLoading = false;
+    betaImportSelectedLotId = 0;
+    betaImportLines = [];
+    betaImportLogs = [];
+    if (forceRender) renderBetaWorkspace(getFiltered());
+    return;
+  }
+  if (betaImportLotsLoading) return;
+
+  betaImportLotsLoading = true;
+  betaImportLotsError = "";
+  if (forceRender) renderBetaWorkspace(getFiltered());
+  try {
+    const rows = await apiRequest("GET", "/imports/lotes?" + buildBetaImportApiQuery(), undefined, "UI", { handleAuthFailure: false });
+    betaImportLots = Array.isArray(rows) ? rows : [];
+    betaImportLotsLastSyncAt = isoNow();
+    const hasSelected = betaImportLots.some(function (item) {
+      return Number(item && item.id ? item.id : 0) === Number(betaImportSelectedLotId || 0);
+    });
+    if (!hasSelected) {
+      betaImportSelectedLotId = betaImportLots.length ? Number(betaImportLots[0].id || 0) : 0;
+    }
+    await Promise.all([
+      refreshBetaImportLinesFromApi(false, betaImportSelectedLotId),
+      refreshBetaImportLogsFromApi(false, betaImportSelectedLotId)
+    ]);
+  } catch (err) {
+    betaImportLotsError = extractApiError(err, "Falha ao carregar historico de imports.");
+  } finally {
+    betaImportLotsLoading = false;
+    if (forceRender) renderBetaWorkspace(getFiltered());
+  }
+}
+
+async function governImportLotFromApi(loteId, acao, motivo) {
+  if (!isApiEnabled() || !isProgramadorUser()) {
+    throw new Error("Governanca de import disponivel apenas para PROGRAMADOR.");
+  }
+  const selectedId = Number(loteId || 0);
+  if (!selectedId) {
+    throw new Error("Selecione um lote de importacao.");
+  }
+  const payload = {
+    acao: String(acao || "").trim().toUpperCase(),
+    motivo: String(motivo || "").trim()
+  };
+  const response = await apiRequest(
+    "PATCH",
+    "/imports/lotes/" + encodeURIComponent(String(selectedId)) + "/governanca",
+    payload,
+    "UI"
+  );
+  await refreshBetaImportLotsFromApi(false);
+  Promise.resolve(refreshBetaAuditFromApi(false)).catch(function () { /* no-op */ });
+  renderBetaWorkspace(getFiltered());
+  return response;
 }
 
 async function refreshBetaSupportMessagesFromApi(forceRender, threadId) {
@@ -4669,6 +5218,20 @@ function resetBetaSupportStateLocal() {
   betaSupportMessagesLoading = false;
 }
 
+function resetBetaImportStateLocal() {
+  betaImportLots = [];
+  betaImportLotsLoading = false;
+  betaImportLotsError = "";
+  betaImportLotsLastSyncAt = "";
+  betaImportSelectedLotId = 0;
+  betaImportLines = [];
+  betaImportLinesLoading = false;
+  betaImportLinesError = "";
+  betaImportLogs = [];
+  betaImportLogsLoading = false;
+  betaImportLogsError = "";
+}
+
 function readAuthenticatedProfileFromStore() {
   const fn = getAuthStoreUtil("readAuthenticatedProfile");
   return fn ? fn(AUTH_KEYS) : null;
@@ -4772,12 +5335,14 @@ function getAuthSessionContext() {
 
 function getLocalStateContext() {
   return {
-    storageKey: STORAGE_KEY,
-    legacyStorageKeys: LEGACY_STORAGE_KEYS,
-    crossTabPingKey: CROSS_TAB_PING_KEY,
+    storageKey: getWorkspaceStorageKey(),
+    legacyStorageKeys: getWorkspaceLegacyStorageKeys(),
+    crossTabPingKey: getWorkspaceCrossTabPingKey(),
     localTabId: LOCAL_TAB_ID,
     stateChannel: stateChannel,
-    demoRecords: DEMO,
+    workspaceKey: getCurrentWorkspaceDefinition().key,
+    seedRecords: getWorkspaceSeedRecords(),
+    ignorePersistedState: isLoaPreBetaLocked(),
     getPrimaryStorage: getPrimaryStorage,
     getSecondaryStorage: getSecondaryStorage,
     readStorageValue: readStorageValue,
@@ -4793,6 +5358,10 @@ function getLocalStateContext() {
     },
     setState: function (nextState) {
       state = nextState;
+    },
+    afterLoadState: function (nextState) {
+      const nextRecords = nextState && Array.isArray(nextState.records) ? nextState.records : [];
+      idCountersByYear = buildIdCounters(nextRecords);
     },
     getActiveUsersWithLastMark: getActiveUsersWithLastMark
   };
@@ -4845,9 +5414,12 @@ function getAuthFlowContext() {
 function getAppLifecycleContext() {
   return {
     stateChannel: stateChannel,
-    STORAGE_KEY: STORAGE_KEY,
-    CROSS_TAB_PING_KEY: CROSS_TAB_PING_KEY,
+    getStorageKey: getWorkspaceStorageKey,
+    getCrossTabPingKey: getWorkspaceCrossTabPingKey,
     LOCAL_TAB_ID: LOCAL_TAB_ID,
+    getWorkspaceKey: function () {
+      return getCurrentWorkspaceDefinition().key;
+    },
     refreshStateFromStorage: refreshStateFromStorage,
     initSelects: initSelects,
     setupAuthUi: setupAuthUi,
@@ -4950,6 +5522,7 @@ function resetApiLinkedState(options) {
       clearApiStatePolling: clearApiStatePolling,
       resetBetaAuditState: resetBetaAuditStateLocal,
       resetBetaSupportState: resetBetaSupportStateLocal,
+      resetBetaImportState: resetBetaImportStateLocal,
       setApiOnline: function (nextOnline) {
         apiOnline = !!nextOnline;
       },
@@ -4966,6 +5539,7 @@ function resetApiLinkedState(options) {
   clearApiStatePolling();
   resetBetaAuditStateLocal();
   resetBetaSupportStateLocal();
+  resetBetaImportStateLocal();
   apiOnline = Object.prototype.hasOwnProperty.call(opts, "apiOnline") ? !!opts.apiOnline : false;
   apiLastError = Object.prototype.hasOwnProperty.call(opts, "apiLastError") ? String(opts.apiLastError || "") : "";
 }
@@ -5038,10 +5612,12 @@ function getBetaWorkspaceContext() {
     activeTab: getActiveBetaWorkspaceTab(),
     clearNodeChildren: clearNodeChildren,
     canViewGlobalAuditApi: canViewGlobalAuditApi,
+    showImportGovernance: isProgramadorUser(),
     setTab: setBetaWorkspaceTab,
     renderHistory: renderBetaHistoryPanel,
     renderPowerBi: renderBetaPowerBiPanel,
-    renderSupport: renderBetaSupportPanel
+    renderSupport: renderBetaSupportPanel,
+    renderImports: renderBetaImportsPanel
   };
 }
 
@@ -5052,6 +5628,42 @@ function getExecutiveExportContext() {
     currentRole: CURRENT_ROLE,
     currentUser: CURRENT_USER,
     filters: betaPowerBiFilters
+  };
+}
+
+function getBetaImportsContext() {
+  return {
+    lots: betaImportLots,
+    loading: betaImportLotsLoading,
+    error: betaImportLotsError,
+    lastSyncAt: betaImportLotsLastSyncAt,
+    selectedLotId: betaImportSelectedLotId,
+    lines: betaImportLines,
+    linesLoading: betaImportLinesLoading,
+    linesError: betaImportLinesError,
+    logs: betaImportLogs,
+    logsLoading: betaImportLogsLoading,
+    logsError: betaImportLogsError,
+    filters: betaImportFilters,
+    filterDefaults: BETA_IMPORT_FILTER_DEFAULTS,
+    clearNodeChildren: clearNodeChildren,
+    setSelectOptions: setSelectOptions,
+    fmtDateTime: fmtDateTime,
+    extractApiError: extractApiError,
+    canView: isProgramadorUser,
+    canOpenRecord: canOpenImportLineRecord,
+    openRecord: openImportLineRecord,
+    refreshLots: refreshBetaImportLotsFromApi,
+    refreshLines: refreshBetaImportLinesFromApi,
+    refreshLogs: refreshBetaImportLogsFromApi,
+    governLot: governImportLotFromApi,
+    rerender: rerenderBetaWorkspaceFiltered,
+    setFilters: function (nextFilters) {
+      betaImportFilters = nextFilters;
+    },
+    setSelectedLotId: function (nextId) {
+      betaImportSelectedLotId = Number(nextId || 0);
+    }
   };
 }
 
@@ -5124,7 +5736,11 @@ function getAccessProfileContext() {
     btnProfile: btnProfile,
     btnLogout: btnLogout,
     getStorageMode: getStorageMode,
+    isWorkspaceOperational: isOperationalWorkspace,
+    canUseWorkspaceDataset: canRenderWorkspaceDataset,
+    canUseDemoTools: canUseDemoWorkspaceTools,
     getReadOnlyRoleMeta: getReadOnlyRoleMeta,
+    canImportData: canImportData,
     renderRoleNotice: renderRoleNotice,
     renderSupervisorQuickPanel: renderSupervisorQuickPanel,
     applyModalAccessProfile: applyModalAccessProfile,
@@ -5177,6 +5793,19 @@ function renderBetaSupportPanel(target, filteredRows) {
   const empty = document.createElement("p");
   empty.className = "beta-empty";
   empty.textContent = "Painel de suporte indisponivel nesta compilacao.";
+  target.appendChild(empty);
+}
+
+function renderBetaImportsPanel(target, filteredRows) {
+  const moduleFn = getBetaImportsUtil("renderBetaImportsPanel");
+  if (moduleFn) {
+    return moduleFn(target, filteredRows, getBetaImportsContext());
+  }
+
+  clearNodeChildren(target);
+  const empty = document.createElement("p");
+  empty.className = "beta-empty";
+  empty.textContent = "Painel de governanca de import indisponivel nesta compilacao.";
   target.appendChild(empty);
 }
 
@@ -5554,6 +6183,9 @@ function applyAccessProfile() {
   const readOnlyMeta = getReadOnlyRoleMeta();
   const canManageData = isOwner || CURRENT_ROLE === "APG";
   const canCreateProfiles = isOwner;
+  const isWorkspaceOperational = isOperationalWorkspace();
+  const canUseWorkspaceDataset = canRenderWorkspaceDataset();
+  const canUseDemoTools = canUseDemoWorkspaceTools();
   const apiTag = apiOnline ? "API online" : "modo local";
   const storageTag = getStorageMode() === STORAGE_MODE_LOCAL ? "persistencia local" : "sessao";
   const viewTag = isOwner ? " (dono)" : (readOnlyMeta ? readOnlyMeta.viewTag : "");
@@ -5562,21 +6194,23 @@ function applyAccessProfile() {
     currentUserInfo.textContent = "Usuario: " + CURRENT_USER + " / " + CURRENT_ROLE + viewTag + " | " + apiTag + " | " + storageTag;
   }
 
-  if (btnExportAtuais) btnExportAtuais.style.display = "inline-block";
-  if (btnExportHistorico) btnExportHistorico.style.display = "inline-block";
-  if (btnExportCustom) btnExportCustom.style.display = "inline-block";
-  if (btnPendingApprovals) btnPendingApprovals.style.display = isOwner ? "inline-block" : "none";
+  if (btnExportAtuais) btnExportAtuais.style.display = canUseWorkspaceDataset ? "inline-block" : "none";
+  if (btnExportHistorico) btnExportHistorico.style.display = canUseWorkspaceDataset ? "inline-block" : "none";
+  if (btnExportCustom) btnExportCustom.style.display = canUseWorkspaceDataset ? "inline-block" : "none";
+  if (btnPendingApprovals) btnPendingApprovals.style.display = isOwner && isWorkspaceOperational ? "inline-block" : "none";
   if (btnCreateProfile) btnCreateProfile.style.display = canCreateProfiles ? "inline-block" : "none";
-  if (importLabel) importLabel.style.display = canManageData ? "inline-block" : "none";
-  if (btnReset) btnReset.style.display = isOwner ? "inline-block" : "none";
-  if (btnDemo4Users) btnDemo4Users.style.display = isOwner ? "inline-block" : "none";
+  if (importLabel) importLabel.style.display = canUseWorkspaceDataset && canImportData() ? "inline-block" : "none";
+  if (btnReset) btnReset.style.display = isOwner && canUseDemoTools ? "inline-block" : "none";
+  if (btnDemo4Users) btnDemo4Users.style.display = isOwner && canUseDemoTools ? "inline-block" : "none";
   if (btnProfile) btnProfile.style.display = "inline-block";
   if (btnLogout) btnLogout.style.display = "inline-block";
-  renderRoleNotice();
-  renderSupervisorQuickPanel();
-  applyModalAccessProfile();
-  syncBetaAuditPolling();
-  syncBetaSupportPolling();
+  if (isWorkspaceOperational) {
+    renderRoleNotice();
+    renderSupervisorQuickPanel();
+    applyModalAccessProfile();
+    syncBetaAuditPolling();
+    syncBetaSupportPolling();
+  }
   refreshProfileModal();
 }
 
@@ -6149,6 +6783,7 @@ function connectApiSocket() {
 }
 // Decide se a UI deve operar em modo API (nuvem) ou local.
 function isApiEnabled() {
+  if (!isApiBackedWorkspace()) return false;
   const isApiEnabledUtil = getApiClientUtil("isApiEnabled");
   if (isApiEnabledUtil) {
     return isApiEnabledUtil();

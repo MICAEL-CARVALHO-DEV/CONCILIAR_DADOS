@@ -16,6 +16,10 @@
     return Array.isArray(ctx.supportManagerRoles) && ctx.supportManagerRoles.indexOf(ctx.currentRole) >= 0;
   }
 
+  function isProgramadorUser(ctx) {
+    return String((ctx || {}).currentRole || "").trim().toUpperCase() === "PROGRAMADOR";
+  }
+
   function getReadOnlyRoleMeta(ctx) {
     if (isSupervisorUser(ctx)) {
       return {
@@ -55,27 +59,33 @@
   }
 
   function canViewGlobalAuditApi(ctx) {
-    return ctx.isApiEnabled() && ["APG", "SUPERVISAO", "POWERBI", "PROGRAMADOR"].indexOf(ctx.currentRole) >= 0;
+    return String(ctx.workspaceMode || "operational") === "operational" && ctx.isApiEnabled() && ["APG", "SUPERVISAO", "POWERBI", "PROGRAMADOR"].indexOf(ctx.currentRole) >= 0;
   }
 
   function canUseSupportApi(ctx) {
-    return ctx.isApiEnabled() && !!ctx.currentUser;
+    return String(ctx.workspaceMode || "operational") === "operational" && ctx.isApiEnabled() && !!ctx.currentUser;
+  }
+
+  function canImportData(ctx) {
+    return !!ctx.currentUser && !!ctx.workspaceAllowsImport;
   }
 
   function canMutateRecords(ctx) {
-    return !isReadOnlyRoleUser(ctx);
+    return !!ctx.workspaceAllowsMutation && !isReadOnlyRoleUser(ctx);
   }
 
   root.roleAccessUtils = {
     isSupervisorUser: isSupervisorUser,
     isPowerBiUser: isPowerBiUser,
     isSupportManagerUser: isSupportManagerUser,
+    isProgramadorUser: isProgramadorUser,
     getReadOnlyRoleMeta: getReadOnlyRoleMeta,
     isReadOnlyRoleUser: isReadOnlyRoleUser,
     getReadOnlyRoleMessage: getReadOnlyRoleMessage,
     getReadOnlyRoleLockLabel: getReadOnlyRoleLockLabel,
     canViewGlobalAuditApi: canViewGlobalAuditApi,
     canUseSupportApi: canUseSupportApi,
+    canImportData: canImportData,
     canMutateRecords: canMutateRecords
   };
 })(typeof window !== "undefined" ? window : globalThis);

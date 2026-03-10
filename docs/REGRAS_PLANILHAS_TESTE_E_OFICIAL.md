@@ -211,6 +211,13 @@ Estas decisoes precisam ser fechadas antes de codar:
 - consolidar governanca estrutural
 - consolidar exportacao oficial em pasta oficial
 
+### Fase 4 - pos-beta
+- implementar separacao real por `workspace_id` no backend
+- migrar `LOA atual` para workspace oficial persistente
+- transformar `TESTE` em workspace real de homologacao
+- ligar `FEDERAL` quando a regra operacional estiver pronta
+- referencia oficial: `docs/PLANO_POS_BETA_WORKSPACE_BACKEND.md`
+
 ## Relacao com itens do mapa mestre
 - `C19-A`: cadeia oficial de import
 - `C25-B`: governanca de campos estruturais
@@ -225,6 +232,7 @@ Estas decisoes precisam ser fechadas antes de codar:
   - proteger a oficial
   - permitir teste isolado
   - manter rastreabilidade por planilha
+- A separacao completa de dados por `workspace_id` no backend fica adiada para a fase pos-beta.
 
 ## Resume from
 - Antes de implementar essa logica, abrir este documento junto com `CHECK62.md` e fechar as 5 decisoes minimas listadas aqui.

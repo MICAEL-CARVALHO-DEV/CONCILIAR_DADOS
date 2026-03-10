@@ -11,6 +11,10 @@
   }
 
   function generateRandomMultiUserDemo(ctx) {
+    if (typeof ctx.canUseDemoTools === "function" && !ctx.canUseDemoTools()) {
+      globalScope.alert("A demo de usuarios so pode ser aplicada na Pagina de teste.");
+      return;
+    }
     var currentState = ctx.getState();
     if (!Array.isArray(currentState.records) || currentState.records.length === 0) {
       ctx.setState({ records: ctx.deepClone(ctx.DEMO).map(ctx.normalizeRecordShape) });
@@ -47,14 +51,19 @@
     var btnReset = opts.btnReset || null;
     var fileCsv = opts.fileCsv || null;
     var canMutateRecords = typeof opts.canMutateRecords === "function" ? opts.canMutateRecords : function () { return false; };
+    var canImportData = typeof opts.canImportData === "function" ? opts.canImportData : canMutateRecords;
 
     if (btnReset) {
       btnReset.addEventListener("click", function () {
+        if (typeof opts.canUseDemoTools === "function" && !opts.canUseDemoTools()) {
+          globalScope.alert("O reset de demo so pode ser usado na Pagina de teste.");
+          return;
+        }
         if (!canMutateRecords()) {
           globalScope.alert("Perfil SUPERVISAO nao pode resetar dados.");
           return;
         }
-        if (!globalScope.confirm("Resetar para dados DEMO? Isso apaga alteracoes locais.")) return;
+        if (!globalScope.confirm("Resetar a Pagina de teste para dados DEMO? Isso apaga alteracoes locais deste workspace.")) return;
         opts.setState({ records: opts.deepClone(opts.DEMO).map(opts.normalizeRecordShape) });
         var nextState = opts.getState();
         opts.setIdCountersByYear(opts.buildIdCounters(nextState.records));
@@ -71,8 +80,8 @@
 
     if (fileCsv) {
       fileCsv.addEventListener("change", async function () {
-        if (!canMutateRecords()) {
-          globalScope.alert("Perfil SUPERVISAO nao pode importar planilhas.");
+        if (!canImportData()) {
+          globalScope.alert("Usuario sem permissao para importar planilhas.");
           fileCsv.value = "";
           return;
         }
@@ -101,6 +110,9 @@
           var loteId = await opts.syncImportBatchToApi(file, report);
           if (loteId) {
             await opts.syncImportLinesToApi(loteId, report.rowDetails || []);
+            if (typeof opts.refreshImportLots === "function") {
+              Promise.resolve(opts.refreshImportLots(false)).catch(function () { /* no-op */ });
+            }
           }
 
           var extraDemoInfo = removedDemo > 0 ? (" | Demos removidos: " + String(removedDemo)) : "";

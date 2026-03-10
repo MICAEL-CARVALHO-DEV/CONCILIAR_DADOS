@@ -123,6 +123,50 @@ def ensure_legacy_schema(engine) -> None:
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_import_linhas_id_interno ON import_linhas(id_interno)"))
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_import_linhas_ref_key ON import_linhas(ref_key)"))
 
+    if "lotes_importacao" in tables:
+        cols = {c["name"] for c in insp.get_columns("lotes_importacao")}
+        statements = []
+        if "status_governanca" not in cols:
+            statements.append("ALTER TABLE lotes_importacao ADD COLUMN status_governanca VARCHAR(20) NOT NULL DEFAULT 'APLICADO'")
+        if "governanca_motivo" not in cols:
+            statements.append("ALTER TABLE lotes_importacao ADD COLUMN governanca_motivo TEXT NOT NULL DEFAULT ''")
+        if "governado_por_id" not in cols:
+            statements.append("ALTER TABLE lotes_importacao ADD COLUMN governado_por_id INTEGER")
+        if "governado_por_nome" not in cols:
+            statements.append("ALTER TABLE lotes_importacao ADD COLUMN governado_por_nome VARCHAR(120) NOT NULL DEFAULT ''")
+        if "governado_por_setor" not in cols:
+            statements.append("ALTER TABLE lotes_importacao ADD COLUMN governado_por_setor VARCHAR(40) NOT NULL DEFAULT ''")
+        if "governado_em" not in cols:
+            statements.append("ALTER TABLE lotes_importacao ADD COLUMN governado_em TIMESTAMP")
+        if "registros_removidos" not in cols:
+            statements.append("ALTER TABLE lotes_importacao ADD COLUMN registros_removidos INTEGER NOT NULL DEFAULT 0")
+
+        with engine.begin() as conn:
+            for st in statements:
+                conn.execute(text(st))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_lotes_importacao_created_at ON lotes_importacao(created_at)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_lotes_importacao_usuario_id ON lotes_importacao(usuario_id)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_lotes_importacao_status_governanca ON lotes_importacao(status_governanca)"))
+
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS import_governanca_logs ("
+                "id INTEGER PRIMARY KEY, "
+                "lote_id INTEGER NOT NULL, "
+                "acao VARCHAR(20) NOT NULL, "
+                "motivo TEXT NOT NULL DEFAULT '', "
+                "usuario_id INTEGER NULL, "
+                "usuario_nome VARCHAR(120) NOT NULL DEFAULT '', "
+                "setor VARCHAR(40) NOT NULL DEFAULT '', "
+                "detalhes_json TEXT NOT NULL DEFAULT '', "
+                "created_at TIMESTAMP NOT NULL"
+                ")"
+            )
+        )
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_import_governanca_logs_lote_id ON import_governanca_logs(lote_id)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_import_governanca_logs_created_at ON import_governanca_logs(created_at)"))
+
     if "export_logs" in tables:
         cols = {c["name"] for c in insp.get_columns("export_logs")}
         statements = []
