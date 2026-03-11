@@ -74,6 +74,7 @@ const normalizeUtils = SEC_FRONTEND.normalizeUtils || null;
 const localStateUtils = SEC_FRONTEND.localStateUtils || null;
 const importNormalizationUtils = SEC_FRONTEND.importNormalizationUtils || null;
 const importPipelineUtils = SEC_FRONTEND.importPipelineUtils || null;
+const importProcessorUtils = SEC_FRONTEND.importProcessorUtils || null;
 const idUtils = SEC_FRONTEND.idUtils || null;
 const statusUtils = SEC_FRONTEND.statusUtils || null;
 const progressUtils = SEC_FRONTEND.progressUtils || null;
@@ -570,6 +571,12 @@ function getImportNormalizationUtil(methodName) {
 function getImportPipelineUtil(methodName) {
   if (!importPipelineUtils) return null;
   const method = importPipelineUtils[methodName];
+  return typeof method === "function" ? method : null;
+}
+
+function getImportProcessorUtil(methodName) {
+  if (!importProcessorUtils) return null;
+  const method = importProcessorUtils[methodName];
   return typeof method === "function" ? method : null;
 }
 
