@@ -182,13 +182,13 @@ Funcoes centrais:
 - `processImportedRows()`
 - `createRecordFromImport()`
 - `mergeImportIntoRecord()`
-- `parseInputFile()`
+- `preview-xlsx` (backend-first)
 - `detectHeaderRow()`
 
 Destino futuro:
 
 - `frontend/js/features/import/processImport.js`
-- `frontend/js/features/import/parseWorkbook.js`
+- `backend/app/services/import_export_service.py`
 - `frontend/js/features/import/validation.js`
 
 ## 8. Auth gate e sessao no frontend

@@ -73,10 +73,7 @@ const formatUtils = SEC_FRONTEND.formatUtils || null;
 const normalizeUtils = SEC_FRONTEND.normalizeUtils || null;
 const localStateUtils = SEC_FRONTEND.localStateUtils || null;
 const importNormalizationUtils = SEC_FRONTEND.importNormalizationUtils || null;
-const importValidationUtils = SEC_FRONTEND.importValidationUtils || null;
 const importPipelineUtils = SEC_FRONTEND.importPipelineUtils || null;
-const importProcessorUtils = SEC_FRONTEND.importProcessorUtils || null;
-const importReaderUtils = SEC_FRONTEND.importReaderUtils || null;
 const idUtils = SEC_FRONTEND.idUtils || null;
 const statusUtils = SEC_FRONTEND.statusUtils || null;
 const progressUtils = SEC_FRONTEND.progressUtils || null;
@@ -205,19 +202,19 @@ const MODAL_FIELD_ORDER = [
   { key: "ref_key", label: "Ref Key", editable: false }
 ];
 const IMPORT_ALIASES = {
-  id: ["id", "id_interno", "id interno", "codigo_interno", "codigo interno"],
+  id: ["id", "id_interno", "id interno", "codigo_interno", "codigo interno", "emenda"],
   ano: ["ano", "exercicio"],
-  identificacao: ["identificacao", "identificacao_emenda", "numero_emenda", "emenda", "identificacao da emenda"],
-  cod_subfonte: ["cod_subfonte", "codigo_subfonte", "subfonte", "cod subfonte"],
+  identificacao: ["identificacao", "identificacao_emenda", "numero_emenda", "identificacao da emenda"],
+  cod_subfonte: ["cod_subfonte", "codigo_subfonte", "subfonte", "cod subfonte", "cod. subfonte"],
   deputado: ["deputado", "autor", "parlamentar"],
-  cod_uo: ["cod_uo", "codigo_uo", "uo", "cod uo"],
-  sigla_uo: ["sigla_uo", "sigla uo", "uo_sigla", "sigla da uo", "sigla do uo"],
-  cod_orgao: ["cod_orgao", "codigo_orgao", "orgao", "cod orgao"],
-  cod_acao: ["cod_acao", "codigo_acao", "acao", "cod acao", "cod da acao", "cod. da acao", "codigo da acao"],
-  descricao_acao: ["descricao_acao", "descricao da acao", "acao_descricao", "descricao", "descritor da acao"],
+  cod_uo: ["cod_uo", "codigo_uo", "uo", "cod uo", "cod. uo"],
+  sigla_uo: ["sigla_uo", "sigla uo", "uo_sigla", "sigla da uo", "sigla do uo", "sigla do orgao", "sigla do órgão"],
+  cod_orgao: ["cod_orgao", "codigo_orgao", "orgao", "cod orgao", "cod. orgao", "cod. órgão"],
+  cod_acao: ["cod_acao", "codigo_acao", "acao", "cod acao", "cod da acao", "cod. da acao", "codigo da acao", "cód. da ação"],
+  descricao_acao: ["descricao_acao", "descricao da acao", "acao_descricao", "descricao", "descritor da acao", "descritor da ação"],
   plan_a: ["plan_a", "plano_a", "plano a", "planoa", "plano a acao", "plano de acao a"],
   plan_b: ["plan_b", "plano_b", "plano b", "planob", "plano b acao", "plano de acao b"],
-  municipio: ["municipio", "cidade", "municipio / estado", "municipio estado"],
+  municipio: ["municipio", "cidade", "municipio / estado", "municipio estado", "município / estado"],
   valor_inicial: ["valor_inicial", "valor inicial", "valor_original", "valor original", "valor inicial epi"],
   valor_atual: ["valor_atual", "valor atual", "valor", "valor_emenda", "valor emenda", "valor atual epi"],
   processo_sei: ["processo_sei", "processo sei", "sei", "processo"],
@@ -570,27 +567,9 @@ function getImportNormalizationUtil(methodName) {
   return typeof method === "function" ? method : null;
 }
 
-function getImportValidationUtil(methodName) {
-  if (!importValidationUtils) return null;
-  const method = importValidationUtils[methodName];
-  return typeof method === "function" ? method : null;
-}
-
 function getImportPipelineUtil(methodName) {
   if (!importPipelineUtils) return null;
   const method = importPipelineUtils[methodName];
-  return typeof method === "function" ? method : null;
-}
-
-function getImportProcessorUtil(methodName) {
-  if (!importProcessorUtils) return null;
-  const method = importProcessorUtils[methodName];
-  return typeof method === "function" ? method : null;
-}
-
-function getImportReaderUtil(methodName) {
-  if (!importReaderUtils) return null;
-  const method = importReaderUtils[methodName];
   return typeof method === "function" ? method : null;
 }
 
@@ -1236,7 +1215,14 @@ function getImportControlsContext() {
     setLastImportedPlanilha1Aoa: function (nextValue) {
       lastImportedPlanilha1Aoa = nextValue;
     },
-    parseInputFile: parseInputFile,
+    setLastImportValidation: function (nextValue) {
+      lastImportValidation = nextValue || null;
+    },
+    setLastImportedWorkbookTemplate: function (nextValue) {
+      lastImportedWorkbookTemplate = nextValue || null;
+    },
+    isApiEnabled: isApiEnabled,
+    previewImportXlsx: previewImportXlsx,
     purgeDemoBeforeOfficialImport: purgeDemoBeforeOfficialImport,
     processImportedRows: processImportedRows,
     showImportReport: showImportReport,
@@ -2474,8 +2460,7 @@ function processImportedRows(sourceRows, fileName) {
       mapImportRow: mapImportRow,
       hasUsefulData: hasUsefulData,
       createRecordFromImport: createRecordFromImport,
-      mergeImportIntoRecord: mergeImportIntoRecord,
-      buildImportValidationReport: buildImportValidationReport
+      mergeImportIntoRecord: mergeImportIntoRecord
     });
   }
 
@@ -2508,6 +2493,10 @@ function processImportedRows(sourceRows, fileName) {
 
   sourceRows.forEach(function (ctx) {
     sheetSet.add(ctx.sheetName || "XLSX");
+    const previewStatus = String((((ctx || {}).row || {}).__previewStatus) || "").trim().toUpperCase();
+    if (previewStatus === "SKIPPED" || previewStatus === "CONFLICT" || previewStatus === "UNCHANGED") {
+      return;
+    }
     const incoming = mapImportRow(ctx);
 
     if (!hasUsefulData(incoming)) {
@@ -2579,7 +2568,6 @@ function processImportedRows(sourceRows, fileName) {
   });
 
   report.sheetNames = Array.from(sheetSet);
-  if (!report.validation) report.validation = buildImportValidationReport(sourceRows);
   return report;
 }
 
@@ -2718,14 +2706,15 @@ function mapImportRow(ctx) {
   const row = normalizeRowKeys(rawOriginal);
 
   const ano = importCtx.toInt(importCtx.pickValue(row, importCtx.importAliases.ano));
-  const identificacao = importCtx.asText(importCtx.pickValue(row, importCtx.importAliases.identificacao));
+  const rowId = importCtx.asText(importCtx.pickValue(row, importCtx.importAliases.id));
+  const identificacao = importCtx.asText(importCtx.pickValue(row, importCtx.importAliases.identificacao)) || rowId;
   const codSubfonte = importCtx.asText(importCtx.pickValue(row, importCtx.importAliases.cod_subfonte));
   const codAcao = importCtx.asText(importCtx.pickValue(row, importCtx.importAliases.cod_acao));
   const municipio = importCtx.asText(importCtx.pickValue(row, importCtx.importAliases.municipio));
   const deputado = importCtx.asText(importCtx.pickValue(row, importCtx.importAliases.deputado));
 
   const record = {
-    id: importCtx.asText(importCtx.pickValue(row, importCtx.importAliases.id)),
+    id: rowId,
     ano: ano || importCtx.currentYear(),
     identificacao: identificacao,
     cod_subfonte: codSubfonte,
@@ -2819,295 +2808,7 @@ function buildImportNote(fileName, ctx) {
   return "Importado de " + fileName + " | Aba: " + (ctx.sheetName || "XLSX") + " | Linha: " + String(ctx.rowNumber || "-");
 }
 
-// Le arquivo XLSX, detecta cabecalho e extrai linhas validas para importacao.
-async function parseInputFile(file) {
-  const parseInputFileUtil = getImportReaderUtil("parseInputFile");
-  if (parseInputFileUtil) {
-    const result = await parseInputFileUtil(file, {
-      xlsxApi: getXlsxApi(),
-      buildKnownHeaderSet: buildKnownHeaderSet,
-      detectHeaderRow: detectHeaderRow,
-      normalizeHeader: normalizeHeader,
-      isRowEmpty: isRowEmpty,
-      rowArrayToObject: rowArrayToObject,
-      extractPlanilha1AoaFromWorkbook: extractPlanilha1AoaFromWorkbook,
-      isoNow: isoNow,
-      buildImportValidationReport: buildImportValidationReport,
-      text: text,
-      normalizeLooseText: normalizeLooseText
-    });
-    lastImportedPlanilha1Aoa = result && Array.isArray(result.planilha1Aoa) ? result.planilha1Aoa : null;
-    lastImportedWorkbookTemplate = result && result.templateSnapshot ? result.templateSnapshot : null;
-    lastImportValidation = result ? result.validation || null : null;
-    return result && Array.isArray(result.rows) ? result.rows : [];
-  }
-
-  const name = String(file.name || "").toLowerCase();
-
-  if (!name.endsWith(".xlsx")) {
-    throw new Error("Formato nao suportado. Use apenas XLSX.");
-  }
-
-  const xlsxApi = getXlsxApi();
-  if (!xlsxApi) throw new Error("Biblioteca XLSX nao carregada.");
-
-  const buffer = await file.arrayBuffer();
-  const templateBuffer = buffer.slice(0);
-  const wb = xlsxApi.read(buffer, {
-    type: "array",
-    raw: false,
-    cellFormula: true,
-    cellNF: true,
-    cellStyles: true,
-    cellDates: false
-  });
-  const out = [];
-  const knownHeaders = buildKnownHeaderSet();
-  lastImportedPlanilha1Aoa = extractPlanilha1AoaFromWorkbook(wb, xlsxApi);
-
-  const preferredSheet = wb.SheetNames.includes("Controle de EPI") ? "Controle de EPI" : null;
-  const orderedSheetNames = preferredSheet
-    ? [preferredSheet].concat(wb.SheetNames.filter(function (n) { return n !== preferredSheet; }))
-    : wb.SheetNames.slice();
-
-  orderedSheetNames.forEach(function (sheetName) {
-    const sheet = wb.Sheets[sheetName];
-    const matrix = xlsxApi.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false, blankrows: false });
-    const detected = detectHeaderRow(matrix);
-    if (!detected) return;
-
-    const headers = detected.headers;
-    const recognizedCount = headers.reduce(function (acc, h) {
-      return acc + (knownHeaders.has(normalizeHeader(h)) ? 1 : 0);
-    }, 0);
-
-    if (sheetName === "Controle de EPI" && recognizedCount < 5) {
-      throw new Error("Cabecalho da aba Controle de EPI nao reconhecido. Verifique se a linha de cabecalho esta correta.");
-    }
-    if (sheetName !== "Controle de EPI" && recognizedCount < 3) return;
-
-    for (let r = detected.headerRowIndex + 1; r < matrix.length; r += 1) {
-      const arr = matrix[r] || [];
-      if (isRowEmpty(arr)) continue;
-      const rowObj = rowArrayToObject(arr, headers);
-      out.push({ sheetName: sheetName, rowNumber: r + 1, row: rowObj });
-    }
-  });
-
-  lastImportedWorkbookTemplate = {
-    fileName: file.name || "template.xlsx",
-    importedAt: isoNow(),
-    preferredSheet: preferredSheet || "",
-    buffer: templateBuffer
-  };
-
-  lastImportValidation = buildImportValidationReport(out);
-  return out;
-}
-
-
-function extractPlanilha1AoaFromWorkbook(workbook, xlsxApi) {
-  const extractPlanilha1AoaFromWorkbookUtil = getImportReaderUtil("extractPlanilha1AoaFromWorkbook");
-  if (extractPlanilha1AoaFromWorkbookUtil) {
-    return extractPlanilha1AoaFromWorkbookUtil(workbook, xlsxApi, {
-      normalizeHeader: normalizeHeader,
-      text: text,
-      normalizeLooseText: normalizeLooseText
-    });
-  }
-
-  try {
-    if (!workbook || !xlsxApi || !workbook.Sheets) return null;
-    const ws = workbook.Sheets["Planilha1"];
-    if (!ws) return null;
-
-    const matrix = xlsxApi.utils.sheet_to_json(ws, { header: 1, defval: "", raw: false, blankrows: false });
-    if (!Array.isArray(matrix) || !matrix.length) return null;
-
-    let headerIdx = -1;
-    const scanLimit = Math.min(matrix.length, 50);
-    for (let i = 0; i < scanLimit; i += 1) {
-      const row = Array.isArray(matrix[i]) ? matrix[i] : [];
-      const c1 = normalizeHeader(row[0]);
-      const c2 = normalizeHeader(row[1]);
-      const hasRotulo = c1.indexOf("rotulos_de_linha") >= 0 || c1.indexOf("rotulo_de_linha") >= 0;
-      const hasContagem = c2.indexOf("contagem_de_deputado") >= 0;
-      if (hasRotulo && hasContagem) {
-        headerIdx = i;
-        break;
-      }
-    }
-
-    if (headerIdx < 0) return null;
-
-    const headerRow = matrix[headerIdx] || [];
-    const out = [[
-      text(headerRow[0]) || "Rotulos de Linha",
-      text(headerRow[1]) || "Contagem de Deputado"
-    ]];
-
-    for (let i = headerIdx + 1; i < matrix.length; i += 1) {
-      const row = Array.isArray(matrix[i]) ? matrix[i] : [];
-      const label = text(row[0]);
-      const value = text(row[1]);
-      if (!label && !value) continue;
-      out.push([label, value]);
-      if (normalizeLooseText(label) === "total geral") break;
-    }
-
-    return out.length > 1 ? out : null;
-  } catch (_err) {
-    return null;
-  }
-}
-
-
-// Gera diagnostico estrutural da planilha (cabecalhos, tipos e faltas criticas).
-function buildImportValidationReport(sourceRows) {
-  const validationCtx = getImportValidationContext();
-  const buildImportValidationReportUtil = getImportValidationUtil("buildImportValidationReport");
-  if (buildImportValidationReportUtil) {
-    return buildImportValidationReportUtil(sourceRows, {
-      buildKnownHeaderSet: function () {
-        return buildKnownHeaderSet();
-      },
-      countCriticalEmpties: function (rows) {
-        return countCriticalEmpties(rows);
-      },
-      detectImportTypes: function (rows) {
-        return detectImportTypes(rows);
-      },
-      shallowCloneObj: validationCtx.shallowCloneObj,
-      normalizeHeader: validationCtx.normalizeHeader
-    });
-  }
-
-  const rows = Array.isArray(sourceRows) ? sourceRows : [];
-  const knownSet = buildKnownHeaderSet();
-  const headersFound = [];
-  const headerSeen = new Set();
-  const headerNormalizedCount = {};
-  const preview = [];
-  const alerts = [];
-
-  rows.slice(0, 5).forEach(function (ctx) {
-    preview.push({
-      aba: ctx && ctx.sheetName ? ctx.sheetName : "XLSX",
-      linha: ctx && ctx.rowNumber != null ? Number(ctx.rowNumber) : null,
-      dados: validationCtx.shallowCloneObj((ctx && ctx.row) || {})
-    });
-  });
-
-  rows.forEach(function (ctx) {
-    const row = (ctx && ctx.row) || {};
-    Object.keys(row).forEach(function (k) {
-      if (!headerSeen.has(k)) {
-        headerSeen.add(k);
-        headersFound.push(k);
-      }
-      const nk = validationCtx.normalizeHeader(k);
-      headerNormalizedCount[nk] = (headerNormalizedCount[nk] || 0) + 1;
-    });
-  });
-
-  const recognized = [];
-  const unrecognized = [];
-  headersFound.forEach(function (h) {
-    if (knownSet.has(validationCtx.normalizeHeader(h))) recognized.push(h);
-    else unrecognized.push(h);
-  });
-
-  const duplicated = Object.keys(headerNormalizedCount).filter(function (k) {
-    return headerNormalizedCount[k] > 1;
-  });
-
-  if (recognized.length < 3) alerts.push("Cabecalho suspeito: poucas colunas reconhecidas.");
-  if (duplicated.length) alerts.push("Colunas duplicadas detectadas: " + duplicated.join(", "));
-
-  const criticalEmpty = countCriticalEmpties(rows);
-  Object.keys(criticalEmpty).forEach(function (key) {
-    if (criticalEmpty[key] > 0) alerts.push("Campo critico vazio em " + key + ": " + String(criticalEmpty[key]) + " linha(s).");
-  });
-
-  return {
-    recognizedHeaders: recognized,
-    unrecognizedHeaders: unrecognized,
-    duplicatedHeaders: duplicated,
-    previewRows: preview,
-    detectedTypes: detectImportTypes(rows),
-    alerts: alerts
-  };
-}
-
-function buildKnownHeaderSet() {
-  const importCtx = getImportPipelineContext();
-  const buildKnownHeaderSetUtil = getImportValidationUtil("buildKnownHeaderSet");
-  if (buildKnownHeaderSetUtil) {
-    return buildKnownHeaderSetUtil(importCtx.importAliases, importCtx.normalizeHeader);
-  }
-
-  const set = new Set();
-  Object.keys(importCtx.importAliases).forEach(function (key) {
-    (importCtx.importAliases[key] || []).forEach(function (alias) {
-      set.add(importCtx.normalizeHeader(alias));
-    });
-  });
-  return set;
-}
-
-function countCriticalEmpties(rows) {
-  const validationCtx = getImportValidationContext();
-  const countCriticalEmptiesUtil = getImportValidationUtil("countCriticalEmpties");
-  if (countCriticalEmptiesUtil) {
-    return countCriticalEmptiesUtil(rows, validationCtx.mapImportRow, validationCtx.text);
-  }
-
-  const counters = { identificacao: 0, deputado: 0, municipio: 0 };
-  rows.forEach(function (ctx) {
-    const mapped = validationCtx.mapImportRow(ctx);
-    if (!validationCtx.text(mapped.identificacao)) counters.identificacao += 1;
-    if (!validationCtx.text(mapped.deputado)) counters.deputado += 1;
-    if (!validationCtx.text(mapped.municipio)) counters.municipio += 1;
-  });
-  return counters;
-}
-
-function detectImportTypes(rows) {
-  const validationCtx = getImportValidationContext();
-  const detectImportTypesUtil = getImportValidationUtil("detectImportTypes");
-  if (detectImportTypesUtil) {
-    return detectImportTypesUtil(rows, validationCtx.mapImportRow, validationCtx.detectType);
-  }
-
-  const sample = rows.slice(0, 50).map(function (ctx) { return validationCtx.mapImportRow(ctx); });
-  return {
-    ano: validationCtx.detectType(sample.map(function (r) { return r.ano; })),
-    valor_inicial: validationCtx.detectType(sample.map(function (r) { return r.valor_inicial; })),
-    valor_atual: validationCtx.detectType(sample.map(function (r) { return r.valor_atual; })),
-    identificacao: validationCtx.detectType(sample.map(function (r) { return r.identificacao; })),
-    processo_sei: validationCtx.detectType(sample.map(function (r) { return r.processo_sei; }))
-  };
-}
-
-function detectType(values) {
-  const detectTypeUtil = getImportValidationUtil("detectType");
-  if (detectTypeUtil) {
-    return detectTypeUtil(values);
-  }
-
-  const v = (values || []).filter(function (x) { return x != null && String(x).trim() !== ""; });
-  if (!v.length) return "vazio";
-  const allNum = v.every(function (x) { return Number.isFinite(Number(x)); });
-  if (allNum) return "numero";
-  return "texto";
-}
 function detectHeaderRow(matrix) {
-  const validationCtx = getImportValidationContext();
-  const detectHeaderRowUtil = getImportValidationUtil("detectHeaderRow");
-  if (detectHeaderRowUtil) {
-    return detectHeaderRowUtil(matrix, validationCtx.text, validationCtx.normalizeHeader, buildHeadersFromRow);
-  }
-
   if (!Array.isArray(matrix) || !matrix.length) return null;
 
   const scanLimit = Math.min(matrix.length, 40);
@@ -3117,11 +2818,11 @@ function detectHeaderRow(matrix) {
   for (let i = 0; i < scanLimit; i += 1) {
     const row = Array.isArray(matrix[i]) ? matrix[i] : [];
     const nonEmpty = row.filter(function (v) {
-      return validationCtx.text(v) !== "";
+      return text(v) !== "";
     }).length;
     if (nonEmpty < 3) continue;
 
-    const normalized = row.map(function (v) { return validationCtx.normalizeHeader(v); });
+    const normalized = row.map(function (v) { return normalizeHeader(v); });
     let score = nonEmpty;
     const hints = ["identificacao", "deputado", "status", "municipio", "cod_uo", "cod_subfonte", "cod_da_acao", "descritor_da_acao"];
     hints.forEach(function (h) {
@@ -3141,18 +2842,12 @@ function detectHeaderRow(matrix) {
 }
 
 function buildHeadersFromRow(rawHeader) {
-  const validationCtx = getImportValidationContext();
-  const buildHeadersFromRowUtil = getImportValidationUtil("buildHeadersFromRow");
-  if (buildHeadersFromRowUtil) {
-    return buildHeadersFromRowUtil(rawHeader, validationCtx.text);
-  }
-
   const out = [];
   const used = {};
   const total = Math.max(rawHeader.length, 1);
 
   for (let i = 0; i < total; i += 1) {
-    let base = validationCtx.text(rawHeader[i]);
+    let base = text(rawHeader[i]);
     if (!base) base = "COL_" + String(i + 1);
 
     let key = base;
@@ -3166,34 +2861,6 @@ function buildHeadersFromRow(rawHeader) {
   }
 
   return out;
-}
-
-function rowArrayToObject(arr, headers) {
-  const rowArrayToObjectUtil = getImportValidationUtil("rowArrayToObject");
-  if (rowArrayToObjectUtil) {
-    return rowArrayToObjectUtil(arr, headers);
-  }
-
-  const obj = {};
-  for (let c = 0; c < headers.length; c += 1) {
-    const key = headers[c];
-    if (!key) continue;
-    obj[key] = arr[c] == null ? "" : String(arr[c]).trim();
-  }
-  return obj;
-}
-
-function isRowEmpty(arr) {
-  const validationCtx = getImportValidationContext();
-  const isRowEmptyUtil = getImportValidationUtil("isRowEmpty");
-  if (isRowEmptyUtil) {
-    return isRowEmptyUtil(arr, validationCtx.text);
-  }
-
-  if (!Array.isArray(arr)) return true;
-  return !arr.some(function (v) {
-    return validationCtx.text(v) !== "";
-  });
 }
 
 function renderStatus(status) {
@@ -5451,6 +5118,8 @@ function getApiSyncOpsContext() {
   return {
     isApiEnabled: isApiEnabled,
     apiRequest: apiRequest,
+    getApiBaseUrl: getApiBaseUrl,
+    buildApiHeaders: buildApiHeaders,
     text: text,
     toInt: toInt,
     toNumber: toNumber,
@@ -5542,6 +5211,14 @@ function resetApiLinkedState(options) {
   resetBetaImportStateLocal();
   apiOnline = Object.prototype.hasOwnProperty.call(opts, "apiOnline") ? !!opts.apiOnline : false;
   apiLastError = Object.prototype.hasOwnProperty.call(opts, "apiLastError") ? String(opts.apiLastError || "") : "";
+}
+
+async function previewImportXlsx(file) {
+  const moduleFn = getApiSyncOpsUtil("previewImportXlsx");
+  if (moduleFn) {
+    return await moduleFn(file, getApiSyncOpsContext());
+  }
+  throw new Error("Preview de importacao indisponivel.");
 }
 
 function getBetaHistoryContext() {
@@ -7539,16 +7216,6 @@ function getImportPipelineContext() {
     normalizeRowKeys: normalizeRowKeys,
     normalizeHeader: normalizeHeader,
     text: text
-  };
-}
-
-function getImportValidationContext() {
-  return {
-    text: text,
-    normalizeHeader: normalizeHeader,
-    shallowCloneObj: shallowCloneObj,
-    mapImportRow: mapImportRow,
-    detectType: detectType
   };
 }
 

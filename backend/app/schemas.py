@@ -529,6 +529,7 @@ class ImportPreviewOut(BaseModel):
     sheetNames: list[str] = Field(default_factory=list)
     rowDetails: list[ImportPreviewLineOut] = Field(default_factory=list)
     newRowsPreview: list[ImportPreviewNewRowOut] = Field(default_factory=list)
+    sourceRows: list[ImportPreviewSourceRowOut] = Field(default_factory=list)
     validation: ImportPreviewValidationOut | None = None
     planilha1Aoa: list[list[str]] | None = None
 

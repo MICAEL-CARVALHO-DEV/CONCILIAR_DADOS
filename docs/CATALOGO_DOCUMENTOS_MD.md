@@ -18,6 +18,7 @@ Success: Antes de abrir, criar ou atualizar um `.md`, a equipe sabe exatamente o
 - `tipos_refatoracao.md`
 - `DESIGN_DASHBOARD_POWERBI_E_LAYOUT_PRINCIPAL.md`
 - `REGRAS_PLANILHAS_TESTE_E_OFICIAL.md`
+- `MAPA_OFICIAL_COLUNAS_LOA.md`
 - `../backend/MAPA_MAIN.md`
 - `../frontend/js/MAPA_APP.md`
 

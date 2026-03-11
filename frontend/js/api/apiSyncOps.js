@@ -117,6 +117,56 @@
     safeWarn("Falha ao sincronizar " + actionName + " com API:", msg);
   }
 
+  async function previewImportXlsx(file, ctx) {
+    if (!ctx.isApiEnabled()) {
+      throw new Error("Preview de importacao indisponivel sem API ativa.");
+    }
+    if (!file) {
+      throw new Error("Arquivo XLSX nao informado.");
+    }
+
+    var url = ctx.getApiBaseUrl() + "/imports/preview-xlsx";
+    var formData = new globalScope.FormData();
+    formData.append("file", file, file && file.name ? file.name : "import.xlsx");
+
+    var headers = Object.assign({}, ctx.buildApiHeaders("IMPORT"));
+    delete headers["Content-Type"];
+    delete headers["content-type"];
+
+    var response;
+    try {
+      response = await globalScope.fetch(url, {
+        method: "POST",
+        headers: headers,
+        body: formData
+      });
+    } catch (err) {
+      handleApiSyncError(err, "preview de importacao", ctx);
+      throw err;
+    }
+
+    var payload = null;
+    var contentType = response.headers.get("content-type") || "";
+    if (contentType.indexOf("application/json") >= 0) {
+      payload = await response.json().catch(function () { return null; });
+    } else {
+      var textPayload = await response.text().catch(function () { return ""; });
+      payload = textPayload ? { detail: textPayload } : null;
+    }
+
+    if (!response.ok) {
+      var err = new Error(payload && payload.detail ? String(payload.detail) : ("Falha no preview de importacao (" + String(response.status) + ")"));
+      err.status = response.status;
+      handleApiSyncError(err, "preview de importacao", ctx);
+      throw err;
+    }
+
+    ctx.setApiOnline(true);
+    ctx.setApiLastError("");
+    ctx.applyAccessProfile();
+    return payload || {};
+  }
+
   async function rollbackSaveAndReport(err, rec, snapshot, actionName, ctx) {
     ctx.restoreRecordFromSnapshot(rec, snapshot);
     ctx.saveState(true);
@@ -233,6 +283,7 @@
 
   root.apiSyncOpsUtils = {
     applySyncResponseToRecord: applySyncResponseToRecord,
+    previewImportXlsx: previewImportXlsx,
     syncOfficialStatusToApi: syncOfficialStatusToApi,
     syncGenericEventToApi: syncGenericEventToApi,
     ensureBackendEmenda: ensureBackendEmenda,

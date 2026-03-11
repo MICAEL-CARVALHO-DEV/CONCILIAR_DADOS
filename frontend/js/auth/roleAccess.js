@@ -67,7 +67,10 @@
   }
 
   function canImportData(ctx) {
-    return !!ctx.currentUser && !!ctx.workspaceAllowsImport;
+    return !!ctx.currentUser
+      && !!ctx.workspaceAllowsImport
+      && typeof ctx.isApiEnabled === "function"
+      && !!ctx.isApiEnabled();
   }
 
   function canMutateRecords(ctx) {

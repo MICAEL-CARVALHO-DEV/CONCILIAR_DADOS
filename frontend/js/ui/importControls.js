@@ -10,6 +10,30 @@
     return arr[i];
   }
 
+  function buildAuthoritativeImportReport(preview, fallbackFileName) {
+    var source = preview && typeof preview === "object" ? preview : {};
+    return {
+      fileName: source.fileName || fallbackFileName || "importacao.xlsx",
+      fileHash: source.fileHash || "",
+      totalRows: Number(source.totalRows || 0),
+      consideredRows: Number(source.consideredRows || 0),
+      skippedRows: Number(source.skippedRows || 0),
+      invalidRows: Number(source.invalidRows || 0),
+      created: Number(source.created || 0),
+      updated: Number(source.updated || 0),
+      unchanged: Number(source.unchanged || 0),
+      duplicateById: Number(source.duplicateById || 0),
+      duplicateByRef: Number(source.duplicateByRef || 0),
+      duplicateInFile: Number(source.duplicateInFile || 0),
+      conflictIdVsRef: Number(source.conflictIdVsRef || 0),
+      sheetNames: Array.isArray(source.sheetNames) ? source.sheetNames.slice() : [],
+      rowDetails: Array.isArray(source.rowDetails) ? source.rowDetails.slice() : [],
+      validation: source.validation || null,
+      newRowsPreview: Array.isArray(source.newRowsPreview) ? source.newRowsPreview.slice() : [],
+      planilha1Aoa: Array.isArray(source.planilha1Aoa) ? source.planilha1Aoa : null
+    };
+  }
+
   function generateRandomMultiUserDemo(ctx) {
     if (typeof ctx.canUseDemoTools === "function" && !ctx.canUseDemoTools()) {
       globalScope.alert("A demo de usuarios so pode ser aplicada na Pagina de teste.");
@@ -89,7 +113,44 @@
         if (!file) return;
 
         try {
-          var sourceRows = await opts.parseInputFile(file);
+          var useBackendPreview = typeof opts.isApiEnabled === "function" && opts.isApiEnabled() && typeof opts.previewImportXlsx === "function";
+          var sourceRows = [];
+          var authoritativePreview = null;
+          var report = null;
+
+          if (!useBackendPreview) {
+            throw new Error("Importacao oficial exige API ativa e preview Python.");
+          }
+
+          authoritativePreview = await opts.previewImportXlsx(file);
+          sourceRows = Array.isArray(authoritativePreview && authoritativePreview.sourceRows)
+            ? authoritativePreview.sourceRows.map(function (item) {
+                var source = item && typeof item === "object" ? item : {};
+                return {
+                  sheetName: source.aba || "XLSX",
+                  rowNumber: source.linha != null ? Number(source.linha) : 0,
+                  row: source.dados && typeof source.dados === "object" ? source.dados : {}
+                };
+              })
+            : [];
+
+          if (Array.isArray(authoritativePreview && authoritativePreview.planilha1Aoa)) {
+            opts.setLastImportedPlanilha1Aoa(authoritativePreview.planilha1Aoa);
+          }
+          if (typeof opts.setLastImportValidation === "function") {
+            opts.setLastImportValidation(authoritativePreview && authoritativePreview.validation ? authoritativePreview.validation : null);
+          }
+          if (typeof opts.setLastImportedWorkbookTemplate === "function") {
+            var templateBuffer = await file.arrayBuffer();
+            opts.setLastImportedWorkbookTemplate({
+              fileName: file.name || "template.xlsx",
+              importedAt: opts.isoNow(),
+              buffer: templateBuffer.slice(0)
+            });
+          }
+
+          report = buildAuthoritativeImportReport(authoritativePreview, file.name);
+
           if (!sourceRows.length) {
             globalScope.alert("Nenhuma linha valida encontrada no arquivo.");
             opts.hideImportReport();
@@ -102,7 +163,8 @@
             opts.setIdCountersByYear(opts.buildIdCounters((currentState && currentState.records) || []));
           }
 
-          var report = opts.processImportedRows(sourceRows, file.name);
+          // Backend preview is authoritative for metrics; JS only applies the classified rows to state.
+          opts.processImportedRows(sourceRows, file.name);
           opts.saveState();
           opts.syncYearFilter();
           opts.render();
@@ -120,7 +182,9 @@
         } catch (err) {
           globalScope.console.error(err);
           var detail = err && err.message ? String(err.message) : "erro desconhecido";
-          var hint = detail.includes("Biblioteca XLSX nao carregada") ? " Dica: abra por http://127.0.0.1:5500 e confirme internet para carregar a biblioteca XLSX." : "";
+          var hint = detail.includes("Importacao oficial exige API ativa")
+            ? " Ative a API e use a base operacional para importar."
+            : (detail.includes("Biblioteca XLSX nao carregada") ? " Dica: abra por http://127.0.0.1:5500 e confirme internet para carregar a biblioteca XLSX." : "");
           globalScope.alert("Falha ao importar arquivo. Detalhe: " + detail + hint);
         } finally {
           fileCsv.value = "";

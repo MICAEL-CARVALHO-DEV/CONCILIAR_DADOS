@@ -16,19 +16,19 @@ from ..models import Emenda, EmendaLock, ExportLog, Historico, ImportGovernancaL
 
 
 IMPORT_ALIASES = {
-    "id": ["id", "id_interno", "id interno", "codigo_interno", "codigo interno"],
+    "id": ["id", "id_interno", "id interno", "codigo_interno", "codigo interno", "emenda"],
     "ano": ["ano", "exercicio"],
-    "identificacao": ["identificacao", "identificacao_emenda", "numero_emenda", "emenda", "identificacao da emenda"],
-    "cod_subfonte": ["cod_subfonte", "codigo_subfonte", "subfonte", "cod subfonte"],
+    "identificacao": ["identificacao", "identificacao_emenda", "numero_emenda", "identificacao da emenda"],
+    "cod_subfonte": ["cod_subfonte", "codigo_subfonte", "subfonte", "cod subfonte", "cod. subfonte"],
     "deputado": ["deputado", "autor", "parlamentar"],
-    "cod_uo": ["cod_uo", "codigo_uo", "uo", "cod uo"],
-    "sigla_uo": ["sigla_uo", "sigla uo", "uo_sigla", "sigla da uo", "sigla do uo"],
-    "cod_orgao": ["cod_orgao", "codigo_orgao", "orgao", "cod orgao"],
-    "cod_acao": ["cod_acao", "codigo_acao", "acao", "cod acao", "cod da acao", "cod. da acao", "codigo da acao"],
-    "descricao_acao": ["descricao_acao", "descricao da acao", "acao_descricao", "descricao", "descritor da acao"],
+    "cod_uo": ["cod_uo", "codigo_uo", "uo", "cod uo", "cod. uo"],
+    "sigla_uo": ["sigla_uo", "sigla uo", "uo_sigla", "sigla da uo", "sigla do uo", "sigla do orgao", "sigla do órgão"],
+    "cod_orgao": ["cod_orgao", "codigo_orgao", "orgao", "cod orgao", "cod. orgao", "cod. órgão"],
+    "cod_acao": ["cod_acao", "codigo_acao", "acao", "cod acao", "cod da acao", "cod. da acao", "codigo da acao", "cód. da ação"],
+    "descricao_acao": ["descricao_acao", "descricao da acao", "acao_descricao", "descricao", "descritor da acao", "descritor da ação"],
     "plan_a": ["plan_a", "plano_a", "plano a", "planoa", "plano a acao", "plano de acao a"],
     "plan_b": ["plan_b", "plano_b", "plano b", "planob", "plano b acao", "plano de acao b"],
-    "municipio": ["municipio", "cidade", "municipio / estado", "municipio estado"],
+    "municipio": ["municipio", "cidade", "municipio / estado", "municipio estado", "município / estado"],
     "valor_inicial": ["valor_inicial", "valor inicial", "valor_original", "valor original", "valor inicial epi"],
     "valor_atual": ["valor_atual", "valor atual", "valor", "valor_emenda", "valor emenda", "valor atual epi"],
     "processo_sei": ["processo_sei", "processo sei", "sei", "processo"],
@@ -279,10 +279,11 @@ def _extract_planilha1_aoa_from_workbook(workbook) -> list[list[str]] | None:
 def _map_import_row(ctx: dict) -> dict:
     row = _normalize_row_keys((ctx or {}).get("row") or {})
     ano = _to_int(_pick_value(row, IMPORT_ALIASES["ano"]))
+    row_id = _as_text(_pick_value(row, IMPORT_ALIASES["id"]))
     record = {
-        "id": _as_text(_pick_value(row, IMPORT_ALIASES["id"])),
+        "id": row_id,
         "ano": ano or datetime.utcnow().year,
-        "identificacao": _as_text(_pick_value(row, IMPORT_ALIASES["identificacao"])),
+        "identificacao": _as_text(_pick_value(row, IMPORT_ALIASES["identificacao"])) or row_id,
         "cod_subfonte": _as_text(_pick_value(row, IMPORT_ALIASES["cod_subfonte"])),
         "deputado": _as_text(_pick_value(row, IMPORT_ALIASES["deputado"])),
         "cod_uo": _as_text(_pick_value(row, IMPORT_ALIASES["cod_uo"])),
@@ -306,6 +307,70 @@ def _map_import_row(ctx: dict) -> dict:
         record["status_oficial"] = _normalize_status(status_raw)
     record["ref_key"] = _build_reference_key(record)
     return record
+
+
+def _serialize_preview_source_row(ctx: dict, incoming: dict, status_linha: str, mensagem: str) -> dict:
+    source = ctx or {}
+    mapped = incoming or {}
+    raw_row = dict(source.get("row") or {})
+    normalized_status = str(status_linha or "").strip().upper()
+    serialized_row = dict(raw_row)
+    serialized_row.update(
+        {
+            "id": _as_text(mapped.get("id")),
+            "ano": _as_text(mapped.get("ano")),
+            "identificacao": _as_text(mapped.get("identificacao")),
+            "cod_subfonte": _as_text(mapped.get("cod_subfonte")),
+            "deputado": _as_text(mapped.get("deputado")),
+            "cod_uo": _as_text(mapped.get("cod_uo")),
+            "sigla_uo": _as_text(mapped.get("sigla_uo")),
+            "cod_orgao": _as_text(mapped.get("cod_orgao")),
+            "cod_acao": _as_text(mapped.get("cod_acao")),
+            "descricao_acao": _as_text(mapped.get("descricao_acao")),
+            "plan_a": _as_text(mapped.get("plan_a")),
+            "plan_b": _as_text(mapped.get("plan_b")),
+            "municipio": _as_text(mapped.get("municipio")),
+            "valor_inicial": _as_text(mapped.get("valor_inicial")),
+            "valor_atual": _as_text(mapped.get("valor_atual")),
+            "processo_sei": _as_text(mapped.get("processo_sei")),
+            "status_oficial": _as_text(mapped.get("status_oficial")),
+            "ref_key": _as_text(mapped.get("ref_key")),
+            "__previewStatus": normalized_status,
+            "__previewMessage": _as_text(mensagem),
+        }
+    )
+    return {
+        "aba": str(source.get("sheetName") or "XLSX"),
+        "linha": int(source.get("rowNumber") or 0),
+        "dados": serialized_row,
+    }
+
+
+def _coerce_preview_source_rows(source_rows: list[dict], row_details: list[dict]) -> list[dict]:
+    coerced: list[dict] = []
+    details = row_details or []
+    for index, item in enumerate(source_rows or []):
+        source = item or {}
+        row_data = dict(source.get("dados") or {})
+        if row_data.get("__previewStatus"):
+            coerced.append(source)
+            continue
+        detail = details[index] if index < len(details) else {}
+        ctx = {
+            "sheetName": source.get("aba") or source.get("sheetName") or "XLSX",
+            "rowNumber": source.get("linha") if source.get("linha") is not None else source.get("rowNumber"),
+            "row": row_data or source.get("row") or {},
+        }
+        incoming = _map_import_row(ctx)
+        coerced.append(
+            _serialize_preview_source_row(
+                ctx,
+                incoming,
+                detail.get("status_linha") or "UNCHANGED",
+                detail.get("mensagem") or "",
+            )
+        )
+    return coerced
 
 
 def _has_useful_data(record: dict) -> bool:
@@ -481,6 +546,7 @@ def preview_import_xlsx_service(*, file_name: str, file_bytes: bytes, db: Sessio
     new_rows_preview: list[dict] = []
     seen_ids_in_file: set[str] = set()
     seen_refs_in_file: set[str] = set()
+    normalized_source_rows: list[dict] = []
     report = {
         "fileName": file_name or "import.xlsx",
         "fileHash": hashlib.sha256(file_bytes).hexdigest(),
@@ -498,6 +564,7 @@ def preview_import_xlsx_service(*, file_name: str, file_bytes: bytes, db: Sessio
         "sheetNames": read_sheets,
         "rowDetails": row_details,
         "newRowsPreview": new_rows_preview,
+        "sourceRows": normalized_source_rows,
         "validation": validation,
         "planilha1Aoa": planilha1_aoa,
     }
@@ -510,6 +577,7 @@ def preview_import_xlsx_service(*, file_name: str, file_bytes: bytes, db: Sessio
 
         if not _has_useful_data(incoming):
             report["invalidRows"] += 1
+            mensagem = "Linha ignorada: sem dados uteis"
             row_details.append(
                 {
                     "ordem": ordem,
@@ -518,9 +586,10 @@ def preview_import_xlsx_service(*, file_name: str, file_bytes: bytes, db: Sessio
                     "status_linha": "SKIPPED",
                     "id_interno": id_interno,
                     "ref_key": ref_key,
-                    "mensagem": "Linha ignorada: sem dados uteis",
+                    "mensagem": mensagem,
                 }
             )
+            normalized_source_rows.append(_serialize_preview_source_row(ctx, incoming, "SKIPPED", mensagem))
             continue
 
         report["consideredRows"] += 1
@@ -537,6 +606,7 @@ def preview_import_xlsx_service(*, file_name: str, file_bytes: bytes, db: Sessio
 
         if duplicate_in_file:
             report["duplicateInFile"] += 1
+            mensagem = "Duplicidade detectada no proprio arquivo"
             row_details.append(
                 {
                     "ordem": ordem,
@@ -545,9 +615,10 @@ def preview_import_xlsx_service(*, file_name: str, file_bytes: bytes, db: Sessio
                     "status_linha": "CONFLICT",
                     "id_interno": id_interno,
                     "ref_key": ref_key,
-                    "mensagem": "Duplicidade detectada no proprio arquivo",
+                    "mensagem": mensagem,
                 }
             )
+            normalized_source_rows.append(_serialize_preview_source_row(ctx, incoming, "CONFLICT", mensagem))
             continue
 
         by_id = existing_by_id.get(id_interno) if id_interno else None
@@ -560,6 +631,7 @@ def preview_import_xlsx_service(*, file_name: str, file_bytes: bytes, db: Sessio
 
         if by_id and by_ref and by_id.id != by_ref.id:
             report["conflictIdVsRef"] += 1
+            mensagem = "Conflito ID x chave referencia; revisar antes de aplicar"
             row_details.append(
                 {
                     "ordem": ordem,
@@ -568,14 +640,16 @@ def preview_import_xlsx_service(*, file_name: str, file_bytes: bytes, db: Sessio
                     "status_linha": "CONFLICT",
                     "id_interno": id_interno,
                     "ref_key": ref_key,
-                    "mensagem": "Conflito ID x chave referencia; revisar antes de aplicar",
+                    "mensagem": mensagem,
                 }
             )
+            normalized_source_rows.append(_serialize_preview_source_row(ctx, incoming, "CONFLICT", mensagem))
             continue
 
         target = by_id or by_ref
         if not target:
             report["created"] += 1
+            mensagem = "Registro novo pronto para entrar"
             row_details.append(
                 {
                     "ordem": ordem,
@@ -584,9 +658,10 @@ def preview_import_xlsx_service(*, file_name: str, file_bytes: bytes, db: Sessio
                     "status_linha": "CREATED",
                     "id_interno": id_interno,
                     "ref_key": ref_key,
-                    "mensagem": "Registro novo pronto para entrar",
+                    "mensagem": mensagem,
                 }
             )
+            normalized_source_rows.append(_serialize_preview_source_row(ctx, incoming, "CREATED", mensagem))
             if len(new_rows_preview) < 25:
                 new_rows_preview.append(
                     {
@@ -621,6 +696,7 @@ def preview_import_xlsx_service(*, file_name: str, file_bytes: bytes, db: Sessio
 
         if changed_fields:
             report["updated"] += 1
+            mensagem = f"Registro existente com alteracoes: {', '.join(changed_fields[:6])}"
             row_details.append(
                 {
                     "ordem": ordem,
@@ -637,11 +713,13 @@ def preview_import_xlsx_service(*, file_name: str, file_bytes: bytes, db: Sessio
                             "deputado": target.deputado,
                         }
                     ),
-                    "mensagem": f"Registro existente com alteracoes: {', '.join(changed_fields[:6])}",
+                    "mensagem": mensagem,
                 }
             )
+            normalized_source_rows.append(_serialize_preview_source_row(ctx, incoming, "UPDATED", mensagem))
         else:
             report["unchanged"] += 1
+            mensagem = "Registro existente sem alteracao"
             row_details.append(
                 {
                     "ordem": ordem,
@@ -658,10 +736,12 @@ def preview_import_xlsx_service(*, file_name: str, file_bytes: bytes, db: Sessio
                             "deputado": target.deputado,
                         }
                     ),
-                    "mensagem": "Registro existente sem alteracao",
+                    "mensagem": mensagem,
                 }
             )
+            normalized_source_rows.append(_serialize_preview_source_row(ctx, incoming, "UNCHANGED", mensagem))
 
+    report["sourceRows"] = _coerce_preview_source_rows(report.get("sourceRows") or [], row_details)
     return report
 
 

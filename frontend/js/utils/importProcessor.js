@@ -22,7 +22,6 @@
     var hasUsefulData = typeof dep.hasUsefulData === "function" ? dep.hasUsefulData : function () { return true; };
     var createRecordFromImport = typeof dep.createRecordFromImport === "function" ? dep.createRecordFromImport : function (incoming) { return incoming; };
     var mergeImportIntoRecord = typeof dep.mergeImportIntoRecord === "function" ? dep.mergeImportIntoRecord : function () { return { changedAny: false }; };
-    var buildImportValidationReport = typeof dep.buildImportValidationReport === "function" ? dep.buildImportValidationReport : function () { return null; };
     var report = {
       fileName: fileName,
       totalRows: rows.length,
@@ -55,6 +54,10 @@
 
     rows.forEach(function (ctx) {
       sheetSet.add((ctx && ctx.sheetName) || "XLSX");
+      var previewStatus = String((((ctx || {}).row || {}).__previewStatus) || "").trim().toUpperCase();
+      if (previewStatus === "SKIPPED" || previewStatus === "CONFLICT" || previewStatus === "UNCHANGED") {
+        return;
+      }
       var incoming = mapImportRow(ctx);
 
       if (!hasUsefulData(incoming)) {
@@ -128,7 +131,6 @@
     });
 
     report.sheetNames = Array.from(sheetSet);
-    if (!report.validation) report.validation = buildImportValidationReport(rows);
     return report;
   }
 

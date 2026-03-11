@@ -87,14 +87,15 @@
     var importAliases = dep.importAliases || {};
 
     var ano = typeof dep.toInt === "function" ? dep.toInt(pickValue(row, importAliases.ano)) : readInt(pickValue(row, importAliases.ano));
-    var identificacao = asText(pickValue(row, importAliases.identificacao));
+    var rowId = asText(pickValue(row, importAliases.id));
+    var identificacao = asText(pickValue(row, importAliases.identificacao)) || rowId;
     var codSubfonte = asText(pickValue(row, importAliases.cod_subfonte));
     var codAcao = asText(pickValue(row, importAliases.cod_acao));
     var municipio = asText(pickValue(row, importAliases.municipio));
     var deputado = asText(pickValue(row, importAliases.deputado));
 
     var record = {
-      id: asText(pickValue(row, importAliases.id)),
+      id: rowId,
       ano: ano || (typeof dep.currentYear === "function" ? dep.currentYear() : new Date().getFullYear()),
       identificacao: identificacao,
       cod_subfonte: codSubfonte,
