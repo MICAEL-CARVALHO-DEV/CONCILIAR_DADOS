@@ -2,9 +2,8 @@ window.SEC_APP_CONFIG = Object.assign(
   {
     // Base padrao (pode ficar vazio para usar mapeamento por host)
     API_BASE_URL: "",
-    // Enquanto a beta oficial nao estiver liberada para usuarios, a LOA
-    // permanece vazia/local no front. Desligue quando a operacao oficial comecar.
-    LOA_PRE_BETA_LOCKED: true,
+    // LOA operacional liberada.
+    LOA_PRE_BETA_LOCKED: false,
     // OAuth Google (deixe vazio ate configurar o client id)
     GOOGLE_CLIENT_ID: "",
     // Mapeamento automatico por hostname
