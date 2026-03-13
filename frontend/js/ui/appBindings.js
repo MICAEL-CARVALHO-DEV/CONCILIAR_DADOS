@@ -79,7 +79,7 @@
     var modal = opts.modal || null;
     var btnKvSave = opts.btnKvSave || null;
     var modalAutoCloseTimerRef = typeof opts.setModalAutoCloseTimer === "function" ? opts.setModalAutoCloseTimer : noop;
-    var authLoginPage = String(opts.authLoginPage || "login.html");
+    var authLoginPage = String(opts.authLoginPage || "frontend/pages/login.html");
 
     if (statusFilter) statusFilter.addEventListener("change", render);
     if (yearFilter) yearFilter.addEventListener("change", render);

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, File, Query, UploadFile
 
-from ..core.dependencies import _actor_from_headers, _require_monitor, _require_owner
+from ..core.dependencies import _actor_from_headers, _require_manager, _require_monitor
 from ..db import get_db
 from ..schemas import (
     ExportLogCreate,
@@ -87,7 +87,7 @@ def create_operations_router(resolve_event_origin, utcnow, broadcast_update, mas
     def governar_lote_importacao(
         lote_id: int,
         payload: ImportGovernanceActionIn,
-        actor: dict = Depends(_require_owner),
+        actor: dict = Depends(_require_manager),
         db=Depends(get_db),
     ):
         return import_export_service.govern_import_lot_service(

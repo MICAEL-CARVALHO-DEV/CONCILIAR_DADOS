@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from ..models import SupportMessage, SupportThread
 from ..schemas import SUPPORT_CATEGORIES, SUPPORT_THREAD_STATUS
 
-SUPPORT_MANAGER_ROLES = {"SUPERVISAO", "POWERBI", "PROGRAMADOR"}
+SUPPORT_MANAGER_ROLES = {"APG", "SUPERVISAO", "POWERBI", "PROGRAMADOR"}
 
 
 def is_support_manager(actor: dict | None) -> bool:

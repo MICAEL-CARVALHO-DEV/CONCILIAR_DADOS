@@ -13,7 +13,7 @@ from ..core.dependencies import OWNER_ROLE
 from ..core.security import _mask_history_pair, _utcnow
 from ..models import Emenda, EmendaLock, Historico
 
-EDITOR_ROLES = {"APG", "CONTABIL", "PROGRAMADOR"}
+EDITOR_ROLES = {"APG", "SUPERVISAO", "POWERBI", "PROGRAMADOR"}
 EDIT_LOCK_TTL_SECONDS = 90
 STATUS_TRANSITIONS = {
     "Recebido": {"Em analise", "Pendente", "Cancelado"},

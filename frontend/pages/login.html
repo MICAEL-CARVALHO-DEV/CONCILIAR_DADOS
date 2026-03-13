@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="../../style.css" />
 </head>
 <body class="login-page">
   <main class="login-layout">
@@ -68,8 +68,8 @@
     </section>
   </main>
 
-  <script src="config.js"></script>
-  <script src="config.production.js"></script>
+  <script src="../config/config.js"></script>
+  <script src="../config/config.production.js"></script>
   <script>
     (async function () {
       // Mapa rapido:
@@ -309,7 +309,7 @@
       function persistSession(data, fallbackName, fallbackRole) {
         writeStoredToken(String(data.token || ""));
         localStorage.setItem(USER_NAME_KEY, String(data.usuario && data.usuario.nome || fallbackName || ""));
-        localStorage.setItem(USER_ROLE_KEY, String(data.usuario && data.usuario.perfil || fallbackRole || "CONTABIL"));
+        localStorage.setItem(USER_ROLE_KEY, String(data.usuario && data.usuario.perfil || fallbackRole || "APG"));
       }
 
       // Controla estado visual durante chamadas async (loading/disable).
@@ -341,7 +341,7 @@
 
         try {
           const data = await apiRequest("/auth/google", { credential: credential });
-          persistSession(data, (data && data.usuario && data.usuario.nome) || "Google", (data && data.usuario && data.usuario.perfil) || "CONTABIL");
+          persistSession(data, (data && data.usuario && data.usuario.nome) || "Google", (data && data.usuario && data.usuario.perfil) || "APG");
           window.location.href = next;
         } catch (err) {
           if (Number(err && err.status) === 404) {
@@ -410,7 +410,7 @@
 
         try {
           const data = await apiRequest("/auth/login", { nome: n, senha: s });
-          persistSession(data, n, "CONTABIL");
+          persistSession(data, n, "APG");
           window.location.href = next;
         } catch (err) {
           msg.textContent = err && err.message ? err.message : "Falha no login.";

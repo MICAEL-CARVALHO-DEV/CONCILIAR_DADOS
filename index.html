@@ -26,10 +26,10 @@
           }
         }
         if (token) return;
-        var loginUrl = "login.html?next=" + encodeURIComponent("index.html") + "&msg=" + encodeURIComponent("Entre para continuar.");
+        var loginUrl = "frontend/pages/login.html?next=" + encodeURIComponent("index.html") + "&msg=" + encodeURIComponent("Entre para continuar.");
         window.location.replace(loginUrl);
       } catch (_err) {
-        window.location.replace("login.html?next=" + encodeURIComponent("index.html"));
+        window.location.replace("frontend/pages/login.html?next=" + encodeURIComponent("index.html"));
       }
     })();
   </script>
@@ -139,7 +139,7 @@
 
             <div class="field">
               <label for="markReason">Motivo / Observacao (obrigatorio)</label>
-              <textarea id="markReason" rows="4" placeholder="Ex.: aguardando documento / aguardando execucao / ajuste contabil..."></textarea>
+          <textarea id="markReason" rows="4" placeholder="Ex.: aguardando documento / aguardando execucao / ajuste operacional..."></textarea>
             </div>
 
             <div class="row">
@@ -256,7 +256,7 @@
         </div>
       </div>
       <div class="modal-foot">
-        <a class="btn" href="cadastro.html?next=index.html">Criar perfil</a>
+        <a class="btn" href="frontend/pages/cadastro.html?next=index.html">Criar perfil</a>
         <button id="btnProfileClose" class="btn primary">Fechar</button>
       </div>
     </div>
@@ -282,8 +282,8 @@
     </div>
   </div>
 
-  <script src="config.js"></script>
-  <script src="config.production.js"></script>
+  <script src="frontend/config/config.js"></script>
+  <script src="frontend/config/config.production.js"></script>
   <script>
     (function () {
       function loadScriptsSequentially(urls, onDone) {

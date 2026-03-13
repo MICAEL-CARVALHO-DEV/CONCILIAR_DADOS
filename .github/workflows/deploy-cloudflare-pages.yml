@@ -21,14 +21,16 @@ jobs:
       - name: Build static bundle
         run: |
           mkdir -p .cf-pages-dist
+          mkdir -p .cf-pages-dist/frontend/pages
+          mkdir -p .cf-pages-dist/frontend/config
           cp index.html .cf-pages-dist/
-          cp login.html .cf-pages-dist/
-          cp cadastro.html .cf-pages-dist/
+          cp frontend/pages/login.html .cf-pages-dist/frontend/pages/
+          cp frontend/pages/cadastro.html .cf-pages-dist/frontend/pages/
           cp style.css .cf-pages-dist/
           cp app.js .cf-pages-dist/
-          cp config.js .cf-pages-dist/
-          cp config.production.js .cf-pages-dist/
-          cp LICENSE .cf-pages-dist/
+          cp frontend/config/config.js .cf-pages-dist/frontend/config/
+          cp frontend/config/config.production.js .cf-pages-dist/frontend/config/
+          cp anotacoes/legal/license .cf-pages-dist/license
           mkdir -p .cf-pages-dist/assets
           cp assets/sec-logo.png .cf-pages-dist/assets/
           cp assets/login-bg.jpg .cf-pages-dist/assets/

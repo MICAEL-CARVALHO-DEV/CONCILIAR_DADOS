@@ -62,8 +62,8 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 - [DONE] Extrair renderizadores de acesso/presenca do modal para `frontend/js/ui/renderers.js`, deixando `app.js` apenas com bridges de estado.
 - [DONE] Extrair o editor de campos do modal e o box de progresso do usuario para `frontend/js/ui/renderers.js`, reduzindo UI local do `app.js`.
 - [DONE] Extrair a atualizacao visual do rascunho e o perfil de acesso do modal para `frontend/js/ui/renderers.js`, deixando `app.js` com estado e regras.
-- [DONE] Criar fila operacional da IA ORQ em `docs/ORQ_REFATORACAO_FRONTEND_QUEUE.md` para usar planejamento e revisao multi-IA sem conflito de arquivo.
-- [DONE] Definir `STACK-01` em `docs/ORQ_REFATORACAO_FRONTEND_QUEUE.md` com ordem oficial: ORQ frontend -> execucao FE -> ORQ backend.
+- [DONE] Criar fila operacional da IA ORQ em `docs/orq_refatoracao_frontend_queue.md` para usar planejamento e revisao multi-IA sem conflito de arquivo.
+- [DONE] Definir `STACK-01` em `docs/orq_refatoracao_frontend_queue.md` com ordem oficial: ORQ frontend -> execucao FE -> ORQ backend.
 - [DONE] Extrair helpers visuais de feedback e visibilidade de modais auxiliares para `frontend/js/ui/renderers.js`, deixando `app.js` com wrappers simples para perfil/aprovacao e feedback do modal.
 - [DONE] Extrair helpers de cabecalho/conflito do modal e reutilizar o helper de visibilidade nos modais principal e de exportacao customizada.
 - [DONE] Extrair o painel beta de suporte para `frontend/js/ui/betaSupport.js`, deixando `app.js` como bridge de estado e callbacks.
@@ -102,3 +102,4 @@ Success: funcoes de progresso/marcacao passam a usar `frontend/js/ui/metrics.js`
 
 Active: ID-FE-95
 Risks: validar comportamento em dispositivos com storage bloqueado.
+

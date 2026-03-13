@@ -149,7 +149,7 @@
     introTitle.textContent = "Governanca de imports";
     var introText = document.createElement("p");
     introText.className = "muted small";
-    introText.textContent = "Todos podem importar. O PROGRAMADOR monitora, corrige e remove imports com trilha de auditoria.";
+    introText.textContent = "Fluxo operacional unificado: usuarios operacionais podem importar, corrigir e remover imports com trilha de auditoria.";
     intro.appendChild(introTitle);
     intro.appendChild(introText);
     target.appendChild(intro);
@@ -157,7 +157,7 @@
     if (!canView()) {
       var locked = document.createElement("p");
       locked.className = "beta-empty";
-      locked.textContent = "Painel de governanca disponivel apenas para PROGRAMADOR.";
+      locked.textContent = "Perfil sem permissao para governanca de imports.";
       target.appendChild(locked);
       return;
     }
@@ -389,7 +389,7 @@
 
     var governanceHint = document.createElement("p");
     governanceHint.className = "muted small";
-    governanceHint.textContent = "O PROGRAMADOR pode abrir a emenda criada ou alterada por este lote para fazer o ajuste diretamente.";
+    governanceHint.textContent = "Qualquer perfil operacional com permissao de governanca pode abrir a emenda criada ou alterada por este lote para ajuste direto.";
     detailCard.appendChild(governanceHint);
 
     var linesTitle = document.createElement("h4");

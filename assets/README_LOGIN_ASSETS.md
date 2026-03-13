@@ -32,7 +32,7 @@ clean modern university campus with palm trees and minimal landscaping, large gl
 4. Exporte o brasão em PNG transparente e salve como `assets/sec-logo.png`.
 5. Recarregue o browser com `Ctrl+F5`.
 
-Prompts adicionais: `assets/PROMPTS_LOGIN_SAAS.md`
+Prompts adicionais: `assets/prompts_login_saas.md`
 
 ## Critério de aceite visual
 
@@ -40,3 +40,4 @@ Prompts adicionais: `assets/PROMPTS_LOGIN_SAAS.md`
 - Formulário com contraste alto.
 - Fundo bonito sem poluição visual.
 - Login mantém fluxo atual (sem quebrar autenticação).
+

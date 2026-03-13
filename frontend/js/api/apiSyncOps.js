@@ -118,7 +118,10 @@
   }
 
   async function previewImportXlsx(file, ctx) {
-    if (!ctx.isApiEnabled()) {
+    var canPreview = typeof ctx.isImportPreviewApiEnabled === "function"
+      ? !!ctx.isImportPreviewApiEnabled()
+      : !!ctx.isApiEnabled();
+    if (!canPreview) {
       throw new Error("Preview de importacao indisponivel sem API ativa.");
     }
     if (!file) {

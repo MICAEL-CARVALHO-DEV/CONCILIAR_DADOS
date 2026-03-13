@@ -99,9 +99,43 @@
     upsertRawField(record.all_fields, "processo_sei", record.processo_sei, aliasesByCanonical, preferredHeaders, normalizeHeaderFn);
   }
 
+  function buildRawFieldsPreview(record, draftState, fieldOrder, getModalFieldType, normalizeDraftFieldValue, aliasesByCanonical, preferredHeaders, normalizeHeaderFn) {
+    if (!record || typeof record !== "object") return {};
+
+    var clone = typeof normalizeUtils.shallowCloneObj === "function"
+      ? normalizeUtils.shallowCloneObj
+      : function (obj) {
+          var out = {};
+          Object.keys(obj || {}).forEach(function (key) {
+            out[key] = obj[key];
+          });
+          return out;
+        };
+    var preview = clone(record);
+    preview.all_fields = clone(record.all_fields && typeof record.all_fields === "object" ? record.all_fields : {});
+
+    var state = draftState && typeof draftState === "object" ? draftState : null;
+    var fields = Array.isArray(fieldOrder) ? fieldOrder : [];
+    var getType = typeof getModalFieldType === "function" ? getModalFieldType : function () { return "string"; };
+    var normalizeDraft = typeof normalizeDraftFieldValue === "function"
+      ? normalizeDraftFieldValue
+      : function (value) { return value == null ? "" : value; };
+
+    if (state && String(state.recordId || "") === String(record.id || "") && state.draft && typeof state.draft === "object") {
+      fields.forEach(function (field) {
+        if (!field || !field.editable || !field.key) return;
+        preview[field.key] = normalizeDraft(state.draft[field.key], getType(field.key));
+      });
+    }
+
+    syncCanonicalToAllFields(preview, aliasesByCanonical, preferredHeaders, normalizeHeaderFn);
+    return preview.all_fields;
+  }
+
   root.importNormalizationUtils = root.importNormalizationUtils || {};
   root.importNormalizationUtils.upsertRawField = upsertRawField;
   root.importNormalizationUtils.syncCanonicalToAllFields = syncCanonicalToAllFields;
+  root.importNormalizationUtils.buildRawFieldsPreview = buildRawFieldsPreview;
   root.importNormalizationUtils.normalizeReferencePart = normalizeReferencePart;
   root.importNormalizationUtils.buildReferenceKey = buildReferenceKey;
   root.importNormalizationUtils.syncReferenceKeys = syncReferenceKeys;

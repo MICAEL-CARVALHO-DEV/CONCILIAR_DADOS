@@ -52,7 +52,7 @@ py -3 -m http.server $FrontPort --bind 127.0.0.1
 Write-Host ""
 Write-Host "Iniciando stack local..." -ForegroundColor Cyan
 Write-Host "API   : http://127.0.0.1:$ApiPort" -ForegroundColor Green
-Write-Host "Front : http://127.0.0.1:$FrontPort/login.html" -ForegroundColor Green
+Write-Host "Front : http://127.0.0.1:$FrontPort/frontend/pages/login.html" -ForegroundColor Green
 Write-Host "Obs   : Front rodando apenas em localhost (evita bloqueio WinError 10013 em redes corporativas)." -ForegroundColor Yellow
 Write-Host ""
 
@@ -61,7 +61,7 @@ Start-Sleep -Milliseconds 700
 Start-Process powershell -ArgumentList "-NoExit", "-Command", $frontCmd | Out-Null
 Start-Sleep -Milliseconds 700
 
-Start-Process "http://127.0.0.1:$FrontPort/login.html"
+Start-Process "http://127.0.0.1:$FrontPort/frontend/pages/login.html"
 
 Write-Host "Pronto. Dois terminais foram abertos (API + Front)." -ForegroundColor Cyan
 Write-Host "Deixe os dois terminais abertos durante o uso."

@@ -7,7 +7,7 @@
   function applyAccessProfile(ctx) {
     var isOwner = ctx.currentRole === "PROGRAMADOR";
     var readOnlyMeta = ctx.getReadOnlyRoleMeta();
-    var canManageData = isOwner || ctx.currentRole === "APG";
+    var canManageData = ["APG", "SUPERVISAO", "POWERBI", "PROGRAMADOR"].indexOf(String(ctx.currentRole || "").trim().toUpperCase()) >= 0;
     var canCreateProfiles = isOwner;
     var isWorkspaceOperational = typeof ctx.isWorkspaceOperational === "function" ? !!ctx.isWorkspaceOperational() : true;
     var canUseWorkspaceDataset = typeof ctx.canUseWorkspaceDataset === "function" ? !!ctx.canUseWorkspaceDataset() : isWorkspaceOperational;

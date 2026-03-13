@@ -1,4 +1,4 @@
-# PLANO POS-BETA - WORKSPACE BACKEND
+﻿# PLANO POS-BETA - WORKSPACE BACKEND
 
 Goal: Registrar a fase futura de separacao real por `workspace_id` no backend, a ser iniciada somente depois que todos os checks da beta estiverem encerrados e a beta estiver oficialmente ativa.
 Success: A equipe sabe exatamente por que essa etapa foi adiada, quando ela deve comecar e o que precisa mudar no banco, na API e nos scripts.
@@ -100,4 +100,6 @@ Os scripts de smoke/regressao/import precisam ser atualizados para:
   - `FEDERAL` apenas como placeholder futuro
 
 ## Resume from
-- Quando todos os checks da beta estiverem encerrados, abrir este documento junto com `CHECK62.md` e `docs/REGRAS_PLANILHAS_TESTE_E_OFICIAL.md` para iniciar a modelagem real de workspaces no backend.
+- Quando todos os checks da beta estiverem encerrados, abrir este documento junto com `check62.md` e `docs/regras_planilhas_teste_e_oficial.md` para iniciar a modelagem real de workspaces no backend.
+
+

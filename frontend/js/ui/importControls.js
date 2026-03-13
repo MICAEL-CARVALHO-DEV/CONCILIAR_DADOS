@@ -84,7 +84,7 @@
           return;
         }
         if (!canMutateRecords()) {
-          globalScope.alert("Perfil SUPERVISAO nao pode resetar dados.");
+          globalScope.alert("Perfil atual nao pode resetar dados neste workspace.");
           return;
         }
         if (!globalScope.confirm("Resetar a Pagina de teste para dados DEMO? Isso apaga alteracoes locais deste workspace.")) return;
@@ -113,13 +113,19 @@
         if (!file) return;
 
         try {
-          var useBackendPreview = typeof opts.isApiEnabled === "function" && opts.isApiEnabled() && typeof opts.previewImportXlsx === "function";
+          var canUsePreviewApi = typeof opts.canUseImportPreviewApi === "function"
+            ? !!opts.canUseImportPreviewApi()
+            : (typeof opts.isApiEnabled === "function" && !!opts.isApiEnabled());
+          var shouldSyncImportToApi = typeof opts.shouldSyncImportToApi === "function"
+            ? !!opts.shouldSyncImportToApi()
+            : false;
+          var useBackendPreview = canUsePreviewApi && typeof opts.previewImportXlsx === "function";
           var sourceRows = [];
           var authoritativePreview = null;
           var report = null;
 
           if (!useBackendPreview) {
-            throw new Error("Importacao oficial exige API ativa e preview Python.");
+            throw new Error("Importacao exige API ativa para preview Python.");
           }
 
           authoritativePreview = await opts.previewImportXlsx(file);
@@ -157,7 +163,7 @@
             return;
           }
 
-          var removedDemo = opts.purgeDemoBeforeOfficialImport();
+          var removedDemo = shouldSyncImportToApi ? opts.purgeDemoBeforeOfficialImport() : 0;
           if (removedDemo > 0) {
             var currentState = opts.getState();
             opts.setIdCountersByYear(opts.buildIdCounters((currentState && currentState.records) || []));
@@ -169,21 +175,26 @@
           opts.syncYearFilter();
           opts.render();
           opts.showImportReport(report);
-          var loteId = await opts.syncImportBatchToApi(file, report);
-          if (loteId) {
-            await opts.syncImportLinesToApi(loteId, report.rowDetails || []);
-            if (typeof opts.refreshImportLots === "function") {
-              Promise.resolve(opts.refreshImportLots(false)).catch(function () { /* no-op */ });
+          if (shouldSyncImportToApi) {
+            var loteId = await opts.syncImportBatchToApi(file, report);
+            if (loteId) {
+              await opts.syncImportLinesToApi(loteId, report.rowDetails || []);
+              if (typeof opts.refreshImportLots === "function") {
+                Promise.resolve(opts.refreshImportLots(false)).catch(function () { /* no-op */ });
+              }
             }
           }
 
           var extraDemoInfo = removedDemo > 0 ? (" | Demos removidos: " + String(removedDemo)) : "";
-          globalScope.alert("Importacao concluida. Criados: " + report.created + " | Atualizados: " + report.updated + " | Sem alteracao: " + report.unchanged + " | Linhas lidas: " + report.totalRows + extraDemoInfo);
+          var syncInfo = shouldSyncImportToApi
+            ? " | Sincronizado com API oficial."
+            : " | Importacao isolada neste workspace (sem enviar lote para API oficial).";
+          globalScope.alert("Importacao concluida. Criados: " + report.created + " | Atualizados: " + report.updated + " | Sem alteracao: " + report.unchanged + " | Linhas lidas: " + report.totalRows + extraDemoInfo + syncInfo);
         } catch (err) {
           globalScope.console.error(err);
           var detail = err && err.message ? String(err.message) : "erro desconhecido";
-          var hint = detail.includes("Importacao oficial exige API ativa")
-            ? " Ative a API e use a base operacional para importar."
+          var hint = detail.includes("Importacao exige API ativa para preview Python")
+            ? " Ative a API para usar o preview Python da importacao."
             : (detail.includes("Biblioteca XLSX nao carregada") ? " Dica: abra por http://127.0.0.1:5500 e confirme internet para carregar a biblioteca XLSX." : "");
           globalScope.alert("Falha ao importar arquivo. Detalhe: " + detail + hint);
         } finally {

@@ -433,7 +433,7 @@ backup/
 ### Dia 28 - Documentacao final
 Criar ou atualizar:
 
-- `README.md`
+- `readme.md`
 - `docs/estrutura.md`
 - `docs/fluxo-auth.md`
 - `docs/refatoracao.md`
@@ -551,5 +551,6 @@ Concluido neste ciclo:
 - [ID-FE-04] utilitarios base de texto, numero e formatacao no arquivo `frontend/js/utils/format.js`
 - [ID-FE-05] utilitarios de normalizacao e clones no arquivo `frontend/js/utils/normalize.js`
 - [ID-FE-06] utilitarios de geracao de ID em `frontend/js/utils/id.js`
+
 
 

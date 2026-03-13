@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="../../style.css" />
 </head>
 <body class="login-page cadastro-page">
   <main class="login-layout cadastro-layout">
@@ -89,8 +89,8 @@
     </section>
   </main>
 
-  <script src="config.js"></script>
-  <script src="config.production.js"></script>
+  <script src="../config/config.js"></script>
+  <script src="../config/config.production.js"></script>
   <script>
     (function () {
       // Mapa rapido:
@@ -116,9 +116,9 @@
       const PENDING_GOOGLE_CREDENTIAL_KEY = "SEC_PENDING_GOOGLE_CREDENTIAL";
       const USER_NAME_KEY = "SEC_USER_NAME";
       const USER_ROLE_KEY = "SEC_USER_ROLE";
-      const ROLE_FALLBACK = ["APG", "SUPERVISAO", "CONTABIL", "POWERBI", "PROGRAMADOR"];
+      const ROLE_FALLBACK = ["APG", "SUPERVISAO", "POWERBI", "PROGRAMADOR"];
       const OWNER_ROLE = "PROGRAMADOR";
-      const PUBLIC_ALLOWED = ["APG", "SUPERVISAO", "CONTABIL", "POWERBI"];
+      const PUBLIC_ALLOWED = ["APG", "SUPERVISAO", "POWERBI"];
       // Evita redirecionamento para URL externa/invalidada que pode causar loop de sessao.
       function sanitizeNextPath(value) {
         const raw = String(value || "").trim();

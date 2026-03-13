@@ -21,14 +21,16 @@ jobs:
       - name: Build static site artifact
         run: |
           mkdir -p _site
+          mkdir -p _site/frontend/pages
+          mkdir -p _site/frontend/config
           cp index.html _site/
-          cp login.html _site/
-          cp cadastro.html _site/
+          cp frontend/pages/login.html _site/frontend/pages/
+          cp frontend/pages/cadastro.html _site/frontend/pages/
           cp style.css _site/
           cp app.js _site/
-          cp config.js _site/
-          cp config.production.js _site/
-          cp LICENSE _site/
+          cp frontend/config/config.js _site/frontend/config/
+          cp frontend/config/config.production.js _site/frontend/config/
+          cp anotacoes/legal/license _site/license
           mkdir -p _site/assets
           cp assets/sec-logo.png _site/assets/
           cp assets/login-bg.jpg _site/assets/
@@ -38,10 +40,11 @@ jobs:
       - name: Verify artifact files
         run: |
           test -f _site/index.html
-          test -f _site/login.html
-          test -f _site/cadastro.html
+          test -f _site/frontend/pages/login.html
+          test -f _site/frontend/pages/cadastro.html
           test -f _site/style.css
           test -f _site/app.js
-          test -f _site/config.production.js
+          test -f _site/frontend/config/config.production.js
+          test -f _site/license
           test -f _site/assets/sec-logo.png
           test -f _site/assets/login-bg.jpg

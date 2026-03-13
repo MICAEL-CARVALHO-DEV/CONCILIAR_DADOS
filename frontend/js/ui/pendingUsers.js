@@ -52,7 +52,7 @@
     if (!userId) return;
     var isOwnerUser = typeof opts.isOwnerUser === "function" ? opts.isOwnerUser : function () { return false; };
     var setFeedback = typeof opts.setFeedback === "function" ? opts.setFeedback : noop;
-    var getSelectedRole = typeof opts.getSelectedRole === "function" ? opts.getSelectedRole : function () { return "CONTABIL"; };
+    var getSelectedRole = typeof opts.getSelectedRole === "function" ? opts.getSelectedRole : function () { return "APG"; };
     var apiRequest = typeof opts.apiRequest === "function" ? opts.apiRequest : function () { return Promise.reject(new Error("apiRequest indisponivel")); };
     var refresh = typeof opts.refresh === "function" ? opts.refresh : function () { return Promise.resolve(); };
 
@@ -77,7 +77,7 @@
     if (!userId) return;
     var isOwnerUser = typeof opts.isOwnerUser === "function" ? opts.isOwnerUser : function () { return false; };
     var setFeedback = typeof opts.setFeedback === "function" ? opts.setFeedback : noop;
-    var getSelectedRole = typeof opts.getSelectedRole === "function" ? opts.getSelectedRole : function () { return "CONTABIL"; };
+    var getSelectedRole = typeof opts.getSelectedRole === "function" ? opts.getSelectedRole : function () { return "APG"; };
     var confirmAction = typeof opts.confirmAction === "function" ? opts.confirmAction : function () { return true; };
     var apiRequest = typeof opts.apiRequest === "function" ? opts.apiRequest : function () { return Promise.reject(new Error("apiRequest indisponivel")); };
     var refresh = typeof opts.refresh === "function" ? opts.refresh : function () { return Promise.resolve(); };

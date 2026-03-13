@@ -1,4 +1,4 @@
-# DESIGN DASHBOARD POWERBI E LAYOUT PRINCIPAL
+﻿# DESIGN DASHBOARD POWERBI E LAYOUT PRINCIPAL
 
 Goal: Registrar a direcao oficial de design para a futura reformulacao visual do `SEC Emendas`, separando o layout operacional principal da visao executiva `Power BI`.
 Success: Quando chegar a hora de redesenhar a interface, a equipe ja tera uma base objetiva para prompts, scripts, wireframes e implementacao sem retrabalho conceitual.
@@ -88,7 +88,7 @@ Descricao visual:
 - excesso de botoes no topo pode continuar poluindo a operacao
 
 ### O que absorver para o SEC Emendas
-- estrutura de navegação lateral ou semi-lateral
+- estrutura de navegaÃ§Ã£o lateral ou semi-lateral
 - layout principal com foco em:
   - filtros
   - tabela
@@ -304,4 +304,5 @@ Quando chegar a hora da execucao, usar este documento junto com:
 - A parte operacional e a parte executiva devem compartilhar identidade, mas nao a mesma densidade de informacao.
 
 ## Resume from
-- Quando for iniciar o redesign, abrir este documento primeiro e depois alinhar com `CHECK62.md` e os prompts/scripts que serao elaborados.
+- Quando for iniciar o redesign, abrir este documento primeiro e depois alinhar com `check62.md` e os prompts/scripts que serao elaborados.
+

@@ -212,6 +212,9 @@
     else delete state.dirty[key];
 
     ctx.updateModalDraftUi();
+    if (typeof ctx.renderModalRawFieldsPreview === "function") {
+      ctx.renderModalRawFieldsPreview();
+    }
     ctx.scheduleModalAutosave("field");
   }
 

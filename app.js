@@ -1,6 +1,6 @@
 /***********************
  * SEC Emendas - v3
- * - Status oficial controlado por usuarios operacionais (supervisao monitora)
+ * - Status oficial controlado por usuarios operacionais em fluxo unificado
  * - Marcacao por usuario e timeline completa
  * - Importacao de XLSX (multiplas abas)
  * - Chave de referencia para duplicidade
@@ -43,15 +43,15 @@ const CROSS_TAB_PING_KEY = "SEC_STATE_PING";
 const LOCAL_TAB_ID = "tab_" + Math.random().toString(36).slice(2) + "_" + Date.now();
 const SYSTEM_MIGRATION_USER = "sistema";
 const SYSTEM_MIGRATION_ROLE = "PROGRAMADOR";
-const USER_ROLE_OPTIONS = ["APG", "SUPERVISAO", "CONTABIL", "POWERBI", "PROGRAMADOR"];
-const PUBLIC_SELF_REGISTER_ROLE_OPTIONS = ["APG", "SUPERVISAO", "CONTABIL", "POWERBI"];
+const USER_ROLE_OPTIONS = ["APG", "SUPERVISAO", "POWERBI", "PROGRAMADOR"];
+const PUBLIC_SELF_REGISTER_ROLE_OPTIONS = ["APG", "SUPERVISAO", "POWERBI"];
 const API_BASE_URL_KEY = "SEC_API_BASE_URL";
 const API_ENABLED_KEY = "SEC_API_ENABLED";
 const API_SHARED_KEY_SESSION_KEY = "SEC_API_SHARED_KEY_SESSION";
 const SESSION_TOKEN_KEY = "SEC_SESSION_TOKEN";
 const SESSION_TOKEN_BACKUP_KEY = "SEC_SESSION_TOKEN_BKP";
-const AUTH_LOGIN_PAGE = "login.html";
-const AUTH_REGISTER_PAGE = "cadastro.html";
+const AUTH_LOGIN_PAGE = "frontend/pages/login.html";
+const AUTH_REGISTER_PAGE = "frontend/pages/cadastro.html";
 const STORAGE_MODE_KEY = "SEC_STORAGE_MODE";
 const STORAGE_MODE_LOCAL = "local";
 const STORAGE_MODE_SESSION = "session";
@@ -147,13 +147,13 @@ const LOA_PRE_BETA_LOCKED = String(
 ).trim().toLowerCase() !== "false";
 const DEMO_MULTI_USERS = [
   { name: "Miguel", role: "APG" },
-  { name: "Ana", role: "CONTABIL" },
+  { name: "Ana", role: "SUPERVISAO" },
   { name: "Bruno", role: "POWERBI" },
-  { name: "Carla", role: "SUPERVISAO" }
+  { name: "Carla", role: "PROGRAMADOR" }
 ];
 const DEMO_NOTES = [
   "Aguardando documento complementar.",
-  "Validacao contabil pendente.",
+  "Validacao operacional pendente.",
   "Encaminhado para execucao.",
   "Revisado em reuniao de acompanhamento.",
   "Aguardando retorno do setor responsavel."
@@ -245,10 +245,10 @@ const RAW_PREFERRED_HEADERS = {
 /**
  * Usuario local por maquina:
  * - CURRENT_USER: nome de quem esta usando
- * - CURRENT_ROLE: APG | SUPERVISAO | CONTABIL | POWERBI
+ * - CURRENT_ROLE: APG | SUPERVISAO | POWERBI | PROGRAMADOR
  */
 let CURRENT_USER = "USER01";
-let CURRENT_ROLE = "CONTABIL";
+let CURRENT_ROLE = "APG";
 let lastFocusedElement = null;
 let modalDraftState = null;
 let modalCloseInProgress = false;
@@ -269,7 +269,7 @@ const MODAL_AUTOSAVE_DEBOUNCE_MS = 2000;
 const MODAL_DRAFT_STORAGE_PREFIX = "SEC_MODAL_DRAFT_V1";
 const SUPPORT_CATEGORIES = ["OPERACAO", "IMPORTACAO", "EXPORTACAO", "DASHBOARD", "ACESSO", "ESTRUTURAL", "OUTRO"];
 const SUPPORT_THREAD_STATUS = ["ABERTO", "EM_ANALISE", "RESPONDIDO", "FECHADO"];
-const SUPPORT_MANAGER_ROLES = ["SUPERVISAO", "POWERBI", "PROGRAMADOR"];
+const SUPPORT_MANAGER_ROLES = ["APG", "SUPERVISAO", "POWERBI", "PROGRAMADOR"];
 let CURRENT_WORKSPACE = readStoredWorkspaceKey();
 
 const DEMO = [
@@ -878,7 +878,8 @@ function syncYearFilter() {
   }
 
   const current = yearFilter.value;
-  const years = Array.from(new Set(state.records.map(function (r) {
+  const datasetRecords = getWorkspaceDatasetRecords();
+  const years = Array.from(new Set(datasetRecords.map(function (r) {
     return toInt(r.ano);
   }))).filter(function (y) {
     return y > 0;
@@ -903,7 +904,8 @@ function syncCustomExportFilters() {
 
   if (!exportCustomYear || !exportCustomStatus) return;
 
-  const years = Array.from(new Set((state.records || []).map(function (r) {
+  const datasetRecords = getWorkspaceDatasetRecords();
+  const years = Array.from(new Set(datasetRecords.map(function (r) {
     return toInt(r.ano);
   }))).filter(function (y) {
     return y > 0;
@@ -1041,8 +1043,9 @@ function getFiltered() {
   const status = statusFilter.value;
   const year = yearFilter.value;
   const q = (searchInput.value || "").trim().toLowerCase();
+  const datasetRecords = getWorkspaceDatasetRecords();
 
-  return state.records.filter(function (r) {
+  return datasetRecords.filter(function (r) {
     const users = getActiveUsersWithLastMark(r);
     const global = getGlobalProgressState(users);
     const okStatus = !status || global.code === status;
@@ -1228,7 +1231,12 @@ function getImportControlsContext() {
     setLastImportedWorkbookTemplate: function (nextValue) {
       lastImportedWorkbookTemplate = nextValue || null;
     },
+    workspaceMode: getCurrentWorkspaceDefinition().mode,
     isApiEnabled: isApiEnabled,
+    canUseImportPreviewApi: isImportPreviewApiEnabled,
+    shouldSyncImportToApi: function () {
+      return isApiBackedWorkspace() && isApiEnabled();
+    },
     previewImportXlsx: previewImportXlsx,
     purgeDemoBeforeOfficialImport: purgeDemoBeforeOfficialImport,
     processImportedRows: processImportedRows,
@@ -1711,6 +1719,7 @@ function onModalFieldInput(e) {
   else delete modalDraftState.dirty[key];
 
   updateModalDraftUi();
+  renderModalRawFieldsPreview();
   scheduleModalAutosave("field");
 }
 
@@ -2072,11 +2081,53 @@ function renderUserProgressBox(progressContainer, progress, delays, options) {
   progressContainer.appendChild(footer);
 }
 
+function buildModalRawFieldsPreview(rec) {
+  const buildRawFieldsPreviewUtil = getImportNormalizationUtil("buildRawFieldsPreview");
+  const draftState = rec && modalDraftState && String(modalDraftState.recordId || "") === String(rec.id || "")
+    ? modalDraftState
+    : null;
+
+  if (buildRawFieldsPreviewUtil) {
+    return buildRawFieldsPreviewUtil(
+      rec,
+      draftState,
+      MODAL_FIELD_ORDER,
+      getModalFieldType,
+      normalizeDraftFieldValue,
+      IMPORT_ALIASES,
+      RAW_PREFERRED_HEADERS,
+      normalizeHeader
+    );
+  }
+
+  if (!rec || typeof rec !== "object") return {};
+
+  const preview = shallowCloneObj(rec);
+  preview.all_fields = shallowCloneObj(rec.all_fields && typeof rec.all_fields === "object" ? rec.all_fields : {});
+
+  if (draftState && draftState.draft && typeof draftState.draft === "object") {
+    MODAL_FIELD_ORDER.forEach(function (field) {
+      if (!field || !field.editable || !field.key) return;
+      preview[field.key] = normalizeDraftFieldValue(draftState.draft[field.key], getModalFieldType(field.key));
+    });
+  }
+
+  syncCanonicalToAllFields(preview);
+  return preview.all_fields;
+}
+
+function renderModalRawFieldsPreview() {
+  if (!modal || !modal.classList.contains("show")) return;
+  const rec = getSelected();
+  if (!rec) return;
+  renderRawFields(rec);
+}
+
 function renderRawFields(rec) {
   if (!rawFields) return;
   const renderRawFieldsUtil = getUiRenderUtil("renderRawFields");
   if (renderRawFieldsUtil) {
-    const source = rec && rec.all_fields && typeof rec.all_fields === "object" ? rec.all_fields : null;
+    const source = buildModalRawFieldsPreview(rec);
     renderRawFieldsUtil(rawFields, source, {});
     return;
   }
@@ -2448,12 +2499,16 @@ function findRecordForImportLine(line) {
 }
 
 function canOpenImportLineRecord(line) {
-  return !!findRecordForImportLine(line);
+  const record = findRecordForImportLine(line);
+  if (!record) return false;
+  if (isOperationalWorkspace() && isLoaMitigationNoiseRecord(record)) return false;
+  return true;
 }
 
 function openImportLineRecord(line) {
   const record = findRecordForImportLine(line);
   if (!record) return false;
+  if (isOperationalWorkspace() && isLoaMitigationNoiseRecord(record)) return false;
   openModal(record.id);
   return true;
 }
@@ -3066,6 +3121,7 @@ function getRoleAccessContext() {
     currentUser: CURRENT_USER,
     supportManagerRoles: SUPPORT_MANAGER_ROLES,
     isApiEnabled: isApiEnabled,
+    isImportPreviewApiEnabled: isImportPreviewApiEnabled,
     workspaceMode: getCurrentWorkspaceDefinition().mode,
     workspaceKey: getCurrentWorkspaceDefinition().key,
     workspaceAllowsImport: canImportInCurrentWorkspace(),
@@ -3327,6 +3383,31 @@ function canUseDemoWorkspaceTools() {
   return !!getCurrentWorkspaceDefinition().demoTools;
 }
 
+function isLoaMitigationNoiseRecord(rec) {
+  if (!rec || typeof rec !== "object") return false;
+  const id = normalizeLooseText(rec.id || rec.id_interno || "");
+  const identificacao = normalizeLooseText(rec.identificacao || "");
+  const refKey = normalizeLooseText(rec.ref_key || "");
+  const processo = normalizeLooseText(rec.processo_sei || "");
+  const blob = [id, identificacao, refKey, processo].join(" ");
+
+  if (blob.indexOf("smoke e2e") >= 0) return true;
+  if (blob.indexOf("regressao p0") >= 0) return true;
+  if (blob.indexOf("qa_smoke_") >= 0) return true;
+  if (/^epi-(item8|c34|hmlg|smoke)-/i.test(String(rec.id || "").trim())) return true;
+  if (/^epi-\d{4}-\d{6}-v\d{2,}$/i.test(String(rec.id || "").trim()) && blob.indexOf("smoke") >= 0) return true;
+  return false;
+}
+
+function getWorkspaceDatasetRecords() {
+  const records = Array.isArray(state && state.records) ? state.records : [];
+  if (!records.length) return [];
+  if (!isOperationalWorkspace()) return records;
+  return records.filter(function (rec) {
+    return !isLoaMitigationNoiseRecord(rec);
+  });
+}
+
 function isLoaPreBetaLocked() {
   return LOA_PRE_BETA_LOCKED && getCurrentWorkspaceDefinition().key === WORKSPACE_KEYS.LOA;
 }
@@ -3514,7 +3595,7 @@ function renderModalAccessState(rec) {
 
   if (!isApiEnabled()) {
     if (!canMutateRecords()) {
-      showAccessState("readonly", readOnlyRoleMessage || "MODO LEITURA: perfil monitor apenas.");
+      showAccessState("readonly", readOnlyRoleMessage || "MODO LEITURA: edicao indisponivel para este contexto.");
       return;
     }
     modalAccessState.classList.add("hidden");
@@ -3524,7 +3605,7 @@ function renderModalAccessState(rec) {
   }
 
   if (!canMutateRecords()) {
-    showAccessState("readonly", readOnlyRoleMessage || "MODO LEITURA: perfil monitor apenas.");
+    showAccessState("readonly", readOnlyRoleMessage || "MODO LEITURA: edicao indisponivel para este contexto.");
     return;
   }
 
@@ -3926,14 +4007,14 @@ function getActiveBetaWorkspaceTab() {
   if (betaWorkspaceTab !== "powerbi" && betaWorkspaceTab !== "history" && betaWorkspaceTab !== "support" && betaWorkspaceTab !== "imports") {
     betaWorkspaceTab = getPreferredBetaWorkspaceTab();
   }
-  if (betaWorkspaceTab === "imports" && !isProgramadorUser()) betaWorkspaceTab = getPreferredBetaWorkspaceTab();
+  if (betaWorkspaceTab === "imports" && !canImportData()) betaWorkspaceTab = getPreferredBetaWorkspaceTab();
   return betaWorkspaceTab;
 }
 
 function setBetaWorkspaceTab(nextTab) {
   if (nextTab === "powerbi" || nextTab === "support") {
     betaWorkspaceTab = nextTab;
-  } else if (nextTab === "imports" && isProgramadorUser()) {
+  } else if (nextTab === "imports" && canImportData()) {
     betaWorkspaceTab = "imports";
   } else {
     betaWorkspaceTab = "history";
@@ -3943,7 +4024,7 @@ function setBetaWorkspaceTab(nextTab) {
   if (betaWorkspaceTab === "support" && canUseSupportApi() && apiOnline) {
     refreshBetaSupportFromApi(true).catch(function () { /* no-op */ });
   }
-  if (betaWorkspaceTab === "imports" && isApiEnabled() && isProgramadorUser()) {
+  if (betaWorkspaceTab === "imports" && isApiEnabled() && canImportData()) {
     refreshBetaImportLotsFromApi(true).catch(function () { /* no-op */ });
   }
   render();
@@ -4291,9 +4372,9 @@ function buildBetaImportApiQuery() {
 }
 
 async function refreshBetaImportLinesFromApi(forceRender, loteId) {
-  if (!isApiEnabled() || !isProgramadorUser()) {
+  if (!isApiEnabled() || !canImportData()) {
     betaImportLines = [];
-    betaImportLinesError = isApiEnabled() ? "Painel de governanca disponivel apenas para PROGRAMADOR." : "";
+    betaImportLinesError = isApiEnabled() ? "Perfil sem permissao para governanca de imports." : "";
     betaImportLinesLoading = false;
     if (forceRender) renderBetaWorkspace(getFiltered());
     return;
@@ -4328,9 +4409,9 @@ async function refreshBetaImportLinesFromApi(forceRender, loteId) {
 }
 
 async function refreshBetaImportLogsFromApi(forceRender, loteId) {
-  if (!isApiEnabled() || !isProgramadorUser()) {
+  if (!isApiEnabled() || !canImportData()) {
     betaImportLogs = [];
-    betaImportLogsError = isApiEnabled() ? "Painel de governanca disponivel apenas para PROGRAMADOR." : "";
+    betaImportLogsError = isApiEnabled() ? "Perfil sem permissao para governanca de imports." : "";
     betaImportLogsLoading = false;
     if (forceRender) renderBetaWorkspace(getFiltered());
     return;
@@ -4365,9 +4446,9 @@ async function refreshBetaImportLogsFromApi(forceRender, loteId) {
 }
 
 async function refreshBetaImportLotsFromApi(forceRender) {
-  if (!isApiEnabled() || !isProgramadorUser()) {
+  if (!isApiEnabled() || !canImportData()) {
     betaImportLots = [];
-    betaImportLotsError = isApiEnabled() ? "Painel de governanca disponivel apenas para PROGRAMADOR." : "";
+    betaImportLotsError = isApiEnabled() ? "Perfil sem permissao para governanca de imports." : "";
     betaImportLotsLastSyncAt = "";
     betaImportLotsLoading = false;
     betaImportSelectedLotId = 0;
@@ -4404,8 +4485,8 @@ async function refreshBetaImportLotsFromApi(forceRender) {
 }
 
 async function governImportLotFromApi(loteId, acao, motivo) {
-  if (!isApiEnabled() || !isProgramadorUser()) {
-    throw new Error("Governanca de import disponivel apenas para PROGRAMADOR.");
+  if (!isApiEnabled() || !canImportData()) {
+    throw new Error("Perfil sem permissao para governanca de imports.");
   }
   const selectedId = Number(loteId || 0);
   if (!selectedId) {
@@ -4709,7 +4790,8 @@ function getModalDraftStateContext() {
     deepClone: deepClone,
     isoNow: isoNow,
     clearModalSaveFeedback: clearModalSaveFeedback,
-    scheduleModalAutosave: scheduleModalAutosave
+    scheduleModalAutosave: scheduleModalAutosave,
+    renderModalRawFieldsPreview: renderModalRawFieldsPreview
   };
 }
 
@@ -5124,6 +5206,7 @@ function getApiStateSyncContext() {
 function getApiSyncOpsContext() {
   return {
     isApiEnabled: isApiEnabled,
+    isImportPreviewApiEnabled: isImportPreviewApiEnabled,
     apiRequest: apiRequest,
     getApiBaseUrl: getApiBaseUrl,
     buildApiHeaders: buildApiHeaders,
@@ -5296,7 +5379,7 @@ function getBetaWorkspaceContext() {
     activeTab: getActiveBetaWorkspaceTab(),
     clearNodeChildren: clearNodeChildren,
     canViewGlobalAuditApi: canViewGlobalAuditApi,
-    showImportGovernance: isProgramadorUser(),
+    showImportGovernance: canImportData(),
     setTab: setBetaWorkspaceTab,
     renderHistory: renderBetaHistoryPanel,
     renderPowerBi: renderBetaPowerBiPanel,
@@ -5334,7 +5417,7 @@ function getBetaImportsContext() {
     setSelectOptions: setSelectOptions,
     fmtDateTime: fmtDateTime,
     extractApiError: extractApiError,
-    canView: isProgramadorUser,
+    canView: canImportData,
     canOpenRecord: canOpenImportLineRecord,
     openRecord: openImportLineRecord,
     refreshLots: refreshBetaImportLotsFromApi,
@@ -5370,8 +5453,16 @@ function setAuxModalVisibilityWithFallback(modalEl, visible) {
     return;
   }
   if (!modalEl) return;
-  modalEl.classList.toggle("show", !!visible);
-  modalEl.setAttribute("aria-hidden", visible ? "false" : "true");
+  const isVisible = !!visible;
+  const active = typeof document !== "undefined" ? document.activeElement : null;
+  if (!isVisible && active && modalEl.contains(active) && typeof active.blur === "function") {
+    active.blur();
+  }
+  if ("inert" in modalEl) {
+    modalEl.inert = !isVisible;
+  }
+  modalEl.classList.toggle("show", isVisible);
+  modalEl.setAttribute("aria-hidden", isVisible ? "false" : "true");
 }
 
 function getAuxModalContext() {
@@ -5436,7 +5527,7 @@ function getAccessProfileContext() {
 
 function getSelectedPendingUserRole(userId) {
   const roleSelect = pendingUsersTableWrap ? pendingUsersTableWrap.querySelector("select[data-pending-role='" + String(userId) + "']") : null;
-  return normalizeUserRole(roleSelect ? roleSelect.value : "CONTABIL");
+  return normalizeUserRole(roleSelect ? roleSelect.value : "APG");
 }
 
 function refreshPendingUsersContext() {
@@ -5614,7 +5705,7 @@ function buildPowerBiDashboardData(filteredRows) {
   const filterOptions = buildPowerBiFilterOptions(sourceRows);
   const rows = applyPowerBiDashboardFilters(sourceRows);
   const scopedAuditRows = getScopedAuditRowsForRecords(rows);
-  const isExecutiveRole = ["SUPERVISAO", "POWERBI", "PROGRAMADOR"].indexOf(CURRENT_ROLE) >= 0;
+  const isExecutiveRole = ["APG", "SUPERVISAO", "POWERBI", "PROGRAMADOR"].indexOf(CURRENT_ROLE) >= 0;
 
   const summary = {
     total: rows.length,
@@ -5749,7 +5840,7 @@ function buildExecutiveUsersAoa(model) {
 async function exportExecutiveDashboardReport(filteredRows) {
   const model = buildPowerBiDashboardData(filteredRows);
   if (!model.isExecutiveRole) {
-    alert("A exportacao executiva fica liberada apenas para SUPERVISAO, POWERBI e PROGRAMADOR.");
+    alert("A exportacao executiva fica liberada para APG, SUPERVISAO, POWERBI e PROGRAMADOR.");
     return false;
   }
   const xlsxApi = getXlsxApi();
@@ -5865,7 +5956,7 @@ function applyAccessProfile() {
   const isOwner = CURRENT_ROLE === "PROGRAMADOR";
   const isSupervisor = isSupervisorUser();
   const readOnlyMeta = getReadOnlyRoleMeta();
-  const canManageData = isOwner || CURRENT_ROLE === "APG";
+  const canManageData = ["APG", "SUPERVISAO", "POWERBI", "PROGRAMADOR"].indexOf(CURRENT_ROLE) >= 0;
   const canCreateProfiles = isOwner;
   const isWorkspaceOperational = isOperationalWorkspace();
   const canUseWorkspaceDataset = canRenderWorkspaceDataset();
@@ -6475,6 +6566,15 @@ function isApiEnabled() {
   return true;
 }
 
+// Preview Python de import pode rodar em qualquer workspace, desde que a API esteja habilitada no cliente.
+function isImportPreviewApiEnabled() {
+  const isApiEnabledUtil = getApiClientUtil("isApiEnabled");
+  if (isApiEnabledUtil) {
+    return !!isApiEnabledUtil();
+  }
+  return isApiEnabled();
+}
+
 // Resolve URL base da API (compatibilidade local, quando o cliente modular não estiver disponível).
 function getApiBaseUrl() {
   const getApiBaseUrlUtil = getApiClientUtil("getApiBaseUrl");
@@ -6649,7 +6749,7 @@ function handleApiSyncError(err, actionName) {
 
 function normalizeUserRole(roleInput) {
   const role = String(roleInput || "").trim().toUpperCase();
-  return USER_ROLE_OPTIONS.includes(role) ? role : "CONTABIL";
+  return USER_ROLE_OPTIONS.includes(role) ? role : "APG";
 }
 
 function mkEvent(type, payload) {
@@ -7087,7 +7187,7 @@ function getXlsxApi() {
 
 function getImportReportContext() {
   return {
-    records: state.records || [],
+    records: getWorkspaceDatasetRecords(),
     lastImportedPlanilha1Aoa: lastImportedPlanilha1Aoa,
     importReportEl: importReport,
     fmtDateTime: fmtDateTime,
@@ -7172,7 +7272,7 @@ function getFilterContext() {
     exportCustomStatus: exportCustomStatus,
     statusFilters: STATUS_FILTERS,
     statusValues: STATUS,
-    records: state.records,
+    records: getWorkspaceDatasetRecords(),
     toInt: toInt,
     currentYear: exportCustomYear ? exportCustomYear.value : "",
     currentStatus: exportCustomStatus ? exportCustomStatus.value : ""
@@ -7839,8 +7939,9 @@ function matchesTextFilter(value, term) {
 
 function filterRecordsForExport(scope, customFilters) {
   const filterRecordsForExportUtil = getExportFlowUtil("filterRecordsForExport");
+  const datasetRecords = getWorkspaceDatasetRecords();
   if (filterRecordsForExportUtil) {
-    return filterRecordsForExportUtil(scope, customFilters, state.records, {
+    return filterRecordsForExportUtil(scope, customFilters, datasetRecords, {
       exportScope: EXPORT_SCOPE,
       isCurrentRecord: isCurrentRecord,
       toInt: toInt,
@@ -7850,7 +7951,7 @@ function filterRecordsForExport(scope, customFilters) {
     });
   }
 
-  const records = Array.isArray(state.records) ? state.records.slice() : [];
+  const records = Array.isArray(datasetRecords) ? datasetRecords.slice() : [];
 
   if (scope === EXPORT_SCOPE.HISTORICO) {
     return records;
@@ -7938,7 +8039,7 @@ function refreshCustomExportSummary() {
   };
 
   const rows = filterRecordsForExport(EXPORT_SCOPE.PERSONALIZADO, filters);
-  const totalBase = Array.isArray(state.records) ? state.records.length : 0;
+  const totalBase = getWorkspaceDatasetRecords().length;
   exportCustomSummary.textContent = "Registros selecionados: " + String(rows.length) + " de " + String(totalBase);
 }
 

@@ -1,0 +1,44 @@
+name: Check Higiene Organizacao
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/**"
+      - "scripts/**"
+      - "app.js"
+      - "index.html"
+      - "style.css"
+      - "frontend/**"
+      - "anotacoes/**"
+      - "docs/**"
+      - "checks/**"
+      - "assets/**"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/**"
+      - "scripts/**"
+      - "app.js"
+      - "index.html"
+      - "style.css"
+      - "frontend/**"
+      - "anotacoes/**"
+      - "docs/**"
+      - "checks/**"
+      - "assets/**"
+
+permissions:
+  contents: read
+
+jobs:
+  higiene:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Rodar check de higiene
+        shell: pwsh
+        run: ./scripts/check_higiene_organizacao.ps1 -RepoRoot .

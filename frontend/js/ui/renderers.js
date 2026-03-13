@@ -368,8 +368,8 @@
     if (!container) return;
     var opts = options || {};
     var isReadOnlyRole = !!opts.isReadOnlyRole;
-    var noticeTitle = String(opts.roleNoticeTitle || "Modo supervisao: somente monitoramento");
-    var noticeDescription = String(opts.roleNoticeDescription || "Este perfil acompanha andamento e auditoria em tempo real, sem alterar dados.");
+    var noticeTitle = String(opts.roleNoticeTitle || "Fluxo operacional unificado");
+    var noticeDescription = String(opts.roleNoticeDescription || "Os perfis operacionais compartilham o mesmo fluxo de trabalho.");
 
     if (isReadOnlyRole) {
       container.classList.remove("hidden");
@@ -574,7 +574,7 @@
         var option = document.createElement("option");
         option.value = role;
         option.textContent = role;
-        option.selected = role === normalizeUserRole(String(u && u.perfil || "CONTABIL"));
+        option.selected = role === normalizeUserRole(String(u && u.perfil || "APG"));
         select.appendChild(option);
       });
       tdPerfil.appendChild(select);
@@ -852,7 +852,7 @@
     var apiEnabled = !!opts.apiEnabled;
     var isReadOnly = !!opts.isReadOnly;
     var lockState = opts.lockState || null;
-    var readOnlyRoleMessage = String(opts.readOnlyRoleMessage || "MODO LEITURA: perfil SUPERVISAO monitora, sem alterar dados.");
+    var readOnlyRoleMessage = String(opts.readOnlyRoleMessage || "MODO LEITURA: edicao temporariamente indisponivel.");
     var fmtDateTime = typeof opts.fmtDateTime === "function" ? opts.fmtDateTime : fallbackDateTime;
     var ownerText = typeof opts.emendaLockOwnerText === "function" ? opts.emendaLockOwnerText : function () { return ""; };
 
@@ -905,9 +905,8 @@
     if (!container) return;
     var opts = options || {};
     var apiEnabled = !!opts.apiEnabled;
-    var isSupervisor = !!opts.isSupervisor;
     var isReadOnlyRole = !!opts.isReadOnlyRole;
-    var readOnlyLockLabel = String(opts.readOnlyLockLabel || (isSupervisor ? "Modo supervisao (leitura)" : "Modo leitura"));
+    var readOnlyLockLabel = String(opts.readOnlyLockLabel || "Modo leitura");
     var isReadOnly = !!opts.isReadOnly;
     var lockState = opts.lockState || null;
     var fmtDateTime = typeof opts.fmtDateTime === "function" ? opts.fmtDateTime : fallbackDateTime;
@@ -917,7 +916,7 @@
     if (record) {
       if (!apiEnabled) {
         message = "Modo local: lock de edicao indisponivel.";
-      } else if (isSupervisor || isReadOnlyRole) {
+      } else if (isReadOnlyRole) {
         var supervisorOwner = ownerText(lockState);
         message = supervisorOwner
           ? (readOnlyLockLabel + ". Em edicao por: " + supervisorOwner + ".")

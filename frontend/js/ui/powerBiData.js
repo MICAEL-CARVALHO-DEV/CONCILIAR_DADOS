@@ -88,7 +88,7 @@
     var filterOptions = buildPowerBiFilterOptions(sourceRows, ctx);
     var rows = applyPowerBiDashboardFilters(sourceRows, ctx);
     var scopedAuditRows = getScopedAuditRowsForRecords(rows, ctx);
-    var isExecutiveRole = ["SUPERVISAO", "POWERBI", "PROGRAMADOR"].indexOf(ctx.currentRole) >= 0;
+    var isExecutiveRole = ["APG", "SUPERVISAO", "POWERBI", "PROGRAMADOR"].indexOf(ctx.currentRole) >= 0;
 
     var summary = {
       total: rows.length,

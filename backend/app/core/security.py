@@ -21,6 +21,7 @@ from ..schemas import ROLES
 from ..settings import settings
 
 ALLOWED_ROLES = set(ROLES)
+LEGACY_ROLE_ALIASES = {"CONTABIL": "APG"}
 IMMUTABLE_OWNER_NAMES = {"MICAEL_DEV", "VITOR_DEV"}
 SESSION_HOURS = max(int(settings.JWT_EXPIRE_HOURS or 12), 1)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -383,10 +384,17 @@ def _actor_from_bearer_token(token: str, db: Session) -> dict | None:
     if str(sessao.usuario.id) != sub:
         return None
 
+    actor_role = LEGACY_ROLE_ALIASES.get(
+        str(getattr(sessao.usuario, "perfil", "") or "").strip().upper(),
+        str(getattr(sessao.usuario, "perfil", "") or "").strip().upper(),
+    )
+    if actor_role not in ALLOWED_ROLES:
+        return None
+
     return {
         "id": sessao.usuario.id,
         "name": sessao.usuario.nome,
-        "role": sessao.usuario.perfil,
+        "role": actor_role,
         "session_token": token,
         "session_sid": sid,
         "auth_type": "bearer",
@@ -413,10 +421,17 @@ def _actor_from_legacy_session(token: str, db: Session) -> dict | None:
     if not sessao:
         return None
 
+    actor_role = LEGACY_ROLE_ALIASES.get(
+        str(getattr(sessao.usuario, "perfil", "") or "").strip().upper(),
+        str(getattr(sessao.usuario, "perfil", "") or "").strip().upper(),
+    )
+    if actor_role not in ALLOWED_ROLES:
+        return None
+
     return {
         "id": sessao.usuario.id,
         "name": sessao.usuario.nome,
-        "role": sessao.usuario.perfil,
+        "role": actor_role,
         "session_token": raw,
         "session_sid": None,
         "auth_type": "legacy",
@@ -424,7 +439,7 @@ def _actor_from_legacy_session(token: str, db: Session) -> dict | None:
 
 
 def _normalize_role(role: str) -> str:
-    value = (role or "").strip().upper()
+    value = LEGACY_ROLE_ALIASES.get((role or "").strip().upper(), (role or "").strip().upper())
     if value not in ALLOWED_ROLES:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="setor invalido")
     return value

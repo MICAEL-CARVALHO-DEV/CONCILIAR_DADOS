@@ -1,63 +1,81 @@
-﻿# @DEVE DE CASA - FECHAMENTO DA BETA SEC
+﻿# @DEVE DE CASA - CENTRAL UNICA DE PENDENCIAS BETA SEC
 
 CHECKLIST
-Goal: Listar so o que realmente falta para fechar a beta, sem misturar itens ja decididos ou trabalho tecnico ja concluido.
-Success: O usuario abre este arquivo e enxerga apenas as decisoes e validacoes finais que ainda faltam para declarar a beta fechada.
+Goal: Centralizar todas as pendencias (decisao, validacao, execucao e pos-beta) em um unico arquivo para eliminar retrabalho e duplicidade entre checks.
+Success: Qualquer duvida de "o que falta" e respondida aqui, sem precisar cruzar varios arquivos.
 
-## Ja decididos - nao entram mais como pendencia principal
-- [DONE] `C12-A` `Status_2` nao entra no sistema; coluna extra/duplicada do Excel sera apenas tolerada.
-- [DONE] Import oficial ficou `backend-first`; Python le o `.xlsx` e o front so envia/renderiza.
-- [DONE] Governanca de import ficou assim: qualquer usuario importa, `PROGRAMADOR` governa, corrige e remove com auditoria e motivo.
-- [DONE] `TESTE x OFICIAL` ficou alinhado para a beta atual: `LOA` focada, `TESTE` isolada no front, `FEDERAL` futura.
-- [DONE] Separacao completa por `workspace_id` no backend foi adiada oficialmente para o pos-beta.
+## Regra oficial de uso
+- Pendencia nova entra primeiro aqui.
+- `check62.md` e `checkuser.md` ficam como mapa/historico de execucao.
+- `check_pendencias_beta_sec.md` fica somente como referencia historica de decisoes.
+- Este arquivo e a fonte canonica para fechamento da beta.
 
-## Faltas reais para fechar a beta
-- [TODO] `C49-A` Fechar a regra final da contagem de deputado.
-  O que falta responder: a contagem automatica nasce da base inteira ou do import atual? O ajuste manual vale por import, por planilha ou global? Quem ajusta e quem so visualiza?
-  Recomendacao tecnica: `automatica + ajuste manual auditado`, com ajuste por `import` e permissao de ajuste so para `PROGRAMADOR`.
+## Ja decididos (nao pendentes)
+- [DONE] `C12-A` `Status_2` nao entra no sistema; coluna extra/duplicada sera apenas tolerada no import.
+- [DONE] Import oficial `backend-first` (Python le `.xlsx`; front envia/renderiza).
+- [DONE] Fluxo operacional unificado sem dependencia exclusiva de PROGRAMADOR.
+- [DONE] `LOA x TESTE x FEDERAL` alinhado para fase beta (FEDERAL futura).
+- [DONE] `workspace_id` completo no backend adiado para pos-beta.
 
-- [TODO] `C27` Fechar a regra oficial do export.
-  O que falta responder: o export oficial da operacao sera sempre em `template mode` para preservar mais o layout do arquivo original?
-  Decisao ja tomada: nao precisa pasta de rede; download normal do navegador basta.
-  Recomendacao tecnica: `template mode` como export oficial e export normal escondido da operacao.
+## PENDENCIAS BLOQUEADORAS DA BETA
+### A) Veredito funcional (depende da sua decisao)
+- [TODO] `C19-A` / `P-R02` cadeia oficial de import (`raiz -> import2 -> import3`).
+  Falta decidir: base consolidada x camadas, selecao de contexto e trilha por lote/emenda.
+- [TODO] `C49-A` / `P-R03` regra final da contagem de deputado.
+  Falta decidir: origem da contagem (base atual x historico), escopo do ajuste (import/planilha/global) e permissao de ajuste.
+- [TODO] `C25-B` / `P-R05` fechar oficialmente `objetivo_epi`.
+  Falta decidir: entra ou nao na beta; se entrar, origem e tipo (`estrutural` ou `operacional`).
+- [TODO] `C27` regra oficial do export da operacao.
+  Falta decidir: export oficial em `template mode` por padrao (`SIM/NAO`).
+- [TODO] `P-R06` trilha de servidor interno + Power BI externo.
+  Falta decidir: fase de migracao e momento da leitura externa.
 
-- [TODO] `C25-B` Encerrar oficialmente `objetivo_epi`.
-  Estado atual: o codigo esta coerente sem modelar `objetivo_epi` na beta.
-  O que falta responder: vamos fechar isso como `nao entra na beta` e deixar para futura necessidade real?
-  Recomendacao tecnica: nao mexer agora e encerrar como `fora da beta`.
+### B) Validacao final (manual/visual)
+- [TODO] `C48` validar filtros fortes do historico operacional.
+- [TODO] `C49` validar export do relatorio executivo (arquivo e abas).
+- [TODO] `C50-A` validar fluxo completo da aba `Ajuda e suporte`.
+- [TODO] validar no navegador o warning de acessibilidade do modal (`aria-hidden`) sem regressao.
+- [TODO] validar visual final do dashboard expandido da visao Power BI (`C45-A`) no fluxo atual.
 
-- [TODO] `C48` Validacao visual final do historico com filtros fortes.
-  Validar no navegador: ano, mes, usuario, perfil, tipo_evento, origem e busca textual.
-
-- [TODO] `C49` Validacao visual final do relatorio executivo / XLSX.
-  Validar no navegador: botao, arquivo gerado, abas do arquivo e fidelidade do layout esperado.
-
-- [TODO] `C50-A` Validacao visual final da aba `Ajuda e suporte`.
-  Validar no navegador: abrir chamado, responder, fechar e consultar historico.
-
-## Faltas que nao bloqueiam a beta
-- [TODO] `workspace_id` real no backend para separar `LOA`, `TESTE` e `FEDERAL` no banco/API.
-- [TODO] refinamento do export para preservar layout com fidelidade maior que a atual.
+## PENDENCIAS QUE NAO BLOQUEIAM A BETA (POS-BETA)
+- [TODO] `workspace_id` real no backend para separar `LOA/TESTE/FEDERAL` no banco/API.
+- [TODO] refinamento do export para fidelidade visual maior ao original.
 - [TODO] redesign do layout principal e dashboard Power BI.
 - [TODO] mapa interativo com hover/preview de emenda no dashboard.
-- [TODO] servidor interno / migracao de infraestrutura.
-- [TODO] leitura externa por Power BI fora do sistema.
-- [TODO] refinamentos de acessibilidade e warnings visuais residuais.
-- [TODO] melhorias finas de UX nos paineis de governanca, suporte e dashboard.
+- [TODO] migracao para servidor interno (se infraestrutura aprovar).
+- [TODO] leitura externa Power BI fora do sistema.
+- [TODO] melhorias finais de acessibilidade e UX.
 
-## Ordem final recomendada
-1. `C49-A`
-2. `C27`
+## PENDENCIAS DE HIGIENE DO MAPA (DOCUMENTACAO)
+- [TODO] alinhar itens do `check62.md` que estao como `[ ]` mas ja trazem `| DONE:` no texto.
+  Exemplos: `C03`, `C04`, `C18`, `C25-A`, `C35`, `C37..C44`, `C47`, `C50`, `C53..C62`.
+  Objetivo: evitar leitura ambigua de status.
+
+## Ordem recomendada para resolver agora
+1. `C19-A`
+2. `C49-A`
 3. `C25-B`
-4. `C48`
-5. `C49`
-6. `C50-A`
+4. `C27`
+5. `C48`
+6. `C49`
+7. `C50-A`
+8. warning `aria-hidden`
+
+## Formato de resposta rapida (para voce me enviar)
+1. `C19-A`: <decisao>
+2. `C49-A`: <decisao>
+3. `C25-B`: <decisao>
+4. `C27`: <decisao>
+5. `P-R06`: <decisao>
 
 ## Criterio de fechamento da beta
-A beta fecha quando:
-1. as tres decisoes finais acima estiverem respondidas (`C49-A`, `C27`, `C25-B`)
-2. as tres validacoes visuais finais estiverem aprovadas (`C48`, `C49`, `C50-A`)
+Beta fecha quando:
+1. bloco A (vereditos) estiver decidido
+2. bloco B (validacoes finais) estiver aprovado
+3. sem erro critico em smoke/regressao local
 
 ## Resume from
-- Proxima decisao recomendada: `C49-A` contagem de deputado.
-- Se quiser pular decisao e validar algo no sistema, comece por `C48`.
+- Proxima decisao recomendada: `C19-A`.
+- Se quiser validar antes de decidir: comece por `C48` e `C50-A`.
+
+

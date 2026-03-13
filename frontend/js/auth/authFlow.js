@@ -32,7 +32,7 @@
       var currentUser = ctx.getCurrentUser();
       var currentRole = ctx.getCurrentRole();
       var nameInput = globalScope.prompt("Informe seu nome (ex.: Miguel):", savedUser || currentUser) || currentUser;
-      var roleInput = globalScope.prompt("Informe seu setor (APG | SUPERVISAO | CONTABIL | POWERBI | PROGRAMADOR):", savedRole || currentRole) || currentRole;
+      var roleInput = globalScope.prompt("Informe seu setor (APG | SUPERVISAO | POWERBI | PROGRAMADOR):", savedRole || currentRole) || currentRole;
 
       ctx.setCurrentUser(String(nameInput).trim() || currentUser);
       ctx.setCurrentRole(ctx.normalizeUserRole(roleInput));

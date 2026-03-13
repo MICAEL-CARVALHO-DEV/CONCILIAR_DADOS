@@ -1,60 +1,62 @@
-# INDICE DOCUMENTACAO
+﻿# INDICE DOCUMENTACAO
 
 Goal: Centralizar a navegacao da documentacao ativa do projeto.
 Success: Qualquer pessoa encontra rapidamente o documento certo sem depender de memoria ou busca manual.
 
 ## Comece por aqui
-- `../README.md`
-- `../CHECK62.md`
-- `../CHECKUSER.md`
-- `../checks/CHECK_PENDENCIAS_BETA_SEC.md`
-- `CATALOGO_DOCUMENTOS_MD.md`
-- `PADRAO_ORGANIZACAO_MD.md`
+- `../anotacoes/documentacao_raiz/readme.md`
+- `../anotacoes/documentacao_raiz/check62.md`
+- `../anotacoes/documentacao_raiz/checkuser.md`
+- `../checks/check_pendencias_beta_sec.md`
+- `catalogo_documentos_md.md`
+- `padrao_organizacao_md.md`
 
 ## Operacao e implantacao
-- `../CHECK62.md`
-- `../CHECKUSER.md`
-- `../checks/CHECK_PENDENCIAS_BETA_SEC.md`
-- `../CHECKLIST_DEPLOY_FINAL_OPERACAO.md`
-- `../DEPLOY.md`
-- `../DEPLOY_GRATIS_RENDER_SUPABASE.md`
-- `../DEPLOY_CLOUDFLARE_PAGES.md`
+- `../anotacoes/documentacao_raiz/check62.md`
+- `../anotacoes/documentacao_raiz/checkuser.md`
+- `../checks/check_pendencias_beta_sec.md`
+- `../anotacoes/documentacao_raiz/checklist_deploy_final_operacao.md`
+- `../anotacoes/documentacao_raiz/deploy.md`
+- `../anotacoes/documentacao_raiz/deploy_gratis_render_supabase.md`
+- `../anotacoes/documentacao_raiz/deploy_cloudflare_pages.md`
 
 ## Arquitetura e mapas
-- `../MAPA_LOGICO_CONCILIAR_DADOS.md`
+- `../anotacoes/documentacao_raiz/mapa_logico_conciliar_dados.md`
 - `../frontend/js/MAPA_APP.md`
 - `../backend/MAPA_MAIN.md`
-- `../PLANO_ETAPAS_62_ITENS.md`
-- `FLUXO_CORRECAO_ESTRUTURAL.md`
-- `DESIGN_DASHBOARD_POWERBI_E_LAYOUT_PRINCIPAL.md`
-- `REGRAS_PLANILHAS_TESTE_E_OFICIAL.md`
-- `MAPA_OFICIAL_COLUNAS_LOA.md`
+- `../anotacoes/documentacao_raiz/plano_etapas_62_itens.md`
+- `fluxo_correcao_estrutural.md`
+- `design_dashboard_powerbi_e_layout_principal.md`
+- `regras_planilhas_teste_e_oficial.md`
+- `mapa_oficial_colunas_loa.md`
 
 ## Refatoracao
 - `refatoracao.md`
-- `REFATORACAO_EXECUTION_CHECKLIST.md`
-- `REFATORACAO_BACKEND_CHECKLIST.md`
+- `refatoracao_execution_checklist.md`
+- `refatoracao_backend_checklist.md`
 - `tipos_refatoracao.md`
-- `ORQ_REFATORACAO_FRONTEND_QUEUE.md`
+- `orq_refatoracao_frontend_queue.md`
 
 ## Guias de apoio
-- `../GUIA_ORQUESTRADOR_MULTI_IA.md`
-- `../GUIA_SKILLS_E_HABILIDADES.md`
-- `../GUIA_TRELLO_NOTION_OPERACAO.md`
+- `operacao_codex_duplo.md`
+- `prompts_codex_duplo.md`
+- `../anotacoes/documentacao_raiz/guia_orquestrador_multi_ia.md`
+- `../anotacoes/documentacao_raiz/guia_skills_e_habilidades.md`
+- `../anotacoes/documentacao_raiz/guia_trello_notion_operacao.md`
 
 ## Checks auxiliares
-- `../checks/README.md`
-- `../checks/auxiliares/README.md`
-- `../checks/auxiliares/CHECKMASTER.md`
-- `../checks/auxiliares/CHECKSEC.md`
-- `../checks/auxiliares/CHECKTEST.md`
-- `../checks/auxiliares/CHECKDEPLOY.md`
-- `../checks/auxiliares/CHECK_TROCA_CONTA_CODEX.md`
+- `../checks/readme.md`
+- `../checks/auxiliares/readme.md`
+- `../checks/auxiliares/checkmaster.md`
+- `../checks/auxiliares/checksec.md`
+- `../checks/auxiliares/checktest.md`
+- `../checks/auxiliares/checkdeploy.md`
+- `../checks/auxiliares/check_troca_conta_codex.md`
 
 ## Anotacoes estrategicas
 - `../anotacoes/README_ANOTACOES.md`
 - `../anotacoes/ORCAMENTO_OPERACAO_SITE_20260305.md`
-- `../anotacoes/RELATORIO_PLANO_EVOLUCAO.md`
+- `../anotacoes/documentacao_raiz/relatorio_plano_evolucao.md`
 - `../anotacoes/DECISOES_IMPORT_EXPORT_XLSX.md`
 - `../anotacoes/ESCOPO_FLUXO_COMPARATIVO_SEC_EMENDAS.md`
 - `../anotacoes/ROADMAP_FASES.md`
@@ -64,10 +66,10 @@ Success: Qualquer pessoa encontra rapidamente o documento certo sem depender de 
 - `../anotacoes/evidencias/RELATORIO_GO_LIVE_20260305_073042.md`
 
 ## Arquivos que sao entrada diaria
-- `README.md`
-- `CHECK62.md`
-- `CHECKUSER.md`
-- `checks/CHECK_PENDENCIAS_BETA_SEC.md`
+- `readme.md`
+- `check62.md`
+- `checkuser.md`
+- `checks/check_pendencias_beta_sec.md`
 
 ## Arquivos que nao devem receber novas decisoes oficiais
 - `anotacoes/snapshots/`
@@ -75,4 +77,7 @@ Success: Qualquer pessoa encontra rapidamente o documento certo sem depender de 
 - arquivos `*.bak*`
 
 ## Resume from
-- Se estiver perdido, volte para `../CHECK62.md`.
+- Se estiver perdido, volte para `../anotacoes/documentacao_raiz/check62.md`.
+
+
+

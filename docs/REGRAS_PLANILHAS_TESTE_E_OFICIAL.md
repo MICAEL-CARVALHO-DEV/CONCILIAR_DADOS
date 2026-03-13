@@ -1,4 +1,4 @@
-# REGRAS PLANILHAS TESTE E OFICIAL
+﻿# REGRAS PLANILHAS TESTE E OFICIAL
 
 Goal: Definir a logica oficial para coexistencia de `Planilha TESTE` e `Planilha OFICIAL` no `SEC Emendas`, sem misturar homologacao com operacao real.
 Success: A equipe consegue implementar os dois tipos de planilha sem contaminar a base oficial, sem perder rastreabilidade e sem gerar retrabalho conceitual.
@@ -127,7 +127,7 @@ O sistema deve deixar claro:
 - se os dados sao oficiais
 - se o que esta vendo e teste ou real
 
-## Prós dessa separacao
+## PrÃ³s dessa separacao
 - evita contaminar a base oficial
 - permite homologar com seguranca
 - permite operar antes de fechar todos os refinamentos
@@ -216,7 +216,7 @@ Estas decisoes precisam ser fechadas antes de codar:
 - migrar `LOA atual` para workspace oficial persistente
 - transformar `TESTE` em workspace real de homologacao
 - ligar `FEDERAL` quando a regra operacional estiver pronta
-- referencia oficial: `docs/PLANO_POS_BETA_WORKSPACE_BACKEND.md`
+- referencia oficial: `docs/plano_pos_beta_workspace_backend.md`
 
 ## Relacao com itens do mapa mestre
 - `C19-A`: cadeia oficial de import
@@ -235,4 +235,6 @@ Estas decisoes precisam ser fechadas antes de codar:
 - A separacao completa de dados por `workspace_id` no backend fica adiada para a fase pos-beta.
 
 ## Resume from
-- Antes de implementar essa logica, abrir este documento junto com `CHECK62.md` e fechar as 5 decisoes minimas listadas aqui.
+- Antes de implementar essa logica, abrir este documento junto com `check62.md` e fechar as 5 decisoes minimas listadas aqui.
+
+

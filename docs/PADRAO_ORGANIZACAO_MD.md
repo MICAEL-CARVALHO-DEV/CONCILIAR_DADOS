@@ -1,4 +1,4 @@
-# PADRAO ORGANIZACAO MD
+﻿# PADRAO ORGANIZACAO MD
 
 Goal: Definir onde cada tipo de documento Markdown deve ficar no projeto.
 Success: Novos `.md` entram no lugar certo, sem baguncar a raiz do repositorio.
@@ -13,9 +13,9 @@ Success: Novos `.md` entram no lugar certo, sem baguncar a raiz do repositorio.
 Usar apenas para documentos de entrada principal ou alto impacto operacional.
 
 Permitidos:
-- `README.md`
-- `CHECK62.md`
-- `CHECKUSER.md`
+- `readme.md`
+- `check62.md`
+- `checkuser.md`
 - `CHECKLIST_DEPLOY_FINAL_OPERACAO.md`
 - `DEPLOY*.md`
 - mapas ou guias principais ja consolidados
@@ -28,8 +28,8 @@ Usar para:
 - checks auxiliares que nao sao mais entrada diaria
 
 Exemplo:
-- `checks/CHECK_PENDENCIAS_BETA_SEC.md`
-- `checks/auxiliares/CHECKTEST.md`
+- `checks/check_pendencias_beta_sec.md`
+- `checks/auxiliares/checktest.md`
 
 ### `docs/`
 Usar para:
@@ -40,10 +40,10 @@ Usar para:
 - organizacao tecnica
 
 Exemplo:
-- `docs/INDICE_DOCUMENTACAO.md`
-- `docs/CATALOGO_DOCUMENTOS_MD.md`
-- `docs/PADRAO_ORGANIZACAO_MD.md`
-- `docs/REFATORACAO_EXECUTION_CHECKLIST.md`
+- `docs/indice_documentacao.md`
+- `docs/catalogo_documentos_md.md`
+- `docs/padrao_organizacao_md.md`
+- `docs/refatoracao_execution_checklist.md`
 
 ### `anotacoes/`
 Usar para:
@@ -71,20 +71,20 @@ Usar para:
 Usar apenas para documento local do proprio modulo.
 
 Exemplos:
-- `backend/README.md`
+- `backend/readme.md`
 - `backend/MAPA_MAIN.md`
 - `frontend/js/MAPA_APP.md`
-- `assets/README_LOGIN_ASSETS.md`
+- `assets/readme_login_assets.md`
 
 ## Politica de promocao de documento
-- Se um arquivo em `anotacoes/` virou regra oficial, promover para `docs/` ou citar no `CHECK62.md`.
+- Se um arquivo em `anotacoes/` virou regra oficial, promover para `docs/` ou citar no `check62.md`.
 - Se um arquivo e so evidencia, manter em `anotacoes/evidencias/`.
 - Se um arquivo parou de ser ativo mas precisa ficar guardado, mover para snapshot/arquivo historico.
 - Se um check saiu da trilha diaria, mover para `checks/auxiliares/`.
 
 ## Politica de duplicidade
 - Um documento deve ter uma fonte canonica.
-- Se existir copia por compatibilidade, registrar a relacao em `CATALOGO_DOCUMENTOS_MD.md`.
+- Se existir copia por compatibilidade, registrar a relacao em `catalogo_documentos_md.md`.
 - Nao editar duas copias divergentes sem decidir antes qual delas e a oficial.
 
 ## Politica de nome
@@ -96,9 +96,11 @@ Exemplos:
 - mapas: `MAPA_*.md`
 
 ## Regra de ouro
-- Status oficial da beta SEC: `CHECK62.md`
-- Sprint ativa: `CHECKUSER.md`
-- Pendencias de decisao: `checks/CHECK_PENDENCIAS_BETA_SEC.md`
+- Status oficial da beta SEC: `check62.md`
+- Sprint ativa: `checkuser.md`
+- Pendencias de decisao: `checks/check_pendencias_beta_sec.md`
 
 ## Resume from
-- Antes de criar ou mover um `.md`, abrir `INDICE_DOCUMENTACAO.md` e `CATALOGO_DOCUMENTOS_MD.md`.
+- Antes de criar ou mover um `.md`, abrir `indice_documentacao.md` e `catalogo_documentos_md.md`.
+
+

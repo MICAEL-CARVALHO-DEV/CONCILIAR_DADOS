@@ -1,4 +1,4 @@
-# ORQ Refatoracao Frontend Queue
+﻿# ORQ Refatoracao Frontend Queue
 
 Atualizado em: 2026-03-07
 
@@ -9,7 +9,7 @@ Usar a IA ORQ para acelerar a reta final da refatoracao do frontend sem criar co
 ## Estado atual
 
 - Branch ativa: `refactor/estrutura-geral`
-- Checklist principal: `docs/REFATORACAO_EXECUTION_CHECKLIST.md`
+- Checklist principal: `docs/refatoracao_execution_checklist.md`
 - Etapa atual: `ID-FE-58`
 - Situacao: frontend ja esta modular o suficiente para iniciar backend, mas ainda vale fechar os ultimos blocos grandes do `app.js`
 
@@ -29,7 +29,7 @@ Nao delegar em paralelo sem liberacao explicita:
 - `frontend/js/utils/export*.js`
 - `frontend/js/utils/import*.js`
 - `index.html`
-- `docs/REFATORACAO_EXECUTION_CHECKLIST.md`
+- `docs/refatoracao_execution_checklist.md`
 
 Motivo: sao os arquivos centrais da refatoracao atual e qualquer conflito aqui custa mais do que ajuda.
 
@@ -73,7 +73,7 @@ Entrega:
 ### ORQ-FE-01
 
 - Objetivo: propor a melhor divisao final do restante do `app.js`
-- Arquivos permitidos: apenas leitura de `app.js`, `frontend/js/ui/renderers.js`, `frontend/js/utils/*`, `docs/REFATORACAO_EXECUTION_CHECKLIST.md`
+- Arquivos permitidos: apenas leitura de `app.js`, `frontend/js/ui/renderers.js`, `frontend/js/utils/*`, `docs/refatoracao_execution_checklist.md`
 - Arquivos proibidos: qualquer escrita
 - Contrato afetado: nenhum
 - Criterio de pronto: devolver mapa dos proximos 5 blocos com ordem de execucao, risco e arquivos alvo
@@ -128,7 +128,7 @@ O stack correto e sequencial com validacao entre etapas:
 1. `ORQ-FE-01`
 2. `ORQ-FE-02` ou `ORQ-FE-03` ou `ORQ-FE-04`
 3. Codex implementa o bloco aprovado
-4. atualizar `docs/REFATORACAO_EXECUTION_CHECKLIST.md`
+4. atualizar `docs/refatoracao_execution_checklist.md`
 5. `ORQ-BACK-START-01`
 6. iniciar backend
 
@@ -161,7 +161,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run_ai_workflow.ps1 `
   -UserName "MICAEL_DEV" `
   -Mode "planejar" `
   -Objective "Mapear os proximos blocos fechados para concluir a refatoracao do frontend do projeto conciliardados" `
-  -Contexto "Ler docs/ORQ_REFATORACAO_FRONTEND_QUEUE.md, docs/REFATORACAO_EXECUTION_CHECKLIST.md e analisar app.js sem alterar contratos"
+  -Contexto "Ler docs/orq_refatoracao_frontend_queue.md, docs/refatoracao_execution_checklist.md e analisar app.js sem alterar contratos"
 ```
 
 #### Passo 2: executar frontend
@@ -215,7 +215,7 @@ powershell -ExecutionPolicy Bypass -File .\scripts\run_ai_workflow.ps1 `
   -UserName "MICAEL_DEV" `
   -Mode "planejar" `
   -Objective "Mapear os proximos blocos fechados para concluir a refatoracao do frontend do projeto conciliardados" `
-  -Contexto "Ler docs/ORQ_REFATORACAO_FRONTEND_QUEUE.md, docs/REFATORACAO_EXECUTION_CHECKLIST.md e analisar app.js sem alterar contratos"
+  -Contexto "Ler docs/orq_refatoracao_frontend_queue.md, docs/refatoracao_execution_checklist.md e analisar app.js sem alterar contratos"
 ```
 
 ### Revisar bloco do modal
@@ -258,3 +258,4 @@ A ORQ pode ajudar agora, mas no formato certo:
 - planejamento e revisao por bloco
 - nunca mudanca paralela no mesmo arquivo central
 - Codex continua como integrador final
+

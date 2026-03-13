@@ -78,8 +78,8 @@
     var introText = document.createElement("p");
     introText.className = "muted small";
     introText.textContent = isExecutiveRole
-      ? "Leitura executiva habilitada para supervisao, Power BI e dono. Acoes sensiveis continuam sob governanca do PROGRAMADOR."
-      : "Visao compartilhada em leitura. O detalhamento executivo e a governanca operacional continuam centralizados em SUPERVISAO, POWERBI e PROGRAMADOR.";
+      ? "Leitura executiva habilitada para APG, supervisao, Power BI e dono. Acoes sensiveis continuam sob governanca do PROGRAMADOR."
+      : "Visao compartilhada em leitura. O detalhamento executivo e a governanca operacional continuam centralizados em APG, SUPERVISAO, POWERBI e PROGRAMADOR.";
     intro.appendChild(introTitle);
     intro.appendChild(introText);
     if (isExecutiveRole) {
@@ -185,7 +185,7 @@
       var sharedViewNote = document.createElement("p");
       sharedViewNote.className = "muted small";
       sharedViewNote.style.marginTop = "8px";
-      sharedViewNote.textContent = "Leitura compartilhada liberada. Controles executivos do dashboard ficam ativos apenas para SUPERVISAO, POWERBI e PROGRAMADOR.";
+      sharedViewNote.textContent = "Leitura compartilhada liberada. Controles executivos do dashboard ficam ativos para APG, SUPERVISAO, POWERBI e PROGRAMADOR.";
       target.appendChild(sharedViewNote);
     }
 
@@ -308,7 +308,7 @@
       "Ultima atualizacao: " + (summary.latestUpdate ? fmtDateTime(summary.latestUpdate) : "-"),
       "Filtro superior aplicado sobre " + String(sourceRows.length) + " emendas.",
       "Filtro interno do dashboard retornou " + String(rows.length) + " emendas.",
-      "Todos podem visualizar o dashboard; a leitura executiva e a governanca continuam centralizadas em SUPERVISAO, POWERBI e PROGRAMADOR."
+      "Todos podem visualizar o dashboard; a leitura executiva e a governanca continuam centralizadas em APG, SUPERVISAO, POWERBI e PROGRAMADOR."
     ].forEach(function (line) {
       var item = document.createElement("div");
       item.className = "beta-metric-line";

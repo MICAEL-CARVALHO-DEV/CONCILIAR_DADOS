@@ -1,4 +1,4 @@
-# FLUXO CORRECAO ESTRUTURAL
+﻿# FLUXO CORRECAO ESTRUTURAL
 
 Goal: Definir como o sistema deve tratar erros em campos estruturais sem liberar edicao comum para toda a operacao.
 Success: A beta protege os campos-base da emenda no fluxo operacional e tem uma trilha clara para correcao oficial agora e no futuro.
@@ -139,9 +139,11 @@ Mitigacao:
 - `objetivo_epi` continua pendente ate formalizacao funcional
 
 ## Relacao com os checks
-- `CHECK62.md` -> `C25-B`
-- `CHECKUSER.md` -> `C25-B`
-- `checks/CHECK_PENDENCIAS_BETA_SEC.md` -> `P-R05`
+- `check62.md` -> `C25-B`
+- `checkuser.md` -> `C25-B`
+- `checks/check_pendencias_beta_sec.md` -> `P-R05`
 
 ## Resume from
 - Proxima decisao funcional: definir se `objetivo_epi` entra no schema e qual natureza ele tera (`estrutural` ou `operacional`).
+
+

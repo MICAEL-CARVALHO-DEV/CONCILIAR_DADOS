@@ -25,7 +25,7 @@ from ..core.security import (
 from ..models import AuthAuditLog, Usuario, UsuarioSessao
 from ..settings import settings
 
-PUBLIC_REGISTER_ROLES = {"APG", "SUPERVISAO", "CONTABIL", "POWERBI"}
+PUBLIC_REGISTER_ROLES = {"APG", "SUPERVISAO", "POWERBI"}
 REGISTRATION_STATUS_PENDING = "EM_ANALISE"
 REGISTRATION_STATUS_APPROVED = "APROVADO"
 REGISTRATION_STATUS_REJECTED = "RECUSADO"

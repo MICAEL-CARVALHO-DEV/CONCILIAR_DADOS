@@ -745,14 +745,18 @@ def preview_import_xlsx_service(*, file_name: str, file_bytes: bytes, db: Sessio
     return report
 
 
-def _is_programador(actor: dict | None) -> bool:
-    return str((actor or {}).get("role") or "").strip().upper() == "PROGRAMADOR"
+IMPORT_GOVERNANCE_ROLES = {"APG", "SUPERVISAO", "POWERBI", "PROGRAMADOR"}
+
+
+def _can_govern_imports(actor: dict | None) -> bool:
+    role = str((actor or {}).get("role") or "").strip().upper()
+    return role in IMPORT_GOVERNANCE_ROLES
 
 
 def _actor_matches_lote(lote: ImportLote, actor: dict | None) -> bool:
     if not lote or not actor:
         return False
-    if _is_programador(actor):
+    if _can_govern_imports(actor):
         return True
     actor_id = actor.get("id")
     if actor_id is not None and lote.usuario_id is not None:
@@ -859,7 +863,7 @@ def create_import_lot_service(
 
 def list_import_lots_service(*, limit: int, actor: dict, db: Session) -> list[ImportLote]:
     query = db.query(ImportLote)
-    if not _is_programador(actor):
+    if not _can_govern_imports(actor):
         actor_id = actor.get("id")
         if actor_id is not None:
             query = query.filter(ImportLote.usuario_id == actor_id)
@@ -942,8 +946,8 @@ def govern_import_lot_service(
     lote = db.get(ImportLote, lote_id)
     if not lote:
         raise HTTPException(status_code=404, detail="lote de importacao nao encontrado")
-    if not _is_programador(actor):
-        raise HTTPException(status_code=403, detail="apenas PROGRAMADOR pode governar imports")
+    if not _can_govern_imports(actor):
+        raise HTTPException(status_code=403, detail="perfil sem permissao para governar imports")
 
     acao = str(payload.acao or "").strip().upper()
     motivo = str(payload.motivo or "").strip()

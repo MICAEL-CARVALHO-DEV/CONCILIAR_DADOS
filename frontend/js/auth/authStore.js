@@ -161,7 +161,7 @@
   }
 
   function redirectToAuth(page, query, nextPath) {
-    var target = page || "login.html";
+    var target = page || "frontend/pages/login.html";
     var suffix = query ? (String(query).startsWith("?") ? String(query) : "?" + String(query)) : "";
     var next = encodeURIComponent(nextPath || "index.html");
     var hasQuery = suffix.indexOf("?") >= 0;

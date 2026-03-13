@@ -3,7 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel, Field, field_validator
 
 
-ROLES = ["APG", "SUPERVISAO", "CONTABIL", "POWERBI", "PROGRAMADOR"]
+ROLES = ["APG", "SUPERVISAO", "POWERBI", "PROGRAMADOR"]
 ROLE_SET = set(ROLES)
 
 STATUS = {

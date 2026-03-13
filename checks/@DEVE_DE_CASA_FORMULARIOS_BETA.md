@@ -1,6 +1,6 @@
-# @DEVE DE CASA - FORMULARIOS BETA SEC
+﻿# @DEVE DE CASA - FORMULARIOS BETA SEC
 
-Goal: Dar ao usuario um roteiro pronto para a reuniao da empresa, com perguntas objetivas, prós, contras, mitigacao e campo de resposta para fechar as decisoes funcionais da beta.
+Goal: Dar ao usuario um roteiro pronto para a reuniao da empresa, com perguntas objetivas, prÃ³s, contras, mitigacao e campo de resposta para fechar as decisoes funcionais da beta.
 Success: Ao final da reuniao, as respostas saem registradas de forma clara e podem ser convertidas diretamente em decisao de sistema.
 
 ## Como usar este arquivo
@@ -9,9 +9,9 @@ Success: Ao final da reuniao, as respostas saem registradas de forma clara e pod
 - Marcar a opcao escolhida.
 - Preencher a decisao final.
 - Depois refletir a resposta em:
-  - `@DEVE_DE_CASA_BETA.md`
-  - `CHECK_PENDENCIAS_BETA_SEC.md`
-  - item correspondente no `CHECK62.md`
+  - `@deve_de_casa_beta.md`
+  - `check_pendencias_beta_sec.md`
+  - item correspondente no `check62.md`
 
 ## Ordem recomendada da reuniao
 1. `P-R02` cadeia oficial de import
@@ -323,3 +323,5 @@ Depois disso, sobra principalmente:
 
 ## Resume from
 - Levar este arquivo para a reuniao e preencher na ordem proposta.
+
+
