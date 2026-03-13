@@ -16,7 +16,7 @@
       <div class="login-logo-frame">
         <div class="login-logo-flip">
           <img
-            src="assets/sec-logo.png"
+            src="../../assets/sec-logo.png"
             alt="Brasao do Estado da Bahia"
             class="login-logo"
             onerror="var frame=this.closest('.login-logo-frame'); if(frame){ frame.style.display='none'; } else { this.style.display='none'; }"
@@ -105,8 +105,22 @@
         if (lower.includes("login.html") || lower.includes("cadastro.html")) return "index.html";
         return raw.startsWith("/") ? raw.slice(1) : raw;
       }
+      function getAppBasePath() {
+        const pathname = (window.location && window.location.pathname) ? String(window.location.pathname) : "/";
+        const normalized = pathname.replace(/\\/g, "/");
+        const marker = "/frontend/pages/";
+        const markerIndex = normalized.toLowerCase().indexOf(marker);
+        if (markerIndex >= 0) return normalized.slice(0, markerIndex + 1);
+        return normalized.replace(/[^/]*$/, "");
+      }
+      function resolveAppPath(path) {
+        const clean = sanitizeNextPath(path);
+        const base = getAppBasePath();
+        return base + clean.replace(/^\/+/, "");
+      }
       const query = new URLSearchParams(window.location.search);
       const next = sanitizeNextPath(query.get("next") || "index.html");
+      const nextUrl = resolveAppPath(next);
       const incomingMsg = query.get("msg") || "";
       const forceClean = query.get("clean") === "1";
 
@@ -251,7 +265,7 @@
             localStorage.setItem(USER_ROLE_KEY, String(data.perfil));
           }
 
-          window.location.href = next;
+          window.location.href = nextUrl;
           return true;
         } catch (_) {
           clearStoredToken();
@@ -342,7 +356,7 @@
         try {
           const data = await apiRequest("/auth/google", { credential: credential });
           persistSession(data, (data && data.usuario && data.usuario.nome) || "Google", (data && data.usuario && data.usuario.perfil) || "APG");
-          window.location.href = next;
+          window.location.href = nextUrl;
         } catch (err) {
           if (Number(err && err.status) === 404) {
             sessionStorage.setItem(PENDING_GOOGLE_CREDENTIAL_KEY, credential);
@@ -411,7 +425,7 @@
         try {
           const data = await apiRequest("/auth/login", { nome: n, senha: s });
           persistSession(data, n, "APG");
-          window.location.href = next;
+          window.location.href = nextUrl;
         } catch (err) {
           msg.textContent = err && err.message ? err.message : "Falha no login.";
           msg.style.color = "#b4233d";
