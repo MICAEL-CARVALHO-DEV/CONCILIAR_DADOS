@@ -76,6 +76,8 @@ def ensure_legacy_schema(engine) -> None:
             statements.append("ALTER TABLE emendas ADD COLUMN row_version INTEGER NOT NULL DEFAULT 1")
         if "is_current" not in cols:
             statements.append("ALTER TABLE emendas ADD COLUMN is_current BOOLEAN NOT NULL DEFAULT TRUE")
+        if "objetivo_epi" not in cols:
+            statements.append("ALTER TABLE emendas ADD COLUMN objetivo_epi TEXT NOT NULL DEFAULT ''")
         if "plan_a" not in cols:
             statements.append("ALTER TABLE emendas ADD COLUMN plan_a TEXT NOT NULL DEFAULT ''")
         if "plan_b" not in cols:

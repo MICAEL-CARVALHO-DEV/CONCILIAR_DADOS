@@ -1,10 +1,14 @@
 from fastapi import APIRouter, Depends, File, Query, UploadFile
 
-from ..core.dependencies import _actor_from_headers, _require_manager, _require_monitor
+from ..core.dependencies import _actor_from_headers, _require_monitor
 from ..db import get_db
 from ..schemas import (
+    AuditSummaryOut,
+    ImportSummaryOut,
+    DashboardSummaryOut,
     ExportLogCreate,
     ExportLogOut,
+    ExportSummaryOut,
     ImportGovernanceActionIn,
     ImportGovernanceLogOut,
     ImportLinhaOut,
@@ -14,15 +18,39 @@ from ..schemas import (
     ImportPreviewOut,
     SupportMessageCreate,
     SupportMessageOut,
+    SupportSummaryOut,
     SupportThreadCreate,
     SupportThreadOut,
     SupportThreadStatusUpdate,
 )
-from ..services import audit_service, import_export_service, support_service
+from ..services import audit_service, dashboard_service, import_export_service, support_service
 
 
 def create_operations_router(resolve_event_origin, utcnow, broadcast_update, mask_history_pair) -> APIRouter:
     router = APIRouter()
+
+    @router.get("/dashboard/resumo", response_model=DashboardSummaryOut)
+    def dashboard_resumo(
+        ano: int | None = Query(default=None, ge=2000, le=2100),
+        limite_deputados: int = Query(default=8, ge=1, le=20),
+        _actor: dict = Depends(_actor_from_headers),
+        db=Depends(get_db),
+    ):
+        return dashboard_service.build_dashboard_summary_service(
+            ano=ano,
+            limite_deputados=limite_deputados,
+            db=db,
+        )
+
+    @router.get("/imports/resumo", response_model=ImportSummaryOut)
+    def imports_resumo(
+        actor: dict = Depends(_actor_from_headers),
+        db=Depends(get_db),
+    ):
+        return import_export_service.build_import_summary_service(
+            actor=actor,
+            db=db,
+        )
 
     @router.post("/imports/preview-xlsx", response_model=ImportPreviewOut)
     async def prever_importacao_xlsx(
@@ -87,7 +115,7 @@ def create_operations_router(resolve_event_origin, utcnow, broadcast_update, mas
     def governar_lote_importacao(
         lote_id: int,
         payload: ImportGovernanceActionIn,
-        actor: dict = Depends(_require_manager),
+        actor: dict = Depends(_actor_from_headers),
         db=Depends(get_db),
     ):
         return import_export_service.govern_import_lot_service(
@@ -136,6 +164,13 @@ def create_operations_router(resolve_event_origin, utcnow, broadcast_update, mas
     ):
         return import_export_service.list_export_logs_service(limit=limit, db=db)
 
+    @router.get("/exports/resumo", response_model=ExportSummaryOut)
+    def export_resumo(
+        _actor: dict = Depends(_actor_from_headers),
+        db=Depends(get_db),
+    ):
+        return import_export_service.build_export_summary_service(db=db)
+
     @router.get("/audit")
     def audit_log(
         limit: int = Query(default=150, ge=1, le=500),
@@ -162,6 +197,31 @@ def create_operations_router(resolve_event_origin, utcnow, broadcast_update, mas
             mask_history_pair=mask_history_pair,
         )
 
+    @router.get("/audit/resumo", response_model=AuditSummaryOut)
+    def audit_resumo(
+        ano: int | None = Query(default=None, ge=2000, le=2100),
+        mes: int | None = Query(default=None, ge=1, le=12),
+        usuario: str | None = Query(default=None),
+        setor: str | None = Query(default=None),
+        tipo_evento: str | None = Query(default=None),
+        origem_evento: str | None = Query(default=None),
+        q: str | None = Query(default=None),
+        limite_usuarios: int = Query(default=8, ge=1, le=20),
+        _actor: dict = Depends(_require_monitor),
+        db=Depends(get_db),
+    ):
+        return audit_service.build_audit_summary_service(
+            ano=ano,
+            mes=mes,
+            usuario=usuario,
+            setor=setor,
+            tipo_evento=tipo_evento,
+            origem_evento=origem_evento,
+            q=q,
+            limite_usuarios=limite_usuarios,
+            db=db,
+        )
+
     @router.get("/support/threads", response_model=list[SupportThreadOut])
     def list_support_threads(
         limit: int = Query(default=80, ge=1, le=200),
@@ -175,6 +235,26 @@ def create_operations_router(resolve_event_origin, utcnow, broadcast_update, mas
     ):
         return support_service.list_support_threads_service(
             limit=limit,
+            status=status,
+            categoria=categoria,
+            usuario=usuario,
+            q=q,
+            mine_only=mine_only,
+            actor=actor,
+            db=db,
+        )
+
+    @router.get("/support/resumo", response_model=SupportSummaryOut)
+    def support_resumo(
+        status: str | None = Query(default=None),
+        categoria: str | None = Query(default=None),
+        usuario: str | None = Query(default=None),
+        q: str | None = Query(default=None),
+        mine_only: bool = Query(default=False),
+        actor: dict = Depends(_actor_from_headers),
+        db=Depends(get_db),
+    ):
+        return support_service.build_support_summary_service(
             status=status,
             categoria=categoria,
             usuario=usuario,

@@ -159,6 +159,7 @@ class EmendaCreate(BaseModel):
     cod_orgao: str = ""
     cod_acao: str = ""
     descricao_acao: str = ""
+    objetivo_epi: str = ""
     plan_a: str = ""
     plan_b: str = ""
     municipio: str = ""
@@ -239,6 +240,7 @@ class EmendaVersionarIn(BaseModel):
     cod_orgao: str | None = None
     cod_acao: str | None = None
     descricao_acao: str | None = None
+    objetivo_epi: str | None = None
     plan_a: str | None = None
     plan_b: str | None = None
     valor_inicial: float | None = None
@@ -258,6 +260,7 @@ class EmendaOut(BaseModel):
     cod_orgao: str
     cod_acao: str
     descricao_acao: str
+    objetivo_epi: str
     plan_a: str
     plan_b: str
     municipio: str
@@ -464,6 +467,151 @@ class ImportLinhaOut(BaseModel):
         from_attributes = True
 
 
+class ImportGovernanceStatusMetricOut(BaseModel):
+    status_governanca: str
+    total: int
+
+
+class ImportLineStatusMetricOut(BaseModel):
+    status_linha: str
+    total: int
+
+
+class ImportLatestLotOut(BaseModel):
+    id: int
+    arquivo_nome: str
+    usuario_nome: str
+    setor: str
+    status_governanca: str
+    linhas_lidas: int
+    linhas_ignoradas: int
+    registros_criados: int
+    registros_atualizados: int
+    registros_removidos: int
+    created_at: datetime
+
+
+class ImportLatestGovernanceOut(BaseModel):
+    lote_id: int
+    acao: str
+    usuario_nome: str
+    setor: str
+    created_at: datetime
+
+
+class ExportLatestLogOut(BaseModel):
+    id: int
+    arquivo_nome: str
+    formato: str
+    escopo_exportacao: str
+    usuario_nome: str
+    setor: str
+    created_at: datetime
+
+
+class ExportSummaryMetricOut(BaseModel):
+    label: str
+    total: int
+
+
+class ExportSummaryLatestOut(BaseModel):
+    id: int
+    arquivo_nome: str
+    formato: str
+    escopo_exportacao: str
+    quantidade_registros: int
+    quantidade_eventos: int
+    usuario_nome: str
+    setor: str
+    created_at: datetime
+
+
+class ExportSummaryOut(BaseModel):
+    total_exports: int
+    total_registros: int
+    total_eventos: int
+    formato_counts: list[ExportSummaryMetricOut]
+    escopo_counts: list[ExportSummaryMetricOut]
+    round_trip_counts: list[ExportSummaryMetricOut]
+    latest_export: ExportSummaryLatestOut | None = None
+
+
+class ImportSummaryOut(BaseModel):
+    total_lotes: int
+    total_linhas_lidas: int
+    total_linhas_ignoradas: int
+    total_registros_criados: int
+    total_registros_atualizados: int
+    total_registros_removidos: int
+    governance_status_counts: list[ImportGovernanceStatusMetricOut]
+    line_status_counts: list[ImportLineStatusMetricOut]
+    latest_lot: ImportLatestLotOut | None = None
+    latest_governance: ImportLatestGovernanceOut | None = None
+    latest_export_log: ExportLatestLogOut | None = None
+
+
+class DashboardStatusMetricOut(BaseModel):
+    status: str
+    total: int
+
+
+class DashboardDeputadoMetricOut(BaseModel):
+    deputado: str
+    total: int
+
+
+class DashboardLatestEventOut(BaseModel):
+    tipo_evento: str
+    usuario_nome: str
+    setor: str
+    emenda_identificacao: str
+    data_hora: datetime
+
+
+class DashboardSummaryOut(BaseModel):
+    ano_filtro: int | None = None
+    total_registros: int
+    total_valor_inicial: float
+    total_valor_atual: float
+    ultima_atualizacao: datetime | None = None
+    status_counts: list[DashboardStatusMetricOut]
+    top_deputados: list[DashboardDeputadoMetricOut]
+    latest_event: DashboardLatestEventOut | None = None
+
+
+class AuditSummaryMetricOut(BaseModel):
+    label: str
+    total: int
+
+
+class AuditTopUsuarioMetricOut(BaseModel):
+    usuario_nome: str
+    setor: str
+    total: int
+
+
+class AuditLatestEventOut(BaseModel):
+    tipo_evento: str
+    origem_evento: str
+    usuario_nome: str
+    setor: str
+    emenda_identificacao: str
+    motivo: str
+    data_hora: datetime
+
+
+class AuditSummaryOut(BaseModel):
+    ano_filtro: int | None = None
+    mes_filtro: int | None = None
+    total_eventos: int
+    total_emendas_unicas: int
+    tipo_evento_counts: list[AuditSummaryMetricOut]
+    origem_evento_counts: list[AuditSummaryMetricOut]
+    setor_counts: list[AuditSummaryMetricOut]
+    top_usuarios: list[AuditTopUsuarioMetricOut]
+    latest_event: AuditLatestEventOut | None = None
+
+
 class ImportPreviewSourceRowOut(BaseModel):
     aba: str
     linha: int | None = None
@@ -612,4 +760,30 @@ class SupportMessageOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class SupportSummaryMetricOut(BaseModel):
+    label: str
+    total: int
+
+
+class SupportLatestThreadOut(BaseModel):
+    id: int
+    subject: str
+    categoria: str
+    status: str
+    usuario_nome: str
+    setor: str
+    last_actor_nome: str
+    last_actor_role: str
+    updated_at: datetime
+    last_message_at: datetime
+
+
+class SupportSummaryOut(BaseModel):
+    escopo: str
+    total_threads: int
+    status_counts: list[SupportSummaryMetricOut]
+    categoria_counts: list[SupportSummaryMetricOut]
+    latest_thread: SupportLatestThreadOut | None = None
 

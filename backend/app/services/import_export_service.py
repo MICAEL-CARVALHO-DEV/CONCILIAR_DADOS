@@ -10,6 +10,7 @@ from typing import Callable
 
 from fastapi import HTTPException
 from openpyxl import load_workbook
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..models import Emenda, EmendaLock, ExportLog, Historico, ImportGovernancaLog, ImportLinha, ImportLote, SupportThread
@@ -26,6 +27,7 @@ IMPORT_ALIASES = {
     "cod_orgao": ["cod_orgao", "codigo_orgao", "orgao", "cod orgao", "cod. orgao", "cod. órgão"],
     "cod_acao": ["cod_acao", "codigo_acao", "acao", "cod acao", "cod da acao", "cod. da acao", "codigo da acao", "cód. da ação"],
     "descricao_acao": ["descricao_acao", "descricao da acao", "acao_descricao", "descricao", "descritor da acao", "descritor da ação"],
+    "objetivo_epi": ["objetivo_epi", "objetivo epi", "objetivo", "objetivo de epi"],
     "plan_a": ["plan_a", "plano_a", "plano a", "planoa", "plano a acao", "plano de acao a"],
     "plan_b": ["plan_b", "plano_b", "plano b", "planob", "plano b acao", "plano de acao b"],
     "municipio": ["municipio", "cidade", "municipio / estado", "municipio estado", "município / estado"],
@@ -46,6 +48,7 @@ TRACKED_FIELDS = [
     ("cod_orgao", "string"),
     ("cod_acao", "string"),
     ("descricao_acao", "string"),
+    ("objetivo_epi", "string"),
     ("plan_a", "string"),
     ("plan_b", "string"),
     ("municipio", "string"),
@@ -68,6 +71,7 @@ HEADER_HINTS = {
     "deputado",
     "status",
     "municipio",
+    "objetivo",
     "cod_uo",
     "cod_subfonte",
     "cod_da_acao",
@@ -291,6 +295,7 @@ def _map_import_row(ctx: dict) -> dict:
         "cod_orgao": _as_text(_pick_value(row, IMPORT_ALIASES["cod_orgao"])),
         "cod_acao": _as_text(_pick_value(row, IMPORT_ALIASES["cod_acao"])),
         "descricao_acao": _as_text(_pick_value(row, IMPORT_ALIASES["descricao_acao"])),
+        "objetivo_epi": _as_text(_pick_value(row, IMPORT_ALIASES["objetivo_epi"])),
         "plan_a": _as_text(_pick_value(row, IMPORT_ALIASES["plan_a"])),
         "plan_b": _as_text(_pick_value(row, IMPORT_ALIASES["plan_b"])),
         "municipio": _as_text(_pick_value(row, IMPORT_ALIASES["municipio"])),
@@ -327,6 +332,7 @@ def _serialize_preview_source_row(ctx: dict, incoming: dict, status_linha: str, 
             "cod_orgao": _as_text(mapped.get("cod_orgao")),
             "cod_acao": _as_text(mapped.get("cod_acao")),
             "descricao_acao": _as_text(mapped.get("descricao_acao")),
+            "objetivo_epi": _as_text(mapped.get("objetivo_epi")),
             "plan_a": _as_text(mapped.get("plan_a")),
             "plan_b": _as_text(mapped.get("plan_b")),
             "municipio": _as_text(mapped.get("municipio")),
@@ -381,6 +387,7 @@ def _has_useful_data(record: dict) -> bool:
         record.get("cod_acao"),
         record.get("municipio"),
         record.get("deputado"),
+        record.get("objetivo_epi"),
         record.get("processo_sei"),
         record.get("ref_key"),
     ]
@@ -459,6 +466,7 @@ def _build_import_validation_report(source_rows: list[dict]) -> dict:
         "valor_inicial": "numero" if any(item.get("valor_inicial") is not None for item in sample) else "vazio",
         "valor_atual": "numero" if any(item.get("valor_atual") is not None for item in sample) else "vazio",
         "identificacao": "texto" if any(_as_text(item.get("identificacao")) for item in sample) else "vazio",
+        "objetivo_epi": "texto" if any(_as_text(item.get("objetivo_epi")) for item in sample) else "vazio",
         "processo_sei": "texto" if any(_as_text(item.get("processo_sei")) for item in sample) else "vazio",
     }
 
@@ -769,6 +777,14 @@ def _actor_matches_lote(lote: ImportLote, actor: dict | None) -> bool:
     return actor_name == str(lote.usuario_nome or "").strip().lower() and actor_role == str(lote.setor or "").strip().upper()
 
 
+def _can_govern_specific_lote(lote: ImportLote | None, actor: dict | None) -> bool:
+    if not lote or not actor:
+        return False
+    if _can_govern_imports(actor):
+        return True
+    return _actor_matches_lote(lote, actor)
+
+
 def _ensure_lote_access(lote: ImportLote | None, actor: dict | None) -> ImportLote:
     if not lote:
         raise HTTPException(status_code=404, detail="lote de importacao nao encontrado")
@@ -934,6 +950,212 @@ def list_import_governance_logs_service(*, lote_id: int, limit: int, actor: dict
     )
 
 
+def build_import_summary_service(*, actor: dict, db: Session) -> dict:
+    base_query = db.query(ImportLote)
+    if not _can_govern_imports(actor):
+        actor_id = actor.get("id")
+        if actor_id is not None:
+            base_query = base_query.filter(ImportLote.usuario_id == actor_id)
+        else:
+            base_query = base_query.filter(
+                ImportLote.usuario_nome == str(actor.get("name") or ""),
+                ImportLote.setor == str(actor.get("role") or ""),
+            )
+
+    total_lotes = int(base_query.count())
+
+    sums_row = base_query.with_entities(
+        func.coalesce(func.sum(ImportLote.linhas_lidas), 0),
+        func.coalesce(func.sum(ImportLote.linhas_ignoradas), 0),
+        func.coalesce(func.sum(ImportLote.registros_criados), 0),
+        func.coalesce(func.sum(ImportLote.registros_atualizados), 0),
+        func.coalesce(func.sum(ImportLote.registros_removidos), 0),
+    ).one()
+
+    governance_status_rows = (
+        base_query.with_entities(ImportLote.status_governanca, func.count(ImportLote.id))
+        .group_by(ImportLote.status_governanca)
+        .order_by(ImportLote.status_governanca.asc())
+        .all()
+    )
+    governance_status_counts = [
+        {
+            "status_governanca": str(status or ""),
+            "total": int(total or 0),
+        }
+        for status, total in governance_status_rows
+    ]
+
+    accessible_lote_ids = base_query.with_entities(ImportLote.id).subquery()
+    line_status_rows = (
+        db.query(ImportLinha.status_linha, func.count(ImportLinha.id))
+        .filter(ImportLinha.lote_id.in_(select(accessible_lote_ids.c.id)))
+        .group_by(ImportLinha.status_linha)
+        .order_by(ImportLinha.status_linha.asc())
+        .all()
+    )
+    line_status_counts = [
+        {
+            "status_linha": str(status or ""),
+            "total": int(total or 0),
+        }
+        for status, total in line_status_rows
+    ]
+
+    latest_lot = None
+    latest_lot_row = base_query.order_by(ImportLote.created_at.desc(), ImportLote.id.desc()).first()
+    if latest_lot_row:
+        latest_lot = {
+            "id": int(latest_lot_row.id),
+            "arquivo_nome": str(latest_lot_row.arquivo_nome or ""),
+            "usuario_nome": str(latest_lot_row.usuario_nome or ""),
+            "setor": str(latest_lot_row.setor or ""),
+            "status_governanca": str(latest_lot_row.status_governanca or ""),
+            "linhas_lidas": int(latest_lot_row.linhas_lidas or 0),
+            "linhas_ignoradas": int(latest_lot_row.linhas_ignoradas or 0),
+            "registros_criados": int(latest_lot_row.registros_criados or 0),
+            "registros_atualizados": int(latest_lot_row.registros_atualizados or 0),
+            "registros_removidos": int(latest_lot_row.registros_removidos or 0),
+            "created_at": latest_lot_row.created_at,
+        }
+
+    latest_governance = None
+    governance_query = db.query(ImportGovernancaLog)
+    if not _can_govern_imports(actor):
+        actor_id = actor.get("id")
+        if actor_id is not None:
+            governance_query = governance_query.join(ImportLote, ImportGovernancaLog.lote_id == ImportLote.id).filter(
+                ImportLote.usuario_id == actor_id
+            )
+        else:
+            governance_query = governance_query.join(ImportLote, ImportGovernancaLog.lote_id == ImportLote.id).filter(
+                ImportLote.usuario_nome == str(actor.get("name") or ""),
+                ImportLote.setor == str(actor.get("role") or ""),
+            )
+    latest_governance_row = governance_query.order_by(
+        ImportGovernancaLog.created_at.desc(), ImportGovernancaLog.id.desc()
+    ).first()
+    if latest_governance_row:
+        latest_governance = {
+            "lote_id": int(latest_governance_row.lote_id),
+            "acao": str(latest_governance_row.acao or ""),
+            "usuario_nome": str(latest_governance_row.usuario_nome or ""),
+            "setor": str(latest_governance_row.setor or ""),
+            "created_at": latest_governance_row.created_at,
+        }
+
+    latest_export_log = None
+    latest_export_log_row = db.query(ExportLog).order_by(ExportLog.created_at.desc(), ExportLog.id.desc()).first()
+    if latest_export_log_row:
+        latest_export_log = {
+            "id": int(latest_export_log_row.id),
+            "arquivo_nome": str(latest_export_log_row.arquivo_nome or ""),
+            "formato": str(latest_export_log_row.formato or ""),
+            "escopo_exportacao": str(latest_export_log_row.escopo_exportacao or ""),
+            "usuario_nome": str(latest_export_log_row.usuario_nome or ""),
+            "setor": str(latest_export_log_row.setor or ""),
+            "created_at": latest_export_log_row.created_at,
+        }
+
+    return {
+        "total_lotes": total_lotes,
+        "total_linhas_lidas": int(sums_row[0] or 0),
+        "total_linhas_ignoradas": int(sums_row[1] or 0),
+        "total_registros_criados": int(sums_row[2] or 0),
+        "total_registros_atualizados": int(sums_row[3] or 0),
+        "total_registros_removidos": int(sums_row[4] or 0),
+        "governance_status_counts": governance_status_counts,
+        "line_status_counts": line_status_counts,
+        "latest_lot": latest_lot,
+        "latest_governance": latest_governance,
+        "latest_export_log": latest_export_log,
+    }
+
+
+def build_export_summary_service(*, db: Session) -> dict:
+    base_query = db.query(ExportLog)
+
+    total_exports = int(base_query.count())
+    sums_row = base_query.with_entities(
+        func.coalesce(func.sum(ExportLog.quantidade_registros), 0),
+        func.coalesce(func.sum(ExportLog.quantidade_eventos), 0),
+    ).one()
+
+    formato_rows = (
+        base_query.with_entities(ExportLog.formato, func.count(ExportLog.id))
+        .group_by(ExportLog.formato)
+        .order_by(func.count(ExportLog.id).desc(), ExportLog.formato.asc())
+        .all()
+    )
+    formato_counts = [
+        {
+            "label": str(label or ""),
+            "total": int(total or 0),
+        }
+        for label, total in formato_rows
+    ]
+
+    escopo_rows = (
+        base_query.with_entities(ExportLog.escopo_exportacao, func.count(ExportLog.id))
+        .group_by(ExportLog.escopo_exportacao)
+        .order_by(func.count(ExportLog.id).desc(), ExportLog.escopo_exportacao.asc())
+        .all()
+    )
+    escopo_counts = [
+        {
+            "label": str(label or ""),
+            "total": int(total or 0),
+        }
+        for label, total in escopo_rows
+    ]
+
+    round_trip_counts = [
+        {
+            "label": "OK",
+            "total": int(
+                base_query.filter(ExportLog.round_trip_ok.is_(True)).with_entities(func.count(ExportLog.id)).scalar() or 0
+            ),
+        },
+        {
+            "label": "ERRO",
+            "total": int(
+                base_query.filter(ExportLog.round_trip_ok.is_(False)).with_entities(func.count(ExportLog.id)).scalar() or 0
+            ),
+        },
+        {
+            "label": "NAO_VALIDADO",
+            "total": int(
+                base_query.filter(ExportLog.round_trip_ok.is_(None)).with_entities(func.count(ExportLog.id)).scalar() or 0
+            ),
+        },
+    ]
+
+    latest_export = None
+    latest_export_row = base_query.order_by(ExportLog.created_at.desc(), ExportLog.id.desc()).first()
+    if latest_export_row:
+        latest_export = {
+            "id": int(latest_export_row.id),
+            "arquivo_nome": str(latest_export_row.arquivo_nome or ""),
+            "formato": str(latest_export_row.formato or ""),
+            "escopo_exportacao": str(latest_export_row.escopo_exportacao or ""),
+            "quantidade_registros": int(latest_export_row.quantidade_registros or 0),
+            "quantidade_eventos": int(latest_export_row.quantidade_eventos or 0),
+            "usuario_nome": str(latest_export_row.usuario_nome or ""),
+            "setor": str(latest_export_row.setor or ""),
+            "created_at": latest_export_row.created_at,
+        }
+
+    return {
+        "total_exports": total_exports,
+        "total_registros": int(sums_row[0] or 0),
+        "total_eventos": int(sums_row[1] or 0),
+        "formato_counts": formato_counts,
+        "escopo_counts": escopo_counts,
+        "round_trip_counts": round_trip_counts,
+        "latest_export": latest_export,
+    }
+
+
 def govern_import_lot_service(
     *,
     lote_id: int,
@@ -946,8 +1168,8 @@ def govern_import_lot_service(
     lote = db.get(ImportLote, lote_id)
     if not lote:
         raise HTTPException(status_code=404, detail="lote de importacao nao encontrado")
-    if not _can_govern_imports(actor):
-        raise HTTPException(status_code=403, detail="perfil sem permissao para governar imports")
+    if not _can_govern_specific_lote(lote, actor):
+        raise HTTPException(status_code=403, detail="sem permissao para governar este import")
 
     acao = str(payload.acao or "").strip().upper()
     motivo = str(payload.motivo or "").strip()
@@ -1006,23 +1228,13 @@ def govern_import_lot_service(
     removable_ids = [int(item.id) for item in removable]
     removable_backend_ids = [item.id_interno for item in removable]
 
-    if removable_ids:
-        db.query(SupportThread).filter(SupportThread.emenda_id.in_(removable_ids)).update(
-            {"emenda_id": None},
-            synchronize_session=False,
-        )
-        db.query(EmendaLock).filter(EmendaLock.emenda_id.in_(removable_ids)).delete(synchronize_session=False)
-        db.query(Historico).filter(Historico.emenda_id.in_(removable_ids)).delete(synchronize_session=False)
-        for emenda in removable:
-            db.delete(emenda)
-
     lote.status_governanca = "REMOVIDO"
     lote.governanca_motivo = motivo
     lote.governado_por_id = actor.get("id")
     lote.governado_por_nome = str(actor.get("name") or "")
     lote.governado_por_setor = str(actor.get("role") or "")
     lote.governado_em = now
-    lote.registros_removidos = len(removable_backend_ids)
+    lote.registros_removidos = 0
 
     _append_governance_log(
         lote_id=lote.id,
@@ -1030,9 +1242,11 @@ def govern_import_lot_service(
         motivo=motivo,
         actor=actor,
         detalhes={
-            "registros_removidos": removable_backend_ids,
+            "modo_remocao": "LOGICA",
+            "registros_preservados": removable_backend_ids,
             "registros_bloqueados": blocked,
             "linhas_created_lote": created_ids,
+            "registros_afetados": len(removable_ids),
         },
         db=db,
         utcnow=utcnow,
@@ -1041,8 +1255,6 @@ def govern_import_lot_service(
     db.commit()
     db.refresh(lote)
     broadcast_update("import_lote", lote.id)
-    if removable_ids:
-        broadcast_update("emenda", None)
     return lote
 
 

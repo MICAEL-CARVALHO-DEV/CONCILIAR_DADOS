@@ -77,6 +77,7 @@ class Emenda(Base):
     cod_orgao: Mapped[str] = mapped_column(String(40), default="")
     cod_acao: Mapped[str] = mapped_column(String(40), default="")
     descricao_acao: Mapped[str] = mapped_column(Text, default="")
+    objetivo_epi: Mapped[str] = mapped_column(Text, default="")
     plan_a: Mapped[str] = mapped_column(Text, default="")
     plan_b: Mapped[str] = mapped_column(Text, default="")
     municipio: Mapped[str] = mapped_column(String(120), default="")

@@ -4,13 +4,13 @@ from datetime import datetime
 from typing import Callable
 
 from fastapi import HTTPException
-from sqlalchemy import or_
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from ..models import SupportMessage, SupportThread
 from ..schemas import SUPPORT_CATEGORIES, SUPPORT_THREAD_STATUS
 
-SUPPORT_MANAGER_ROLES = {"APG", "SUPERVISAO", "POWERBI", "PROGRAMADOR"}
+SUPPORT_MANAGER_ROLES = {"PROGRAMADOR"}
 
 
 def is_support_manager(actor: dict | None) -> bool:
@@ -85,6 +85,34 @@ def list_support_threads_service(
     actor: dict,
     db: Session,
 ) -> list[SupportThread]:
+    if not is_support_manager(actor):
+        return []
+    query = _build_support_threads_query(
+        status=status,
+        categoria=categoria,
+        usuario=usuario,
+        q=q,
+        mine_only=mine_only,
+        actor=actor,
+        db=db,
+    )
+    return (
+        query.order_by(SupportThread.last_message_at.desc(), SupportThread.id.desc())
+        .limit(limit)
+        .all()
+    )
+
+
+def _build_support_threads_query(
+    *,
+    status: str | None,
+    categoria: str | None,
+    usuario: str | None,
+    q: str | None,
+    mine_only: bool,
+    actor: dict,
+    db: Session,
+):
     query = db.query(SupportThread)
 
     if not is_support_manager(actor) or mine_only:
@@ -120,11 +148,92 @@ def list_support_threads_service(
             )
         )
 
-    return (
-        query.order_by(SupportThread.last_message_at.desc(), SupportThread.id.desc())
-        .limit(limit)
+    return query
+
+
+def build_support_summary_service(
+    *,
+    status: str | None,
+    categoria: str | None,
+    usuario: str | None,
+    q: str | None,
+    mine_only: bool,
+    actor: dict,
+    db: Session,
+) -> dict:
+    if not is_support_manager(actor):
+        return {
+            "escopo": "request_only",
+            "total_threads": 0,
+            "status_counts": [],
+            "categoria_counts": [],
+            "latest_thread": None,
+        }
+    query = _build_support_threads_query(
+        status=status,
+        categoria=categoria,
+        usuario=usuario,
+        q=q,
+        mine_only=mine_only,
+        actor=actor,
+        db=db,
+    )
+
+    total_threads = int(query.count())
+    status_rows = (
+        query.with_entities(SupportThread.status, func.count(SupportThread.id))
+        .group_by(SupportThread.status)
+        .order_by(func.count(SupportThread.id).desc(), SupportThread.status.asc())
         .all()
     )
+    status_counts = [
+        {
+            "label": str(label or ""),
+            "total": int(total or 0),
+        }
+        for label, total in status_rows
+    ]
+
+    categoria_rows = (
+        query.with_entities(SupportThread.categoria, func.count(SupportThread.id))
+        .group_by(SupportThread.categoria)
+        .order_by(func.count(SupportThread.id).desc(), SupportThread.categoria.asc())
+        .all()
+    )
+    categoria_counts = [
+        {
+            "label": str(label or ""),
+            "total": int(total or 0),
+        }
+        for label, total in categoria_rows
+    ]
+
+    latest_thread = None
+    latest_thread_row = (
+        query.order_by(SupportThread.last_message_at.desc(), SupportThread.id.desc()).first()
+    )
+    if latest_thread_row:
+        latest_thread = {
+            "id": int(latest_thread_row.id),
+            "subject": str(latest_thread_row.subject or ""),
+            "categoria": str(latest_thread_row.categoria or ""),
+            "status": str(latest_thread_row.status or ""),
+            "usuario_nome": str(latest_thread_row.usuario_nome or ""),
+            "setor": str(latest_thread_row.setor or ""),
+            "last_actor_nome": str(latest_thread_row.last_actor_nome or ""),
+            "last_actor_role": str(latest_thread_row.last_actor_role or ""),
+            "updated_at": latest_thread_row.updated_at,
+            "last_message_at": latest_thread_row.last_message_at,
+        }
+
+    effective_scope = "mine" if (not is_support_manager(actor) or mine_only) else "all"
+    return {
+        "escopo": effective_scope,
+        "total_threads": total_threads,
+        "status_counts": status_counts,
+        "categoria_counts": categoria_counts,
+        "latest_thread": latest_thread,
+    }
 
 
 def create_support_thread_service(
@@ -171,6 +280,8 @@ def create_support_thread_service(
 
 
 def list_support_messages_service(*, thread_id: int, actor: dict, db: Session) -> list[SupportMessage]:
+    if not is_support_manager(actor):
+        return []
     thread = db.get(SupportThread, thread_id)
     if not thread:
         raise HTTPException(status_code=404, detail="chamado nao encontrado")
@@ -192,6 +303,8 @@ def create_support_message_service(
     utcnow: Callable[[], datetime],
     broadcast_update: Callable[[str, int | None], None],
 ) -> SupportMessage:
+    if not is_support_manager(actor):
+        raise HTTPException(status_code=403, detail="apenas PROGRAMADOR pode responder chamados")
     thread = db.get(SupportThread, thread_id)
     if not thread:
         raise HTTPException(status_code=404, detail="chamado nao encontrado")
