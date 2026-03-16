@@ -173,6 +173,7 @@ const TRACKED_FIELDS = [
   { key: "cod_orgao", label: "Cod Orgao", type: "string" },
   { key: "cod_acao", label: "Cod Acao", type: "string" },
   { key: "descricao_acao", label: "Descricao Acao", type: "string" },
+  { key: "objetivo_epi", label: "Objetivo EPI", type: "string" },
   { key: "plan_a", label: "Plano A", type: "string" },
   { key: "plan_b", label: "Plano B", type: "string" },
   { key: "municipio", label: "Municipio", type: "string" },
@@ -192,6 +193,7 @@ const MODAL_FIELD_ORDER = [
   { key: "cod_subfonte", label: "Cod Subfonte", editable: true },
   { key: "cod_acao", label: "Cod Acao", editable: false },
   { key: "descricao_acao", label: "Descricao Acao", editable: false },
+  { key: "objetivo_epi", label: "Objetivo EPI", editable: true },
   { key: "municipio", label: "Municipio", editable: true },
   { key: "deputado", label: "Deputado", editable: false },
   { key: "cod_uo", label: "Cod UO", editable: true },
@@ -213,6 +215,7 @@ const IMPORT_ALIASES = {
   cod_orgao: ["cod_orgao", "codigo_orgao", "orgao", "cod orgao", "cod. orgao", "cod. órgão"],
   cod_acao: ["cod_acao", "codigo_acao", "acao", "cod acao", "cod da acao", "cod. da acao", "codigo da acao", "cód. da ação"],
   descricao_acao: ["descricao_acao", "descricao da acao", "acao_descricao", "descricao", "descritor da acao", "descritor da ação"],
+  objetivo_epi: ["objetivo_epi", "objetivo epi", "objetivo", "objetivo de epi"],
   plan_a: ["plan_a", "plano_a", "plano a", "planoa", "plano a acao", "plano de acao a"],
   plan_b: ["plan_b", "plano_b", "plano b", "planob", "plano b acao", "plano de acao b"],
   municipio: ["municipio", "cidade", "municipio / estado", "municipio estado", "município / estado"],
@@ -233,6 +236,7 @@ const RAW_PREFERRED_HEADERS = {
   cod_orgao: "Cod. Orgao",
   cod_acao: "Cod. da Acao",
   descricao_acao: "Descritor da Acao",
+  objetivo_epi: "Objetivo EPI",
   plan_a: "Plano A",
   plan_b: "Plano B",
   municipio: "Municipio / Estado",
@@ -258,6 +262,8 @@ let modalAutosaveTimer = null;
 let modalDraftSavePromise = null;
 let betaWorkspaceTab = "history";
 let betaWorkspaceTabTouched = false;
+let shellActiveSector = "operation";
+let shellActiveSection = "mainTableCard";
 const WORKSPACE_STORAGE_KEY = "SEC_ACTIVE_WORKSPACE";
 const WORKSPACE_KEYS = {
   LOA: "LOA_ATUAL",
@@ -269,7 +275,7 @@ const MODAL_AUTOSAVE_DEBOUNCE_MS = 2000;
 const MODAL_DRAFT_STORAGE_PREFIX = "SEC_MODAL_DRAFT_V1";
 const SUPPORT_CATEGORIES = ["OPERACAO", "IMPORTACAO", "EXPORTACAO", "DASHBOARD", "ACESSO", "ESTRUTURAL", "OUTRO"];
 const SUPPORT_THREAD_STATUS = ["ABERTO", "EM_ANALISE", "RESPONDIDO", "FECHADO"];
-const SUPPORT_MANAGER_ROLES = ["APG", "SUPERVISAO", "POWERBI", "PROGRAMADOR"];
+const SUPPORT_MANAGER_ROLES = ["PROGRAMADOR"];
 let CURRENT_WORKSPACE = readStoredWorkspaceKey();
 
 const DEMO = [
@@ -452,12 +458,20 @@ const betaWorkspace = document.getElementById("betaWorkspace");
 const workspaceContextBar = document.getElementById("workspaceContextBar");
 const workspaceModeNotice = document.getElementById("workspaceModeNotice");
 const workspaceStage = document.getElementById("workspaceStage");
+const mainOperationStage = document.getElementById("mainOperationStage");
+const mainSectorStage = document.getElementById("mainSectorStage");
+const operationNoticeGrid = document.getElementById("operationNoticeGrid");
 const importLabel = document.querySelector("label[for='fileCsv']");
 const currentUserInfo = document.getElementById("currentUserInfo");
 const roleNotice = document.getElementById("roleNotice");
 const supervisorQuickPanel = document.getElementById("supervisorQuickPanel");
+const shellSectorCard = document.getElementById("shellSectorCard");
 const mainFiltersCard = document.getElementById("mainFiltersCard");
 const mainTableCard = document.getElementById("mainTableCard");
+const operationShortcutNav = document.getElementById("operationShortcutNav");
+const shellSectorNavButtons = Array.prototype.slice.call(document.querySelectorAll("[data-shell-sector]"));
+const shellSectionNavButtons = Array.prototype.slice.call(document.querySelectorAll("[data-shell-section]"));
+const shellBetaTabNavButtons = Array.prototype.slice.call(document.querySelectorAll("[data-shell-beta-tab]"));
 const btnProfile = document.getElementById("btnProfile");
 const btnPendingApprovals = document.getElementById("btnPendingApprovals");
 const btnCreateProfile = document.getElementById("btnCreateProfile");
@@ -627,6 +641,7 @@ function getTemplateCanonicalKeys() {
     "cod_orgao",
     "cod_acao",
     "descricao_acao",
+    "objetivo_epi",
     "plan_a",
     "plan_b",
     "municipio",
@@ -952,6 +967,7 @@ function render() {
   renderWorkspaceContext();
   const datasetWorkspace = canRenderWorkspaceDataset();
   applyWorkspaceLayoutMode(datasetWorkspace);
+  renderShellSectorCard();
   if (!datasetWorkspace) return;
 
   const rows = getFiltered();
@@ -1036,6 +1052,7 @@ function render() {
   renderImportDashboard();
   renderBetaWorkspace(rows);
   renderSupervisorQuickPanel(rows);
+  syncShellNavigationState();
 }
 
 // Aplica filtros de status/ano/texto sobre o estado em memoria.
@@ -2656,6 +2673,7 @@ function createRecordFromImport(incoming, ctx, fileName) {
     cod_orgao: incoming.cod_orgao || "",
     cod_acao: incoming.cod_acao || "",
     descricao_acao: incoming.descricao_acao || "",
+    objetivo_epi: incoming.objetivo_epi || "",
     plan_a: incoming.plan_a || "",
     plan_b: incoming.plan_b || "",
     municipio: incoming.municipio || "-",
@@ -2786,6 +2804,7 @@ function mapImportRow(ctx) {
     cod_orgao: importCtx.asText(importCtx.pickValue(row, importCtx.importAliases.cod_orgao)),
     cod_acao: codAcao,
     descricao_acao: importCtx.asText(importCtx.pickValue(row, importCtx.importAliases.descricao_acao)),
+    objetivo_epi: importCtx.asText(importCtx.pickValue(row, importCtx.importAliases.objetivo_epi)),
     plan_a: importCtx.asText(importCtx.pickValue(row, importCtx.importAliases.plan_a)),
     plan_b: importCtx.asText(importCtx.pickValue(row, importCtx.importAliases.plan_b)),
     municipio: municipio,
@@ -2813,6 +2832,7 @@ function hasUsefulData(record) {
   }
 
   const checks = [record.id, record.identificacao, record.cod_subfonte, record.cod_acao, record.municipio, record.deputado, record.processo_sei, record.ref_key];
+  if (record.objetivo_epi != null && String(record.objetivo_epi).trim()) return true;
   const hasText = checks.some(function (v) {
     return !!String(v || "").trim();
   });
@@ -2886,7 +2906,7 @@ function detectHeaderRow(matrix) {
 
     const normalized = row.map(function (v) { return normalizeHeader(v); });
     let score = nonEmpty;
-    const hints = ["identificacao", "deputado", "status", "municipio", "cod_uo", "cod_subfonte", "cod_da_acao", "descritor_da_acao"];
+    const hints = ["identificacao", "deputado", "status", "municipio", "objetivo", "cod_uo", "cod_subfonte", "cod_da_acao", "descritor_da_acao"];
     hints.forEach(function (h) {
       if (normalized.includes(h)) score += 5;
     });
@@ -3248,7 +3268,7 @@ function getWorkspaceDefinitions() {
       demoTools: false,
       preBetaLocked: LOA_PRE_BETA_LOCKED,
       notice: LOA_PRE_BETA_LOCKED
-        ? "A LOA oficial fica vazia e sem integracao ate o inicio da beta com usuarios. Testes e demos ficam restritos a Pagina de teste."
+        ? "A LOA oficial fica vazia e sem integracao ate o inicio da beta com usuarios. Smoke e validacoes controladas seguem fora do fluxo oficial."
         : "",
       stageTitle: "",
       stageDescription: "",
@@ -3256,65 +3276,16 @@ function getWorkspaceDefinitions() {
         ? [
             "A LOA continua visivel para validacao do layout e do fluxo oficial.",
             "Importacao, alteracao e sincronizacao oficial ficam bloqueadas ate a liberacao da beta.",
-            "Toda homologacao deve acontecer somente na Pagina de teste."
+            "Homologacao e smoke seguem controlados sem reabrir workspaces extras nesta fase."
           ]
         : [],
       nextSteps: LOA_PRE_BETA_LOCKED
         ? [
             "Liberar a operacao da LOA quando a beta oficial comecar.",
             "Reativar a integracao com a API oficial nesse contexto.",
-            "Manter smoke, regressao e demos apenas no workspace TESTE."
+            "Manter validacoes locais controladas ate a entrada oficial da beta."
           ]
         : []
-    },
-    {
-      key: WORKSPACE_KEYS.TESTE,
-      label: "Pagina de teste",
-      description: "Contexto isolado para testar fluxo e dados locais sem tocar na LOA atual.",
-      mode: "sandbox",
-      datasetVisible: true,
-      apiBacked: false,
-      importEnabled: true,
-      mutateEnabled: true,
-      demoTools: true,
-      notice: "A pagina TESTE usa storage proprio e nao envia demo ou reset para a LOA oficial.",
-      stageTitle: "Workspace de teste local",
-      stageDescription: "Use esta base para seus testes. A LOA continua limpa e a API oficial nao recebe dados de homologacao deste contexto.",
-      rules: [
-        "A LOA atual continua intacta e operacional.",
-        "A pagina TESTE fica visivel apenas para MICAEL_DEV.",
-        "Reset Demo e testes locais devem acontecer somente aqui."
-      ],
-      nextSteps: [
-        "Validar importacoes de teste sem contaminar a LOA.",
-        "Usar este mesmo desenho de contexto para a futura base FEDERAL.",
-        "Manter a governanca da LOA separada da homologacao."
-      ]
-    },
-    {
-      key: WORKSPACE_KEYS.FEDERAL,
-      label: "Federal",
-      description: "Placeholder arquitetural para a base FEDERAL, sem impacto na LOA agora.",
-      mode: "future",
-      datasetVisible: false,
-      apiBacked: false,
-      importEnabled: false,
-      mutateEnabled: false,
-      demoTools: false,
-      disabled: true,
-      notice: "A base FEDERAL foi alinhada como proximo contexto do sistema, mas ainda nao esta habilitada nesta fase.",
-      stageTitle: "Base FEDERAL (futuro)",
-      stageDescription: "O sistema ja reconhece a necessidade de uma base FEDERAL, mas a implementacao operacional fica para a proxima etapa.",
-      rules: [
-        "Nao interfere na LOA atual.",
-        "Nao fica disponivel para operacao nesta fase beta.",
-        "Serve como trilha futura da arquitetura por workspace."
-      ],
-      nextSteps: [
-        "Definir regras de negocio especificas da base FEDERAL.",
-        "Criar dataset, historico e dashboard por workspace.",
-        "Ligar permissao por perfil + workspace."
-      ]
     }
   ];
 }
@@ -3464,13 +3435,32 @@ function setWorkspaceSectionVisibility(sectionEl, visible) {
 
 function applyWorkspaceLayoutMode(canUseDataset) {
   const showBetaPanels = isOperationalWorkspace();
-  setWorkspaceSectionVisibility(mainFiltersCard, canUseDataset);
-  setWorkspaceSectionVisibility(importReport, canUseDataset);
-  setWorkspaceSectionVisibility(betaWorkspace, canUseDataset && showBetaPanels);
-  setWorkspaceSectionVisibility(mainTableCard, canUseDataset);
-  if (!showBetaPanels) {
+  const activeSector = getActiveShellSector();
+  const showOperation = canUseDataset && activeSector === "operation";
+  const showDedicatedSector = canUseDataset && showBetaPanels && activeSector !== "operation";
+
+  setWorkspaceSectionVisibility(mainOperationStage, showOperation);
+  setWorkspaceSectionVisibility(mainSectorStage, showDedicatedSector);
+  setWorkspaceSectionVisibility(workspaceContextBar, showOperation);
+  setWorkspaceSectionVisibility(operationNoticeGrid, showOperation);
+  setWorkspaceSectionVisibility(shellSectorCard, showDedicatedSector);
+  setWorkspaceSectionVisibility(mainFiltersCard, showOperation);
+  setWorkspaceSectionVisibility(importReport, showOperation);
+  setWorkspaceSectionVisibility(betaWorkspace, showDedicatedSector);
+  setWorkspaceSectionVisibility(mainTableCard, showOperation);
+
+  if (operationShortcutNav) {
+    operationShortcutNav.classList.toggle("hidden", activeSector !== "operation");
+  }
+
+  if (!showBetaPanels || !showDedicatedSector) {
     clearBetaAuditPolling();
     clearBetaSupportPolling();
+  }
+
+  if (!showOperation) {
+    if (workspaceModeNotice) workspaceModeNotice.classList.add("hidden");
+    if (workspaceStage) workspaceStage.classList.add("hidden");
     if (roleNotice) roleNotice.classList.add("hidden");
     if (supervisorQuickPanel) supervisorQuickPanel.classList.add("hidden");
   }
@@ -3490,6 +3480,74 @@ function renderWorkspaceContext() {
   const moduleFn = getWorkspaceUtil("renderWorkspaceContext");
   if (!moduleFn || !workspaceContextBar) return;
   moduleFn(workspaceContextBar, workspaceModeNotice, workspaceStage, getWorkspaceContext());
+}
+
+function normalizeShellSectorKey(nextSector) {
+  const key = String(nextSector || "").trim().toLowerCase();
+  if (key === "history" || key === "support" || key === "powerbi") return key;
+  if (key === "imports") return canImportData() ? "imports" : "history";
+  return "operation";
+}
+
+function getActiveShellSector() {
+  if (!isOperationalWorkspace()) {
+    shellActiveSector = "operation";
+    return shellActiveSector;
+  }
+  shellActiveSector = normalizeShellSectorKey(shellActiveSector);
+  return shellActiveSector;
+}
+
+function setShellActiveSector(nextSector) {
+  shellActiveSector = normalizeShellSectorKey(nextSector);
+}
+
+function renderShellSectorCard() {
+  if (!shellSectorCard) return;
+  const activeSector = getActiveShellSector();
+  if (activeSector === "operation" || !isOperationalWorkspace()) {
+    clearNodeChildren(shellSectorCard);
+    return;
+  }
+
+  const sectorMetaByKey = {
+    history: {
+      eyebrow: "Historico operacional",
+      title: "Rastreabilidade dedicada no app-main-content",
+      copy: "Filtros fortes, trilha de eventos e leitura consolidada ficam sozinhos na area principal, sem disputar espaco com a planilha oficial.",
+      badges: ["Auditoria recente", "Leitura dedicada", "Sem competir com a planilha"]
+    },
+    imports: {
+      eyebrow: "Governanca de imports",
+      title: "Lotes, linhas e remocao logica com foco proprio",
+      copy: "A governanca ganha contexto proprio na area principal para tratar lote, linhas, logs e correcoes sem poluir a operacao diaria.",
+      badges: ["Dono do lote", "Remocao logica", "Rastreabilidade de lote"]
+    },
+    support: {
+      eyebrow: "Ajuda e suporte",
+      title: "Solicitacao simples para usuario comum",
+      copy: "O suporte fica dedicado no conteudo principal, com abertura limpa de solicitacao e historico administrativo completo so para PROGRAMADOR.",
+      badges: ["Request only", "Historico administrativo", "Fluxo dedicado"]
+    },
+    powerbi: {
+      eyebrow: "Visao Power BI",
+      title: "Leitura executiva sem competir com a operacao",
+      copy: "Power BI entra com foco total em leitura executiva, indicadores e supervisao, deixando a planilha principal fora do caminho visual.",
+      badges: ["Leitura executiva", "Indicadores", "Foco em supervisao"]
+    }
+  };
+  const meta = sectorMetaByKey[activeSector] || sectorMetaByKey.history;
+  const badgesHtml = meta.badges.map(function (label) {
+    return "<span class=\"workspace-badge workspace-badge-future\">" + escapeHtml(label) + "</span>";
+  }).join("");
+
+  shellSectorCard.innerHTML = ""
+    + "<div class=\"app-sector-card-copy\">"
+    + "  <span class=\"app-panel-label\">" + escapeHtml(meta.eyebrow) + "</span>"
+    + "  <h2 class=\"app-sector-card-title\">" + escapeHtml(meta.title) + "</h2>"
+    + "  <p class=\"muted\">" + escapeHtml(meta.copy) + "</p>"
+    + "</div>"
+    + "<div class=\"app-sector-card-badges\">" + badgesHtml + "</div>";
 }
 
 function clearEmendaLockTimer() {
@@ -4000,6 +4058,57 @@ function getPreferredBetaWorkspaceTab() {
   return isPowerBiUser() ? "powerbi" : "history";
 }
 
+function scrollShellSectionIntoView(sectionId) {
+  const nextId = String(sectionId || "").trim();
+  if (!nextId) return;
+  const target = document.getElementById(nextId);
+  if (!target || target.classList.contains("hidden")) return;
+  if (typeof target.scrollIntoView === "function") {
+    target.scrollIntoView({
+      behavior: "smooth",
+      block: "start"
+    });
+  }
+}
+
+function setShellActiveSection(sectionId) {
+  const nextId = String(sectionId || "").trim();
+  shellActiveSection = nextId || "mainTableCard";
+}
+
+function syncShellNavigationState() {
+  const activeSector = getActiveShellSector();
+
+  if (operationShortcutNav) {
+    operationShortcutNav.classList.toggle("hidden", activeSector !== "operation");
+  }
+
+  shellSectorNavButtons.forEach(function (btn) {
+    const sectorKey = normalizeShellSectorKey(btn.getAttribute("data-shell-sector"));
+    const hidden = sectorKey === "imports" && !canImportData();
+    const isActive = !hidden && sectorKey === activeSector;
+    btn.classList.toggle("hidden", hidden);
+    btn.classList.toggle("active", isActive);
+    btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+  });
+
+  shellSectionNavButtons.forEach(function (btn) {
+    const isActive = activeSector === "operation" && String(btn.getAttribute("data-shell-section") || "") === shellActiveSection;
+    btn.classList.toggle("active", isActive);
+    btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+  });
+
+  const activeTab = activeSector === "operation" ? "" : getActiveBetaWorkspaceTab();
+  shellBetaTabNavButtons.forEach(function (btn) {
+    const tabKey = String(btn.getAttribute("data-shell-beta-tab") || "");
+    const hidden = tabKey === "imports" && !canImportData();
+    const isActive = !hidden && activeSector !== "operation" && tabKey === activeTab;
+    btn.classList.toggle("hidden", hidden);
+    btn.classList.toggle("active", isActive);
+    btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+  });
+}
+
 function getActiveBetaWorkspaceTab() {
   if (!betaWorkspaceTabTouched) {
     betaWorkspaceTab = getPreferredBetaWorkspaceTab();
@@ -4020,6 +4129,8 @@ function setBetaWorkspaceTab(nextTab) {
     betaWorkspaceTab = "history";
   }
   betaWorkspaceTabTouched = true;
+  setShellActiveSector(betaWorkspaceTab);
+  setShellActiveSection("betaWorkspace");
   syncBetaSupportPolling();
   if (betaWorkspaceTab === "support" && canUseSupportApi() && apiOnline) {
     refreshBetaSupportFromApi(true).catch(function () { /* no-op */ });
@@ -5927,6 +6038,60 @@ function renderBetaWorkspace(filteredRows) {
   betaWorkspace.appendChild(empty);
 }
 
+function bindShellNavigationEvents() {
+  shellSectionNavButtons.forEach(function (btn) {
+    if (btn.getAttribute("data-shell-bound") === "1") return;
+    btn.setAttribute("data-shell-bound", "1");
+    btn.addEventListener("click", function () {
+      const targetId = String(btn.getAttribute("data-shell-section") || "").trim();
+      if (!targetId) return;
+      setShellActiveSector("operation");
+      setShellActiveSection(targetId);
+      render();
+      const scheduleScroll = typeof requestAnimationFrame === "function" ? requestAnimationFrame : function (fn) {
+        return setTimeout(fn, 0);
+      };
+      scheduleScroll(function () {
+        scrollShellSectionIntoView(targetId);
+      });
+    });
+  });
+
+  shellSectorNavButtons.forEach(function (btn) {
+    if (btn.hasAttribute("data-shell-beta-tab")) return;
+    if (btn.getAttribute("data-shell-bound") === "1") return;
+    btn.setAttribute("data-shell-bound", "1");
+    btn.addEventListener("click", function () {
+      setShellActiveSector(btn.getAttribute("data-shell-sector"));
+      render();
+      const scheduleScroll = typeof requestAnimationFrame === "function" ? requestAnimationFrame : function (fn) {
+        return setTimeout(fn, 0);
+      };
+      scheduleScroll(function () {
+        scrollShellSectionIntoView("mainOperationStage");
+      });
+    });
+  });
+
+  shellBetaTabNavButtons.forEach(function (btn) {
+    if (btn.getAttribute("data-shell-bound") === "1") return;
+    btn.setAttribute("data-shell-bound", "1");
+    btn.addEventListener("click", function () {
+      const nextTab = String(btn.getAttribute("data-shell-beta-tab") || "").trim();
+      if (!nextTab) return;
+      setBetaWorkspaceTab(nextTab);
+      const scheduleScroll = typeof requestAnimationFrame === "function" ? requestAnimationFrame : function (fn) {
+        return setTimeout(fn, 0);
+      };
+      scheduleScroll(function () {
+        scrollShellSectionIntoView("mainSectorStage");
+      });
+    });
+  });
+
+  syncShellNavigationState();
+}
+
 function renderSupervisorQuickPanel(prefilteredRows) {
   if (!supervisorQuickPanel) return;
   const rows = Array.isArray(prefilteredRows) ? prefilteredRows : getFiltered();
@@ -5987,6 +6152,7 @@ function applyAccessProfile() {
     syncBetaSupportPolling();
   }
   refreshProfileModal();
+  syncShellNavigationState();
 }
 
 function refreshProfileModal() {
@@ -6238,6 +6404,7 @@ function mergeRemoteEmendas(remoteList) {
       cod_orgao: text(re.cod_orgao),
       cod_acao: text(re.cod_acao),
       descricao_acao: text(re.descricao_acao),
+      objetivo_epi: text(re.objetivo_epi),
       plan_a: text(re.plan_a),
       plan_b: text(re.plan_b),
       municipio: text(re.municipio) || "-",
@@ -6790,6 +6957,7 @@ function mkRecord(data) {
     cod_orgao: asText(data.cod_orgao),
     cod_acao: asText(data.cod_acao),
     descricao_acao: asText(data.descricao_acao),
+    objetivo_epi: asText(data.objetivo_epi || data.objetivo || data.objetivoEpi),
     plan_a: asText(data.plan_a || data.plano_a),
     plan_b: asText(data.plan_b || data.plano_b),
     municipio: asText(data.municipio) || "-",
@@ -7140,6 +7308,7 @@ function syncCanonicalToAllFields(record) {
   upsertRawField(record.all_fields, "cod_orgao", record.cod_orgao);
   upsertRawField(record.all_fields, "cod_acao", record.cod_acao);
   upsertRawField(record.all_fields, "descricao_acao", record.descricao_acao);
+  upsertRawField(record.all_fields, "objetivo_epi", record.objetivo_epi);
   upsertRawField(record.all_fields, "plan_a", record.plan_a);
   upsertRawField(record.all_fields, "plan_b", record.plan_b);
   upsertRawField(record.all_fields, "municipio", record.municipio);
@@ -8151,6 +8320,205 @@ async function syncExportLogToApi(meta) {
   }
 }
 
+function normalizeExportFieldKey(value) {
+  let raw = String(value == null ? "" : value);
+  if (typeof raw.normalize === "function") {
+    raw = raw.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  }
+  return raw.toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+}
+
+function resolveExportAuditFieldKey(value) {
+  const normalized = normalizeExportFieldKey(value);
+  const aliases = {
+    ano: "ano",
+    identificacao: "identificacao",
+    identificacao_da_emenda: "identificacao",
+    cod_subfonte: "cod_subfonte",
+    codigo_subfonte: "cod_subfonte",
+    deputado: "deputado",
+    cod_uo: "cod_uo",
+    codigo_uo: "cod_uo",
+    sigla_uo: "sigla_uo",
+    sigla_da_uo: "sigla_uo",
+    cod_orgao: "cod_orgao",
+    codigo_orgao: "cod_orgao",
+    cod_acao: "cod_acao",
+    cod_da_acao: "cod_acao",
+    codigo_acao: "cod_acao",
+    codigo_da_acao: "cod_acao",
+    descricao_acao: "descricao_acao",
+    descricao_da_acao: "descricao_acao",
+    descritor_da_acao: "descricao_acao",
+    objetivo_epi: "objetivo_epi",
+    objetivo: "objetivo_epi",
+    objetivo_de_epi: "objetivo_epi",
+    plan_a: "plan_a",
+    plano_a: "plan_a",
+    plan_b: "plan_b",
+    plano_b: "plan_b",
+    municipio: "municipio",
+    valor_inicial: "valor_inicial",
+    valor_inicial_epi: "valor_inicial",
+    valor_atual: "valor_atual",
+    valor_atual_epi: "valor_atual",
+    processo_sei: "processo_sei",
+    processo: "processo_sei",
+    status_oficial: "status_oficial",
+    rotulos_de_linha: "rotulos_de_linha",
+    contagem_de_deputado: "contagem_de_deputado",
+    motivo: "motivo",
+    valor_antigo: "valor_antigo",
+    valor_novo: "valor_novo",
+    usuarios_ativos: "usuarios_ativos"
+  };
+  return aliases[normalized] || normalized;
+}
+
+function collectExportModifiedFieldMap(auditRows) {
+  const out = {};
+  (auditRows || []).forEach(function (row) {
+    const key = resolveExportAuditFieldKey(row && row.campo);
+    if (key) out[key] = true;
+  });
+  return out;
+}
+
+function clampExportWidth(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function buildExportCellStyle(options) {
+  const opts = options || {};
+  const style = {
+    font: {
+      name: "Aptos",
+      sz: opts.fontSize || 11,
+      bold: !!opts.bold,
+      color: { rgb: opts.fontColor || "1F2937" }
+    },
+    alignment: {
+      horizontal: opts.horizontal || "center",
+      vertical: "center",
+      wrapText: true
+    },
+    border: {
+      top: { style: "thin", color: { rgb: "D0D7DE" } },
+      bottom: { style: "thin", color: { rgb: "D0D7DE" } },
+      left: { style: "thin", color: { rgb: "D0D7DE" } },
+      right: { style: "thin", color: { rgb: "D0D7DE" } }
+    }
+  };
+  if (opts.fillColor) {
+    style.fill = {
+      patternType: "solid",
+      fgColor: { rgb: opts.fillColor }
+    };
+  }
+  if (opts.numFmt) style.numFmt = opts.numFmt;
+  return style;
+}
+
+function computeExportWorksheetCols(aoa, headerRowIndex, widthHints) {
+  const out = [];
+  const headerRow = Array.isArray(aoa && aoa[headerRowIndex]) ? aoa[headerRowIndex] : [];
+  for (let c = 0; c < headerRow.length; c += 1) {
+    const headerKey = resolveExportAuditFieldKey(headerRow[c]);
+    let width = String(headerRow[c] == null ? "" : headerRow[c]).length + 4;
+    for (let r = 0; r < Math.min((aoa || []).length, 180); r += 1) {
+      if (r === headerRowIndex) continue;
+      const row = Array.isArray(aoa[r]) ? aoa[r] : [];
+      const value = row[c];
+      width = Math.max(width, String(value == null ? "" : value).length + 2);
+    }
+    width = Math.max(width, Number((widthHints || {})[headerKey] || 0));
+    out.push({ wch: clampExportWidth(width, 12, 42) });
+  }
+  return out;
+}
+
+function applyExportWorksheetPresentation(ws, aoa, xlsxApi, options) {
+  if (!ws || !aoa || !aoa.length || !xlsxApi || !xlsxApi.utils || typeof xlsxApi.utils.decode_range !== "function") {
+    return;
+  }
+
+  const opts = options || {};
+  const headerRowIndex = Number.isFinite(opts.headerRowIndex) ? opts.headerRowIndex : 0;
+  const totalRowIndex = Number.isFinite(opts.totalRowIndex) ? opts.totalRowIndex : -1;
+  const modifiedHeaders = opts.modifiedHeaders || {};
+  const leftAlignHeaders = opts.leftAlignHeaders || {};
+  const widthHints = opts.widthHints || {};
+  const ref = ws["!ref"];
+  if (!ref) return;
+
+  const range = xlsxApi.utils.decode_range(ref);
+  const headerRow = Array.isArray(aoa[headerRowIndex]) ? aoa[headerRowIndex] : [];
+  const rowsMeta = [];
+
+  ws["!cols"] = computeExportWorksheetCols(aoa, headerRowIndex, widthHints);
+  if (typeof xlsxApi.utils.encode_range === "function" && headerRow.length) {
+    ws["!autofilter"] = {
+      ref: xlsxApi.utils.encode_range({
+        s: { r: headerRowIndex, c: 0 },
+        e: { r: headerRowIndex, c: headerRow.length - 1 }
+      })
+    };
+  }
+
+  for (let rowIndex = 0; rowIndex <= range.e.r; rowIndex += 1) {
+    if (rowIndex < headerRowIndex) rowsMeta[rowIndex] = { hpt: 21 };
+    else if (rowIndex === headerRowIndex) rowsMeta[rowIndex] = { hpt: 25 };
+    else if (rowIndex === totalRowIndex) rowsMeta[rowIndex] = { hpt: 24 };
+    else rowsMeta[rowIndex] = { hpt: 20 };
+  }
+  ws["!rows"] = rowsMeta;
+
+  for (let r = 0; r <= range.e.r; r += 1) {
+    for (let c = 0; c <= range.e.c; c += 1) {
+      const addr = xlsxApi.utils.encode_cell({ r: r, c: c });
+      const cell = ws[addr];
+      if (!cell) continue;
+
+      const headerKey = resolveExportAuditFieldKey(headerRow[c]);
+      const alignLeft = !!leftAlignHeaders[headerKey];
+      let style;
+
+      if (r < headerRowIndex) {
+        style = buildExportCellStyle({
+          fillColor: c === 0 ? "E8F1FB" : "F8FAFC",
+          bold: c === 0,
+          horizontal: c === 0 ? "left" : "center",
+          fontSize: c === 0 ? 11 : 10
+        });
+      } else if (r === headerRowIndex) {
+        style = buildExportCellStyle({
+          fillColor: modifiedHeaders[headerKey] ? "C7791A" : "0F4C81",
+          fontColor: "FFFFFF",
+          bold: true,
+          horizontal: alignLeft ? "left" : "center",
+          fontSize: 12
+        });
+      } else if (r === totalRowIndex) {
+        style = buildExportCellStyle({
+          fillColor: "D6EAF8",
+          bold: true,
+          horizontal: alignLeft ? "left" : "center",
+          fontSize: 11
+        });
+      } else {
+        style = buildExportCellStyle({
+          fillColor: r % 2 === 0 ? "FFFFFF" : "F8FAFC",
+          horizontal: alignLeft ? "left" : "center",
+          fontSize: 11,
+          numFmt: typeof cell.v === "number" ? "#,##0.00" : undefined
+        });
+      }
+
+      cell.s = style;
+    }
+  }
+}
+
 // Exportador padrao: gera abas de dados + auditoria + resumo.
 function exportRecordsToXlsx(records, filename, options) {
   const exportRecordsToXlsxUtil = getExportWorkbookWriterUtil("exportRecordsToXlsx");
@@ -8191,10 +8559,61 @@ function exportRecordsToXlsx(records, filename, options) {
     return auditTable.headers.map(function (h) { return rowObj[h] == null ? "" : rowObj[h]; });
   }));
   const auditSheetAoa = summaryAoa.concat([[]]).concat(auditAoa);
+  const planilha1Aoa = buildPlanilha1Aoa(records);
+  const modifiedHeaders = collectExportModifiedFieldMap(auditTable.rows);
 
   const wsData = xlsxApi.utils.aoa_to_sheet(dataAoa);
   const wsAudit = xlsxApi.utils.aoa_to_sheet(auditSheetAoa);
-  const wsPlanilha1 = xlsxApi.utils.aoa_to_sheet(buildPlanilha1Aoa(records));
+  const wsPlanilha1 = xlsxApi.utils.aoa_to_sheet(planilha1Aoa);
+  applyExportWorksheetPresentation(wsPlanilha1, planilha1Aoa, xlsxApi, {
+    headerRowIndex: 0,
+    totalRowIndex: planilha1Aoa.length - 1,
+    widthHints: {
+      rotulos_de_linha: 28,
+      contagem_de_deputado: 18
+    },
+    leftAlignHeaders: {
+      rotulos_de_linha: true
+    }
+  });
+  applyExportWorksheetPresentation(wsData, dataAoa, xlsxApi, {
+    headerRowIndex: 0,
+    modifiedHeaders: modifiedHeaders,
+    widthHints: {
+      identificacao: 24,
+      descricao_acao: 34,
+      objetivo_epi: 34,
+      plan_a: 24,
+      plan_b: 24,
+      processo_sei: 18
+    },
+    leftAlignHeaders: {
+      identificacao: true,
+      descricao_acao: true,
+      objetivo_epi: true,
+      plan_a: true,
+      plan_b: true
+    }
+  });
+  applyExportWorksheetPresentation(wsAudit, auditSheetAoa, xlsxApi, {
+    headerRowIndex: summaryAoa.length + 1,
+    widthHints: {
+      identificacao: 24,
+      municipio: 20,
+      usuarios_ativos: 28,
+      valor_antigo: 22,
+      valor_novo: 22,
+      motivo: 30
+    },
+    leftAlignHeaders: {
+      identificacao: true,
+      municipio: true,
+      usuarios_ativos: true,
+      valor_antigo: true,
+      valor_novo: true,
+      motivo: true
+    }
+  });
   const wb = xlsxApi.utils.book_new();
   xlsxApi.utils.book_append_sheet(wb, wsPlanilha1, "Planilha1");
   xlsxApi.utils.book_append_sheet(wb, wsData, "Controle de EPI");
@@ -8528,7 +8947,7 @@ function buildExportTableData(records, options) {
     });
   });
 
-  const normalizedHeaders = ["id", "ano", "identificacao", "cod_subfonte", "deputado", "cod_uo", "sigla_uo", "cod_orgao", "cod_acao", "descricao_acao", "plan_a", "plan_b", "municipio", "valor_inicial", "valor_atual", "processo_sei"];
+  const normalizedHeaders = ["id", "ano", "identificacao", "cod_subfonte", "deputado", "cod_uo", "sigla_uo", "cod_orgao", "cod_acao", "descricao_acao", "objetivo_epi", "plan_a", "plan_b", "municipio", "valor_inicial", "valor_atual", "processo_sei"];
   const systemHeaders = ["id_interno_sistema", "backend_id", "parent_id", "version", "row_version", "is_current", "usuarios_ativos", "progresso", "global_state", "ref_key", "created_at", "updated_at", "source_sheet", "source_row"];
   const headers = (useOriginal ? extraHeaders : normalizedHeaders).concat(systemHeaders);
 
@@ -9013,4 +9432,6 @@ if (initializeAppStartupUtil) {
     bindImportControlsUtil(getImportControlsContext());
   }
 }
+
+bindShellNavigationEvents();
 

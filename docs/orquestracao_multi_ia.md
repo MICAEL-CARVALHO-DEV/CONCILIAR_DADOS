@@ -264,3 +264,18 @@ Usar esta regra durante a refatoracao estrutural para:
 - desmontar `app.js` com seguranca
 - modularizar o backend sem quebrar o frontend
 - manter checklist, mapas e homologacao sempre atualizados
+
+## Aplicacao oficial da fase atual
+Durante a fase atual do projeto:
+
+- `Codex VS Code` assume `backend + deve de casa tecnico`
+- `Codex Desktop` assume `front beta + Figma + layout`
+- `Gemini` entra como revisor/contraponto quando a ORQ precisar de segunda opiniao
+
+Check de coordenacao:
+- `../checks/@orq_duas_trilhas.md`
+
+Regras praticas:
+- backend publica handoff curto para o front sempre que mudar endpoint/payload/campo
+- front publica handoff curto para o backend sempre que o layout novo exigir novo dado ou nova area de contexto
+- decisoes ainda abertas do `@deve_de_casa_beta.md` continuam voltando para a ORQ antes de virar implementacao definitiva

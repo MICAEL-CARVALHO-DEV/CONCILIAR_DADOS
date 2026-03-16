@@ -29,6 +29,8 @@ Success: Qualquer pessoa encontra rapidamente o documento certo sem depender de 
 - `design_dashboard_powerbi_e_layout_principal.md`
 - `regras_planilhas_teste_e_oficial.md`
 - `mapa_oficial_colunas_loa.md`
+- `mapa_paginas_front_beta.md`
+- `mapa_backend_por_pagina_front_beta.md`
 
 ## Refatoracao
 - `refatoracao.md`
@@ -40,12 +42,16 @@ Success: Qualquer pessoa encontra rapidamente o documento certo sem depender de 
 ## Guias de apoio
 - `operacao_codex_duplo.md`
 - `prompts_codex_duplo.md`
+- `../checks/@orq_duas_trilhas.md`
+- `handoff_front_beta_por_pagina.md`
 - `../anotacoes/documentacao_raiz/guia_orquestrador_multi_ia.md`
 - `../anotacoes/documentacao_raiz/guia_skills_e_habilidades.md`
 - `../anotacoes/documentacao_raiz/guia_trello_notion_operacao.md`
 
 ## Checks auxiliares
 - `../checks/readme.md`
+- `../checks/@orq_duas_trilhas.md`
+- `../checks/@front_beta.md`
 - `../checks/auxiliares/readme.md`
 - `../checks/auxiliares/checkmaster.md`
 - `../checks/auxiliares/checksec.md`

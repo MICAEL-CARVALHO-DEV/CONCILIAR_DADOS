@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SEC Emendas - V3</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <script>
     (function () {
       try {
@@ -36,74 +39,165 @@
   <link rel="icon" href="data:," />
   <link rel="stylesheet" href="style.css" />
 </head>
-<body>
-  <main class="wrap">
-    <header class="topbar">
-      <div>
-        <h1>SEC Emendas</h1>
-        <p class="muted">Andamento em tempo real, monitoramento por supervisao e trilha de auditoria</p>
-      </div>
-      <div class="actions">
-        <button id="btnProfile" class="btn">Meu perfil</button>
-        <button id="btnPendingApprovals" class="btn" style="display:none">Cadastros em analise</button>
-        <button id="btnLogout" class="btn danger">Sair</button>
-        <button id="btnExportAtuais" class="btn primary">Exportar (Atuais)</button>
-        <button id="btnExportHistorico" class="btn">Exportar (Com historico)</button>
-        <label class="btn file-btn" for="fileCsv">Importar XLSX</label>
-        <input id="fileCsv" type="file" accept=".xlsx" />
-        <button id="btnReset" class="btn danger">Reset Demo</button>
-      </div>
-    </header>
-
-    <section id="workspaceContextBar" class="card workspace-bar"></section>
-
-    <section id="workspaceModeNotice" class="card workspace-mode-notice hidden"></section>
-
-    <section id="workspaceStage" class="card workspace-stage hidden"></section>
-
-    <section id="roleNotice" class="card role-notice hidden"></section>
-
-    <section id="supervisorQuickPanel" class="card supervisor-panel hidden"></section>
-
-    <section id="mainFiltersCard" class="filters card">
-      <div class="field">
-        <label for="statusFilter">Andamento Global</label>
-        <select id="statusFilter"></select>
+<body class="app-page">
+  <main class="wrap app-shell">
+    <aside class="app-sidebar">
+      <div class="app-sidebar-brand">
+        <div class="app-brand-mark">SEC</div>
+        <div class="app-brand-copy">
+          <span class="app-panel-label">Institucional</span>
+          <strong>SEC Emendas</strong>
+          <p class="muted small">Front beta acoplado ao contrato atual, sem romper filtros, tabela ou modais.</p>
+        </div>
       </div>
 
-      <div class="field">
-        <label for="yearFilter">Ano</label>
-        <select id="yearFilter"></select>
-      </div>
+      <section class="app-sidebar-panel">
+        <span class="app-panel-label">Base ativa</span>
+        <div class="app-base-chip">
+          <span class="app-live-dot" aria-hidden="true"></span>
+          LOA atual com trilha de auditoria
+        </div>
+        <p class="muted small">A nova casca visual organiza operacao, historico e governanca no mesmo eixo institucional.</p>
+        <span id="currentUserInfo" class="user-chip app-current-user-chip"></span>
+      </section>
 
-      <div class="field grow">
-        <label for="searchInput">Busca</label>
-        <input id="searchInput" placeholder="ID, identificacao, municipio, deputado, SEI..." />
-      </div>
-    </section>
+      <section class="app-sidebar-panel">
+        <span class="app-panel-label">Mapa de encaixe</span>
+        <div class="app-sidebar-nav-group">
+          <span class="app-sidebar-nav-caption">Setores</span>
+          <nav class="app-sidebar-nav" aria-label="Setores do workspace principal">
+            <button type="button" class="app-nav-link active" data-shell-sector="operation" aria-pressed="true">Operacao principal</button>
+            <button type="button" class="app-nav-link" data-shell-beta-tab="history" data-shell-sector="history" aria-pressed="false">Historico operacional</button>
+            <button type="button" class="app-nav-link" data-shell-beta-tab="imports" data-shell-sector="imports" aria-pressed="false">Governanca de imports</button>
+            <button type="button" class="app-nav-link" data-shell-beta-tab="support" data-shell-sector="support" aria-pressed="false">Ajuda e suporte</button>
+            <button type="button" class="app-nav-link" data-shell-beta-tab="powerbi" data-shell-sector="powerbi" aria-pressed="false">Visao Power BI</button>
+          </nav>
+        </div>
 
-    <section id="importReport" class="card"></section>
+        <div id="operationShortcutNav" class="app-sidebar-nav-group">
+          <span class="app-sidebar-nav-caption">Atalhos da operacao</span>
+          <nav class="app-sidebar-nav" aria-label="Rotas do workspace beta">
+            <button type="button" class="app-nav-link active" data-shell-section="mainTableCard" aria-pressed="true">Planilha principal</button>
+            <button type="button" class="app-nav-link" data-shell-section="workspaceContextBar" aria-pressed="false">Contexto e base</button>
+            <button type="button" class="app-nav-link" data-shell-section="mainFiltersCard" aria-pressed="false">Filtros oficiais</button>
+            <button type="button" class="app-nav-link" data-shell-section="importReport" aria-pressed="false">Resumo de importacao</button>
+          </nav>
+        </div>
+      </section>
 
-    <section id="betaWorkspace" class="card beta-workspace"></section>
+      <section class="app-sidebar-panel app-sidebar-actions-panel">
+        <span class="app-panel-label">Operacao</span>
+        <div class="actions app-sidebar-actions">
+          <label class="btn primary file-btn" for="fileCsv">Importar XLSX</label>
+          <input id="fileCsv" type="file" accept=".xlsx" />
+          <button id="btnExportAtuais" class="btn primary">Exportar (Atuais)</button>
+          <button id="btnExportHistorico" class="btn">Exportar (Com historico)</button>
+          <button id="btnReset" class="btn danger">Reset Demo</button>
+        </div>
+      </section>
+    </aside>
 
-    <section id="mainTableCard" class="card table-wrap">
-      <table class="table">
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Identificacao</th>
-            <th>Municipio</th>
-            <th>Deputado</th>
-            <th>Progresso</th>
-            <th>Usuarios (status)</th>
-            <th>Parado ha</th>
-            <th>Valor Atual</th>
-            <th>Atualizado</th>
-            <th>Acao</th>
-          </tr>
-        </thead>
-        <tbody id="tbody"></tbody>
-      </table>
+    <section class="app-shell-main">
+      <header class="topbar app-topbar">
+        <div class="app-topbar-copy">
+          <span class="app-panel-label">Sistema operacional de monitoramento</span>
+          <h1>Gestao de Emendas</h1>
+          <p class="muted">Tabela operacional como foco, com encaixe seguro para historico, governanca, importacao e apoio beta.</p>
+        </div>
+        <div class="actions app-topbar-actions">
+          <div class="app-operator-chip">
+            <span class="app-operator-avatar">SE</span>
+            <div>
+              <strong>Painel institucional</strong>
+              <span>Contrato funcional preservado</span>
+            </div>
+          </div>
+          <button id="btnPendingApprovals" class="btn" style="display:none">Cadastros em analise</button>
+          <button id="btnProfile" class="btn">Meu perfil</button>
+          <button id="btnLogout" class="btn danger">Sair</button>
+        </div>
+      </header>
+
+      <section class="app-main-content">
+        <section id="mainOperationStage" class="app-stage app-stage-operation">
+          <section
+            id="workspaceContextBar"
+            class="card workspace-bar app-hero-card"
+            data-empty-title="Base ativa, contexto e modo operacional"
+            data-empty-copy="O resumo da base atual e dos badges de contexto aparece aqui sem competir com a tabela principal."
+          ></section>
+
+          <div id="operationNoticeGrid" class="app-notice-grid">
+            <section id="workspaceModeNotice" class="card workspace-mode-notice hidden"></section>
+            <section id="workspaceStage" class="card workspace-stage hidden"></section>
+            <section id="roleNotice" class="card role-notice hidden"></section>
+            <section id="supervisorQuickPanel" class="card supervisor-panel hidden"></section>
+          </div>
+
+          <section id="mainFiltersCard" class="filters card app-filters-card">
+            <div class="field">
+              <label for="yearFilter">Ano</label>
+              <select id="yearFilter"></select>
+            </div>
+
+            <section class="app-sidebar-panel app-sidebar-filter-panel">
+              <div class="field app-sidebar-field">
+                <label for="statusFilter">Andamento global</label>
+                <select id="statusFilter" class="app-sidebar-select"></select>
+              </div>
+              <p class="muted small">Este filtro continua sendo o filtro oficial da tabela principal e dos paineis derivados.</p>
+            </section>
+
+            <div class="field grow app-main-search-field">
+              <label for="searchInput">Busca rapida</label>
+              <input id="searchInput" placeholder="ID, identificacao, municipio, deputado, SEI..." />
+            </div>
+
+            <div class="app-filter-summary">
+              <span class="app-panel-label">Refino da operacao</span>
+              <p class="muted">Os filtros oficiais continuam centralizados neste card: andamento global, ano e busca rapida sustentam a leitura da planilha oficial sem dividir a operacao.</p>
+            </div>
+          </section>
+
+          <section
+            id="importReport"
+            class="card app-support-card app-operacao-report"
+            data-empty-title="Resumo de importacao"
+            data-empty-copy="Assim que um lote rodar, validacoes, abas e alertas entram aqui com prioridade operacional logo antes da tabela."
+          ></section>
+
+          <section id="mainTableCard" class="card table-wrap app-table-card">
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Identificacao</th>
+                  <th>Municipio</th>
+                  <th>Deputado</th>
+                  <th>Progresso</th>
+                  <th>Usuarios (status)</th>
+                  <th>Parado ha</th>
+                  <th>Valor Atual</th>
+                  <th>Atualizado</th>
+                  <th>Acao</th>
+                </tr>
+              </thead>
+              <tbody id="tbody"></tbody>
+            </table>
+          </section>
+        </section>
+
+        <section id="mainSectorStage" class="app-stage app-stage-sector hidden">
+          <section id="shellSectorCard" class="card app-sector-card hidden"></section>
+
+          <section
+            id="betaWorkspace"
+            class="card beta-workspace app-support-card app-support-card-wide"
+            data-empty-title="Workspace beta"
+            data-empty-copy="Historico, governanca, apoio e paineis complementares vivem aqui sem quebrar o contrato do front atual."
+          ></section>
+        </section>
+      </section>
     </section>
   </main>
 

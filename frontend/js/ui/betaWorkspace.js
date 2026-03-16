@@ -23,6 +23,25 @@
     var renderPowerBi = typeof opts.renderPowerBi === "function" ? opts.renderPowerBi : noop;
     var renderSupport = typeof opts.renderSupport === "function" ? opts.renderSupport : noop;
     var renderImports = typeof opts.renderImports === "function" ? opts.renderImports : noop;
+    var tabMetaMap = {
+      history: {
+        label: "Historico operacional",
+        description: "Auditoria recente, filtros e leitura consolidada do que mudou na base operacional."
+      },
+      powerbi: {
+        label: "Visao Power BI",
+        description: "Camada analitica para supervisao, indicadores executivos e recortes por deputado, municipio e status."
+      },
+      support: {
+        label: "Ajuda e suporte",
+        description: "Fila de chamados, respostas operacionais e alinhamento entre usuarios de homologacao e equipe de suporte."
+      },
+      imports: {
+        label: "Governanca de imports",
+        description: "Lotes, linhas, logs e governanca do processo de importacao sem tirar a planilha principal do foco."
+      }
+    };
+    var activeMeta = tabMetaMap[activeTab] || tabMetaMap.history;
 
     clearNodeChildren(target);
 
@@ -31,16 +50,20 @@
 
     var intro = document.createElement("div");
     var title = document.createElement("h3");
-    title.textContent = "Central beta operacional";
+    title.textContent = activeMeta.label;
     var subtitle = document.createElement("p");
     subtitle.className = "muted small";
-    subtitle.textContent = "Historico recente, visao consolidada e suporte operacional para homologacao da empresa.";
+    subtitle.textContent = activeMeta.description;
     intro.appendChild(title);
     intro.appendChild(subtitle);
     head.appendChild(intro);
 
     var headActions = document.createElement("div");
     headActions.className = "beta-head-actions";
+    var routeBadge = document.createElement("span");
+    routeBadge.className = "beta-source-badge";
+    routeBadge.textContent = "Area ativa: " + activeMeta.label;
+    headActions.appendChild(routeBadge);
     var mode = document.createElement("span");
     mode.className = "beta-source-badge";
     mode.textContent = canViewGlobalAuditApi() ? "API ligada para historico" : "Historico em fallback local";
@@ -62,6 +85,8 @@
       var btn = document.createElement("button");
       btn.type = "button";
       btn.className = "beta-tab-btn" + (activeTab === tab.key ? " active" : "");
+      btn.setAttribute("aria-pressed", activeTab === tab.key ? "true" : "false");
+      btn.setAttribute("data-beta-workspace-tab", tab.key);
       btn.textContent = tab.label;
       btn.addEventListener("click", function () {
         setTab(tab.key);

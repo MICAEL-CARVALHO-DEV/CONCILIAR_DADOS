@@ -37,6 +37,7 @@
       source.cod_acao,
       source.municipio,
       source.deputado,
+      source.objetivo_epi,
       source.processo_sei,
       source.ref_key
     ];
@@ -105,6 +106,7 @@
       cod_orgao: asText(pickValue(row, importAliases.cod_orgao)),
       cod_acao: codAcao,
       descricao_acao: asText(pickValue(row, importAliases.descricao_acao)),
+      objetivo_epi: asText(pickValue(row, importAliases.objetivo_epi)),
       plan_a: asText(pickValue(row, importAliases.plan_a)),
       plan_b: asText(pickValue(row, importAliases.plan_b)),
       municipio: municipio,
@@ -153,6 +155,7 @@
       cod_orgao: item.cod_orgao || "",
       cod_acao: item.cod_acao || "",
       descricao_acao: item.descricao_acao || "",
+      objetivo_epi: item.objetivo_epi || "",
       plan_a: item.plan_a || "",
       plan_b: item.plan_b || "",
       municipio: item.municipio || "-",

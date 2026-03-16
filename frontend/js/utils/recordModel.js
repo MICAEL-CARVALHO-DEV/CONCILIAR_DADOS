@@ -39,6 +39,7 @@
       cod_orgao: ctx.asText(data.cod_orgao),
       cod_acao: ctx.asText(data.cod_acao),
       descricao_acao: ctx.asText(data.descricao_acao),
+      objetivo_epi: ctx.asText(data.objetivo_epi || data.objetivo || data.objetivoEpi),
       plan_a: ctx.asText(data.plan_a || data.plano_a),
       plan_b: ctx.asText(data.plan_b || data.plano_b),
       municipio: ctx.asText(data.municipio) || "-",

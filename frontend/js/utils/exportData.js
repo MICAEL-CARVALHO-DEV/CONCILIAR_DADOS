@@ -72,6 +72,7 @@
       "cod_orgao",
       "cod_acao",
       "descricao_acao",
+      "objetivo_epi",
       "plan_a",
       "plan_b",
       "municipio",

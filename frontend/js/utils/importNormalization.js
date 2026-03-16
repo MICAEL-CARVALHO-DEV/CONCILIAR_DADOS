@@ -91,6 +91,7 @@
     upsertRawField(record.all_fields, "cod_orgao", record.cod_orgao, aliasesByCanonical, preferredHeaders, normalizeHeaderFn);
     upsertRawField(record.all_fields, "cod_acao", record.cod_acao, aliasesByCanonical, preferredHeaders, normalizeHeaderFn);
     upsertRawField(record.all_fields, "descricao_acao", record.descricao_acao, aliasesByCanonical, preferredHeaders, normalizeHeaderFn);
+    upsertRawField(record.all_fields, "objetivo_epi", record.objetivo_epi, aliasesByCanonical, preferredHeaders, normalizeHeaderFn);
     upsertRawField(record.all_fields, "plan_a", record.plan_a, aliasesByCanonical, preferredHeaders, normalizeHeaderFn);
     upsertRawField(record.all_fields, "plan_b", record.plan_b, aliasesByCanonical, preferredHeaders, normalizeHeaderFn);
     upsertRawField(record.all_fields, "municipio", record.municipio, aliasesByCanonical, preferredHeaders, normalizeHeaderFn);

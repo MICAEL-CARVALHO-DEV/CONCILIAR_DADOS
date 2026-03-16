@@ -115,7 +115,7 @@
     note.className = "muted small";
     note.textContent = isSupportManagerUser()
       ? "Inbox central de suporte. Voce pode acompanhar todos os chamados, responder e fechar quando a orientacao estiver resolvida."
-      : "Abra um chamado com contexto da operacao. O historico do atendimento fica vinculado ao seu usuario.";
+      : "Abra um chamado com contexto da operacao. O acompanhamento completo fica centralizado com o PROGRAMADOR nesta etapa da beta.";
     intro.appendChild(title);
     intro.appendChild(note);
     target.appendChild(intro);
@@ -128,22 +128,24 @@
       return;
     }
 
-    var toolbar = document.createElement("div");
-    toolbar.className = "beta-head-actions";
-    var badge = document.createElement("span");
-    badge.className = "beta-source-badge";
-    badge.textContent = "Chamados: " + String(threads.length) + " | Escopo: " + (getSupportScopeValue() === "all" ? "todos" : "meus");
-    toolbar.appendChild(badge);
-    var refreshBtn = document.createElement("button");
-    refreshBtn.className = "btn";
-    refreshBtn.type = "button";
-    refreshBtn.textContent = betaSupportLoading ? "Atualizando..." : "Atualizar suporte";
-    refreshBtn.disabled = betaSupportLoading;
-    refreshBtn.addEventListener("click", function () {
-      refreshSupportFromApi(true).catch(noop);
-    });
-    toolbar.appendChild(refreshBtn);
-    target.appendChild(toolbar);
+    if (isSupportManagerUser()) {
+      var toolbar = document.createElement("div");
+      toolbar.className = "beta-head-actions";
+      var badge = document.createElement("span");
+      badge.className = "beta-source-badge";
+      badge.textContent = "Chamados: " + String(threads.length) + " | Escopo: " + (getSupportScopeValue() === "all" ? "todos" : "meus");
+      toolbar.appendChild(badge);
+      var refreshBtn = document.createElement("button");
+      refreshBtn.className = "btn";
+      refreshBtn.type = "button";
+      refreshBtn.textContent = betaSupportLoading ? "Atualizando..." : "Atualizar suporte";
+      refreshBtn.disabled = betaSupportLoading;
+      refreshBtn.addEventListener("click", function () {
+        refreshSupportFromApi(true).catch(noop);
+      });
+      toolbar.appendChild(refreshBtn);
+      target.appendChild(toolbar);
+    }
 
     var composer = document.createElement("div");
     composer.className = "beta-panel-card";
@@ -241,6 +243,14 @@
         composerFeedback.textContent = extractApiError(err, "Falha ao abrir chamado.");
       }
     });
+
+    if (!isSupportManagerUser()) {
+      var restrictedNote = document.createElement("p");
+      restrictedNote.className = "muted small";
+      restrictedNote.textContent = "Nesta fase, usuarios operacionais usam apenas a solicitacao. Historico completo, respostas e fechamento ficam concentrados no PROGRAMADOR.";
+      target.appendChild(restrictedNote);
+      return;
+    }
 
     var filterWrap = document.createElement("div");
     filterWrap.className = "filters beta-support-filter-grid";

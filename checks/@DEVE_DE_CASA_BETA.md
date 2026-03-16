@@ -14,36 +14,53 @@ Success: Qualquer duvida de "o que falta" e respondida aqui, sem precisar cruzar
 - [DONE] `C12-A` `Status_2` nao entra no sistema; coluna extra/duplicada sera apenas tolerada no import.
 - [DONE] Import oficial `backend-first` (Python le `.xlsx`; front envia/renderiza).
 - [DONE] Fluxo operacional unificado sem dependencia exclusiva de PROGRAMADOR.
-- [DONE] `LOA x TESTE x FEDERAL` alinhado para fase beta (FEDERAL futura).
-- [DONE] `workspace_id` completo no backend adiado para pos-beta.
+- [DONE] Beta atual fica focada na base oficial; `TESTE` e `FEDERAL` saem do escopo operacional.
+- [DONE] `workspace_id` completo no backend fica fora da beta atual; so reabre se a estrategia multi-base voltar.
+- [DONE] `C19-A` / `P-R02` cadeia oficial de import fica em base consolidada unica, sem camadas extras (`raiz -> import2 -> import3` ignorado nesta fase).
+- [DONE] Historico de import por lote permanece ativo; historico por emenda permanece ativo e deve continuar acessivel.
+- [DONE] Regra operacional de import: usuarios podem ver, corrigir e excluir o import que eles mesmos fizeram.
+- [DONE] `C25-B` / `P-R05` `objetivo_epi` entra na beta como campo operacional.
+- [DONE] `C25-B` `objetivo_epi` passa a ser ponto de partida do andamento operacional.
+- [DONE] Execucao tecnica de `C25-B`: `objetivo_epi` ja persiste em backend, modal, preview de importacao e export atual.
+- [DONE] Fluxo da aba `Ajuda e suporte`: usuarios comuns ficam com fluxo de solicitar chamado; historico/chamados completos ficam visiveis para `PROGRAMADOR`.
+- [DONE] `P-R06` servidor interno so entra quando banco/historico estiverem confiaveis e operando bem.
+- [DONE] `P-R06` leitura externa do Power BI entra depois da beta final, consumindo `objetivo_epi` e `Planilha1`.
+- [DONE] Estrategia Power BI futura: 2 visoes coexistem (`Power BI` interno de leitura no sistema + leitura externa no `Power BI Desktop`).
 
 ## PENDENCIAS BLOQUEADORAS DA BETA
 ### A) Veredito funcional (depende da sua decisao)
-- [TODO] `C19-A` / `P-R02` cadeia oficial de import (`raiz -> import2 -> import3`).
-  Falta decidir: base consolidada x camadas, selecao de contexto e trilha por lote/emenda.
-- [TODO] `C49-A` / `P-R03` regra final da contagem de deputado.
-  Falta decidir: origem da contagem (base atual x historico), escopo do ajuste (import/planilha/global) e permissao de ajuste.
-- [TODO] `C25-B` / `P-R05` fechar oficialmente `objetivo_epi`.
-  Falta decidir: entra ou nao na beta; se entrar, origem e tipo (`estrutural` ou `operacional`).
-- [TODO] `C27` regra oficial do export da operacao.
-  Falta decidir: export oficial em `template mode` por padrao (`SIM/NAO`).
-- [TODO] `P-R06` trilha de servidor interno + Power BI externo.
-  Falta decidir: fase de migracao e momento da leitura externa.
+- [DOING] `C49-A` / `P-R03` regra final da contagem de deputado.
+  Parcialmente decidido:
+  - ajuste manual fica habilitado
+  - escopo do ajuste: global
+  - quem pode ajustar: todos
+  Ainda falta decidir com a funcionaria: origem oficial da contagem (`base atual`, `historico` ou outra origem).
+- [DOING] `C25-B` nome final do bloco/rotulo.
+  Regra funcional ja fechada como `operacional`, mas ainda existe ajuste de nomenclatura pedido pelo usuario (`Objetivo EPI` e `Planilha1`, com possibilidade de renomear no front).
+- [DOING] `C27` regra oficial do export da operacao.
+  Direcao atual:
+  - manter a logica atual como base
+  - nao forcar `template mode` por enquanto
+  - melhorar layout visual do arquivo final
+  - acabamento visual do export atual ja esta codificado sem trocar a logica base
+  Ainda falta cravar a regra final: manter export atual de vez ou migrar para modo oficial mais rigido depois da beta.
 
 ### B) Validacao final (manual/visual)
 - [TODO] `C48` validar filtros fortes do historico operacional.
 - [TODO] `C49` validar export do relatorio executivo (arquivo e abas).
-- [TODO] `C50-A` validar fluxo completo da aba `Ajuda e suporte`.
+- [TODO] `C50-A` validar fluxo final da aba `Ajuda e suporte` apos aplicar a regra: historico/chamados so para `PROGRAMADOR`; usuarios comuns apenas solicitam.
 - [TODO] validar no navegador o warning de acessibilidade do modal (`aria-hidden`) sem regressao.
+  Regra pratica: se nao reaparecer warning real no console, manter como esta.
 - [TODO] validar visual final do dashboard expandido da visao Power BI (`C45-A`) no fluxo atual.
+  Regra funcional: painel interno fica em modo leitura; integracao externa com `Power BI Desktop` vem depois.
 
 ## PENDENCIAS QUE NAO BLOQUEIAM A BETA (POS-BETA)
-- [TODO] `workspace_id` real no backend para separar `LOA/TESTE/FEDERAL` no banco/API.
+- [TODO] reabrir `workspace_id` real no backend apenas se a estrategia multi-base voltar no futuro.
 - [TODO] refinamento do export para fidelidade visual maior ao original.
 - [TODO] redesign do layout principal e dashboard Power BI.
 - [TODO] mapa interativo com hover/preview de emenda no dashboard.
-- [TODO] migracao para servidor interno (se infraestrutura aprovar).
-- [TODO] leitura externa Power BI fora do sistema.
+- [TODO] migracao para servidor interno (mantendo nuvem ate a base ficar confiavel).
+- [TODO] leitura externa Power BI fora do sistema via `Power BI Desktop`.
 - [TODO] melhorias finais de acessibilidade e UX.
 
 ## PENDENCIAS DE HIGIENE DO MAPA (DOCUMENTACAO)
@@ -52,30 +69,29 @@ Success: Qualquer duvida de "o que falta" e respondida aqui, sem precisar cruzar
   Objetivo: evitar leitura ambigua de status.
 
 ## Ordem recomendada para resolver agora
-1. `C19-A`
-2. `C49-A`
-3. `C25-B`
-4. `C27`
-5. `C48`
-6. `C49`
-7. `C50-A`
-8. warning `aria-hidden`
+1. `C49-A` (origem oficial da contagem)
+2. `C27` (fechar regra final do export)
+3. `C48`
+4. `C49`
+5. `C50-A`
+6. warning `aria-hidden`
+7. `C45-A`
 
 ## Formato de resposta rapida (para voce me enviar)
-1. `C19-A`: <decisao>
-2. `C49-A`: <decisao>
-3. `C25-B`: <decisao>
-4. `C27`: <decisao>
-5. `P-R06`: <decisao>
+1. `C49-A`: <origem oficial da contagem>
+2. `C27`: <export atual definitivo ou nova regra>
+3. `C48`: <passou/falhou>
+4. `C50-A`: <passou/falhou>
+5. `C45-A`: <passou/falhou>
 
 ## Criterio de fechamento da beta
 Beta fecha quando:
-1. bloco A (vereditos) estiver decidido
+1. bloco A (vereditos restantes) estiver decidido
 2. bloco B (validacoes finais) estiver aprovado
 3. sem erro critico em smoke/regressao local
 
 ## Resume from
-- Proxima decisao recomendada: `C19-A`.
-- Se quiser validar antes de decidir: comece por `C48` e `C50-A`.
+- Proxima decisao recomendada: `C49-A`.
+- Se quiser validar antes de decidir: comece por `C48`, `C50-A` e `C45-A`.
 
 

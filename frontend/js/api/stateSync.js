@@ -1,11 +1,155 @@
 (function (global) {
   var root = global.SECFrontend = global.SECFrontend || {};
+  var SEMI_AUTO_REFRESH_MIN_MS = 15000;
 
   function noop() {}
+
+  function isEditableElement(element) {
+    if (!element || typeof element !== "object") return false;
+    if (element.isContentEditable) return true;
+    var tagName = String(element.tagName || "").toUpperCase();
+    if (tagName === "TEXTAREA") return !element.disabled && !element.readOnly;
+    if (tagName !== "INPUT" && tagName !== "SELECT") return false;
+    var inputType = String(element.type || "").toLowerCase();
+    if (inputType === "button" || inputType === "submit" || inputType === "reset" || inputType === "checkbox" || inputType === "radio") {
+      return false;
+    }
+    return !element.disabled && !element.readOnly;
+  }
+
+  function shouldDeferInteractiveRefresh() {
+    if (!global.document) return false;
+    var active = global.document.activeElement;
+    return isEditableElement(active);
+  }
+
+  function isDocumentVisible() {
+    if (!global.document) return true;
+    if (typeof global.document.hidden === "boolean") {
+      return !global.document.hidden;
+    }
+    return true;
+  }
+
+  function isAutoPollEnabled() {
+    var cfg = global.SEC_APP_CONFIG && typeof global.SEC_APP_CONFIG === "object"
+      ? global.SEC_APP_CONFIG
+      : {};
+    if (Object.prototype.hasOwnProperty.call(cfg, "API_STATE_POLL_ENABLED")) {
+      return String(cfg.API_STATE_POLL_ENABLED).trim().toLowerCase() === "true";
+    }
+    return false;
+  }
 
   function safeWarn() {
     if (!global.console || typeof global.console.warn !== "function") return;
     global.console.warn.apply(global.console, arguments);
+  }
+
+  function getNow() {
+    return Date.now();
+  }
+
+  function getLastSemiAutoRefreshAt() {
+    return Number(root.__lastSemiAutoRefreshAt || 0);
+  }
+
+  function markSemiAutoRefreshAt() {
+    root.__lastSemiAutoRefreshAt = getNow();
+  }
+
+  function shouldRunSemiAutoRefresh() {
+    var elapsed = getNow() - getLastSemiAutoRefreshAt();
+    return elapsed >= SEMI_AUTO_REFRESH_MIN_MS;
+  }
+
+  function bindSemiAutoRefresh(options) {
+    var opts = options || {};
+    var isApiEnabled = typeof opts.isApiEnabled === "function" ? opts.isApiEnabled : function () { return false; };
+    var isApiOnline = typeof opts.isApiOnline === "function" ? opts.isApiOnline : function () { return false; };
+    if (!global.document || root.__semiAutoRefreshBound) return;
+
+    function tryRefreshOnResume() {
+      if (!isApiEnabled() || !isApiOnline()) return;
+      if (!isDocumentVisible() || shouldDeferInteractiveRefresh()) return;
+      if (!shouldRunSemiAutoRefresh()) return;
+      Promise.resolve(refreshRemoteEmendasFromApi(true, opts)).catch(noop);
+    }
+
+    global.document.addEventListener("visibilitychange", function () {
+      if (global.document.visibilityState !== "visible") return;
+      tryRefreshOnResume();
+    });
+
+    global.addEventListener("focus", function () {
+      tryRefreshOnResume();
+    });
+
+    global.addEventListener("SEC_REFRESH_NOW", function () {
+      Promise.resolve(refreshRemoteEmendasFromApi(true, opts)).catch(noop);
+    });
+
+    root.__semiAutoRefreshBound = true;
+  }
+
+  function ensureManualRefreshButton(options) {
+    var opts = options || {};
+    var isApiEnabled = typeof opts.isApiEnabled === "function" ? opts.isApiEnabled : function () { return false; };
+    var isApiOnline = typeof opts.isApiOnline === "function" ? opts.isApiOnline : function () { return false; };
+    if (!global.document || !global.document.body) return;
+
+    var button = global.document.getElementById("secManualRefreshBtn");
+    if (!button) {
+      button = global.document.createElement("button");
+      button.type = "button";
+      button.id = "secManualRefreshBtn";
+      button.textContent = "Atualizar agora";
+      button.setAttribute("aria-label", "Atualizar dados agora");
+      button.style.position = "fixed";
+      button.style.right = "20px";
+      button.style.bottom = "20px";
+      button.style.zIndex = "9999";
+      button.style.padding = "10px 14px";
+      button.style.borderRadius = "999px";
+      button.style.border = "1px solid rgba(13, 110, 253, 0.18)";
+      button.style.background = "#ffffff";
+      button.style.color = "#0f172a";
+      button.style.fontSize = "14px";
+      button.style.fontWeight = "600";
+      button.style.boxShadow = "0 8px 20px rgba(15, 23, 42, 0.12)";
+      button.style.cursor = "pointer";
+      button.style.transition = "opacity 160ms ease, transform 160ms ease";
+      button.addEventListener("mouseenter", function () {
+        button.style.transform = "translateY(-1px)";
+      });
+      button.addEventListener("mouseleave", function () {
+        button.style.transform = "translateY(0)";
+      });
+      button.addEventListener("click", function () {
+        if (!isApiEnabled() || !isApiOnline()) return;
+        if (button.dataset.loading === "true") return;
+        button.dataset.loading = "true";
+        button.disabled = true;
+        button.textContent = "Atualizando...";
+        Promise.resolve(refreshRemoteEmendasFromApi(true, opts)).then(function (ok) {
+          button.textContent = ok ? "Atualizado agora" : "Falha ao atualizar";
+        }).catch(function () {
+          button.textContent = "Falha ao atualizar";
+        }).finally(function () {
+          global.setTimeout(function () {
+            button.dataset.loading = "false";
+            button.disabled = false;
+            button.textContent = "Atualizar agora";
+          }, 1600);
+        });
+      });
+      global.document.body.appendChild(button);
+    }
+
+    button.style.display = isApiEnabled() ? "inline-flex" : "none";
+    button.style.alignItems = "center";
+    button.style.justifyContent = "center";
+    button.style.opacity = isApiOnline() ? "1" : "0.6";
   }
 
   function clearPollingTimer(options) {
@@ -34,15 +178,19 @@
     if (!isApiEnabled()) return false;
     try {
       var remoteList = await apiRequest("GET", "/emendas", undefined, "API", { handleAuthFailure: false });
+      var deferInteractiveRefresh = shouldDeferInteractiveRefresh();
       mergeRemoteEmendas(Array.isArray(remoteList) ? remoteList : []);
       setApiOnline(true);
       setApiLastError("");
+      markSemiAutoRefreshAt();
       saveState(true);
       syncYearFilter();
-      if (forceRender !== false) {
+      if (forceRender !== false && !deferInteractiveRefresh) {
         render();
       }
-      refreshOpenModalAfterRemoteSync();
+      if (!deferInteractiveRefresh) {
+        refreshOpenModalAfterRemoteSync();
+      }
       return true;
     } catch (err) {
       var status = Number(err && err.status ? err.status : 0);
@@ -65,15 +213,19 @@
     var clearPolling = typeof opts.clearPolling === "function" ? opts.clearPolling : noop;
     var refreshRemoteEmendas = typeof opts.refreshRemoteEmendas === "function" ? opts.refreshRemoteEmendas : function () { return Promise.resolve(false); };
     var intervalMs = Number(opts.intervalMs || 0);
+    var effectiveIntervalMs = Math.max(intervalMs, 30000);
 
-    if (!isApiEnabled() || !isApiOnline() || isWebSocketEnabled) {
+    if (!isApiEnabled() || !isApiOnline() || isWebSocketEnabled || !isAutoPollEnabled()) {
       clearPolling();
       return;
     }
-    if (getTimer() || !(intervalMs > 0)) return;
+    if (getTimer() || !(effectiveIntervalMs > 0)) return;
     setTimer(setInterval(function () {
+      if (!isDocumentVisible() || shouldDeferInteractiveRefresh()) {
+        return;
+      }
       Promise.resolve(refreshRemoteEmendas(true)).catch(noop);
-    }, intervalMs));
+    }, effectiveIntervalMs));
   }
 
   function resetApiLinkedState(options) {
@@ -137,11 +289,16 @@
     saveState();
     syncYearFilter();
     applyAccessProfile();
-    render();
+    if (!shouldDeferInteractiveRefresh()) {
+      render();
+    }
+    markSemiAutoRefreshAt();
     if (opts.isApiOnline && opts.isApiOnline()) {
       refreshBetaAudit(false).catch(noop);
       refreshBetaSupport(false).catch(noop);
     }
+    ensureManualRefreshButton(opts);
+    bindSemiAutoRefresh(opts);
     syncApiPolling();
   }
 
