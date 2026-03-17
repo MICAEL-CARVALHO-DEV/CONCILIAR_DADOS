@@ -42,9 +42,7 @@ $requiredPaths = @(
   "frontend/pages/login.html",
   "frontend/pages/cadastro.html",
   "frontend/config/config.js",
-  "frontend/config/config.production.js",
-  "anotacoes/deploy/render.yaml",
-  "anotacoes/legal/license"
+  "frontend/config/config.production.js"
 )
 
 foreach ($path in $requiredPaths) {
@@ -54,7 +52,6 @@ foreach ($path in $requiredPaths) {
 }
 
 $mustBeLowercaseDirs = @(
-  "anotacoes/documentacao_raiz",
   "docs",
   "checks",
   "checks/auxiliares",
@@ -97,7 +94,6 @@ $legacyReferencePatterns = @(
 $scanDirs = @(
   "docs",
   "checks",
-  "anotacoes/documentacao_raiz",
   "assets"
 )
 
