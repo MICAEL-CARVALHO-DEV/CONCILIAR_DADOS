@@ -16,21 +16,43 @@
     var apiTag = ctx.apiOnline ? "API online" : "modo local";
     var storageTag = ctx.getStorageMode() === ctx.STORAGE_MODE_LOCAL ? "persistencia local" : "sessao";
     var viewTag = isOwner ? " (dono)" : (readOnlyMeta ? readOnlyMeta.viewTag : "");
+    var userName = String(ctx.currentUser || "").trim() || "Usuario";
+    var userRole = String(ctx.currentRole || "").trim() || "PERFIL";
+    var userHandle = "@" + userName.toLowerCase().replace(/\s+/g, ".");
+    var avatarLetters = typeof ctx.buildUserAvatarLetters === "function"
+      ? String(ctx.buildUserAvatarLetters(userName) || "SE")
+      : "SE";
 
     if (ctx.currentUserInfo) {
-      ctx.currentUserInfo.textContent = "Usuario: " + ctx.currentUser + " / " + ctx.currentRole + viewTag + " | " + apiTag + " | " + storageTag;
+      ctx.currentUserInfo.textContent = apiTag + " | " + storageTag;
+    }
+    if (ctx.sidebarUserName) {
+      ctx.sidebarUserName.textContent = userName;
+    }
+    if (ctx.sidebarUserRole) {
+      ctx.sidebarUserRole.textContent = userRole + viewTag;
+    }
+    if (ctx.sidebarUserMenuName) {
+      ctx.sidebarUserMenuName.textContent = userName;
+    }
+    if (ctx.sidebarUserMenuHandle) {
+      ctx.sidebarUserMenuHandle.textContent = userHandle;
+    }
+    if (ctx.sidebarUserAvatar) {
+      ctx.sidebarUserAvatar.textContent = avatarLetters;
+      ctx.sidebarUserAvatar.setAttribute("title", userName + " (" + userRole + ")");
     }
 
     if (ctx.btnExportAtuais) ctx.btnExportAtuais.style.display = canUseWorkspaceDataset ? "inline-block" : "none";
     if (ctx.btnExportHistorico) ctx.btnExportHistorico.style.display = canUseWorkspaceDataset ? "inline-block" : "none";
     if (ctx.btnExportCustom) ctx.btnExportCustom.style.display = canUseWorkspaceDataset ? "inline-block" : "none";
-    if (ctx.btnPendingApprovals) ctx.btnPendingApprovals.style.display = isOwner && isWorkspaceOperational ? "inline-block" : "none";
+    if (ctx.btnPendingApprovals) ctx.btnPendingApprovals.style.display = isOwner && isWorkspaceOperational ? "flex" : "none";
     if (ctx.btnCreateProfile) ctx.btnCreateProfile.style.display = canCreateProfiles ? "inline-block" : "none";
     if (ctx.importLabel) ctx.importLabel.style.display = canImportData ? "inline-block" : "none";
     if (ctx.btnReset) ctx.btnReset.style.display = isOwner && canUseDemoTools ? "inline-block" : "none";
     if (ctx.btnDemo4Users) ctx.btnDemo4Users.style.display = isOwner && canUseDemoTools ? "inline-block" : "none";
-    if (ctx.btnProfile) ctx.btnProfile.style.display = "inline-block";
-    if (ctx.btnLogout) ctx.btnLogout.style.display = "inline-block";
+    if (ctx.btnProfile) ctx.btnProfile.style.display = "flex";
+    if (ctx.btnLogout) ctx.btnLogout.style.display = "flex";
 
     if (isWorkspaceOperational) {
       ctx.renderRoleNotice();

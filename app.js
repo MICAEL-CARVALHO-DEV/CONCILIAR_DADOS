@@ -50,6 +50,10 @@ const API_ENABLED_KEY = "SEC_API_ENABLED";
 const API_SHARED_KEY_SESSION_KEY = "SEC_API_SHARED_KEY_SESSION";
 const SESSION_TOKEN_KEY = "SEC_SESSION_TOKEN";
 const SESSION_TOKEN_BACKUP_KEY = "SEC_SESSION_TOKEN_BKP";
+const THEME_MODE_STORAGE_KEY = "SEC_THEME_MODE";
+const SIDEBAR_COLLAPSE_STORAGE_KEY = "SEC_SIDEBAR_COLLAPSED";
+const SIDEBAR_COLLAPSE_BREAKPOINT = 1180;
+const ENTRY_PLANILHA_FOCUS_SESSION_KEY = "SEC_PLANILHA_ENTRY_FOCUS";
 const AUTH_LOGIN_PAGE = "frontend/pages/login.html";
 const AUTH_REGISTER_PAGE = "frontend/pages/cadastro.html";
 const STORAGE_MODE_KEY = "SEC_STORAGE_MODE";
@@ -141,6 +145,12 @@ const BETA_IMPORT_LINE_LIMIT = 500;
 const BETA_IMPORT_LOG_LIMIT = 100;
 const API_STATE_POLL_MS = 5000;
 const API_DEFAULT_EVENT_ORIGIN = "UI";
+const DEPUTADO_COUNT_POLICY = Object.freeze({
+  origem_oficial: "BASE_ATUAL",
+  escopo_ajuste: "GLOBAL",
+  perfil_ajuste: "PROGRAMADOR",
+  observacao: "Contagem oficial usa emendas atuais da base consolidada com ajuste manual global auditado."
+});
 const REALTIME_USER_PANEL_ENABLED = false;
 const LOA_PRE_BETA_LOCKED = String(
   ((RUNTIME_CONFIG && RUNTIME_CONFIG.LOA_PRE_BETA_LOCKED) != null ? RUNTIME_CONFIG.LOA_PRE_BETA_LOCKED : "true")
@@ -260,10 +270,41 @@ let modalSaveFeedbackTimer = null;
 let modalAutoCloseTimer = null;
 let modalAutosaveTimer = null;
 let modalDraftSavePromise = null;
+let sidebarCollapsed = false;
+let sidebarOverlayTimer = null;
+let planilhaEntryFocusTimer = null;
+let planilhaEntryFocusDone = false;
 let betaWorkspaceTab = "history";
 let betaWorkspaceTabTouched = false;
 let shellActiveSector = "operation";
 let shellActiveSection = "mainTableCard";
+let shellRouteListenerBound = false;
+let shellRouteHashSyncInProgress = false;
+const SHELL_ROUTE_DEFAULT = "operacao";
+const SHELL_ROUTE_BY_SECTOR = Object.freeze({
+  operation: SHELL_ROUTE_DEFAULT,
+  history: "historico",
+  imports: "governanca-imports",
+  support: "suporte",
+  powerbi: "powerbi"
+});
+const SHELL_ROUTE_BY_OPERATION_SECTION = Object.freeze({
+  mainTableCard: SHELL_ROUTE_DEFAULT,
+  workspaceContextBar: "operacao-contexto",
+  mainFiltersCard: "operacao-filtros",
+  planilhaIndicatorsDock: "operacao-indicadores"
+});
+const SHELL_ROUTE_TO_STATE = Object.freeze({
+  operacao: { sector: "operation", section: "mainTableCard" },
+  "operacao-contexto": { sector: "operation", section: "workspaceContextBar" },
+  "operacao-filtros": { sector: "operation", section: "mainFiltersCard" },
+  "operacao-indicadores": { sector: "operation", section: "planilhaIndicatorsDock" },
+  historico: { sector: "history", tab: "history" },
+  governanca: { sector: "imports", tab: "imports" },
+  "governanca-imports": { sector: "imports", tab: "imports" },
+  suporte: { sector: "support", tab: "support" },
+  powerbi: { sector: "powerbi", tab: "powerbi" }
+});
 const WORKSPACE_STORAGE_KEY = "SEC_ACTIVE_WORKSPACE";
 const WORKSPACE_KEYS = {
   LOA: "LOA_ATUAL",
@@ -362,6 +403,7 @@ let betaSupportThreads = [];
 let betaSupportLoading = false;
 let betaSupportError = "";
 let betaSupportLastSyncAt = "";
+let betaSupportLastRequest = null;
 let betaSupportSelectedThreadId = 0;
 let betaSupportMessages = [];
 let betaSupportMessagesLoading = false;
@@ -386,6 +428,7 @@ const BETA_AUDIT_FILTER_DEFAULTS = Object.freeze({
   setor: "",
   tipo_evento: "",
   origem_evento: "",
+  objetivo_epi: "",
   q: ""
 });
 let betaAuditFilters = Object.assign({}, BETA_AUDIT_FILTER_DEFAULTS);
@@ -409,6 +452,7 @@ const BETA_POWERBI_FILTER_DEFAULTS = Object.freeze({
   deputado: "",
   municipio: "",
   status: "",
+  objetivo_epi: "",
   q: ""
 });
 let betaPowerBiFilters = Object.assign({}, BETA_POWERBI_FILTER_DEFAULTS);
@@ -455,6 +499,8 @@ const btnReset = document.getElementById("btnReset");
 const fileCsv = document.getElementById("fileCsv");
 const importReport = document.getElementById("importReport");
 const betaWorkspace = document.getElementById("betaWorkspace");
+const historyRecentCard = document.getElementById("historyRecentCard");
+const planilhaIndicatorsDock = document.getElementById("planilhaIndicatorsDock");
 const workspaceContextBar = document.getElementById("workspaceContextBar");
 const workspaceModeNotice = document.getElementById("workspaceModeNotice");
 const workspaceStage = document.getElementById("workspaceStage");
@@ -463,15 +509,31 @@ const mainSectorStage = document.getElementById("mainSectorStage");
 const operationNoticeGrid = document.getElementById("operationNoticeGrid");
 const importLabel = document.querySelector("label[for='fileCsv']");
 const currentUserInfo = document.getElementById("currentUserInfo");
+const appBrandMark = document.querySelector(".app-brand-mark");
+const sidebarUserAvatar = document.getElementById("sidebarUserAvatar");
+const sidebarUserName = document.getElementById("sidebarUserName");
+const sidebarUserRole = document.getElementById("sidebarUserRole");
+const sidebarUserMenuName = document.getElementById("sidebarUserMenuName");
+const sidebarUserMenuHandle = document.getElementById("sidebarUserMenuHandle");
+const sidebarUserMenuTrigger = document.getElementById("sidebarUserMenuTrigger");
+const sidebarUserMenuContainer = document.getElementById("sidebarUserMenuContainer");
+const sidebarUserMenuActions = document.getElementById("sidebarUserMenuActions");
+const appShell = document.querySelector(".app-shell");
+const appSidebar = document.querySelector(".app-sidebar");
+const sidebarOverlay = document.getElementById("sidebarOverlay");
 const roleNotice = document.getElementById("roleNotice");
 const supervisorQuickPanel = document.getElementById("supervisorQuickPanel");
 const shellSectorCard = document.getElementById("shellSectorCard");
 const mainFiltersCard = document.getElementById("mainFiltersCard");
 const mainTableCard = document.getElementById("mainTableCard");
+const btnTableScrollTop = document.getElementById("btnTableScrollTop");
+const btnTableScrollBottom = document.getElementById("btnTableScrollBottom");
 const operationShortcutNav = document.getElementById("operationShortcutNav");
 const shellSectorNavButtons = Array.prototype.slice.call(document.querySelectorAll("[data-shell-sector]"));
 const shellSectionNavButtons = Array.prototype.slice.call(document.querySelectorAll("[data-shell-section]"));
 const shellBetaTabNavButtons = Array.prototype.slice.call(document.querySelectorAll("[data-shell-beta-tab]"));
+const btnSidebarToggle = document.getElementById("btnSidebarToggle");
+const btnThemeToggle = document.getElementById("btnThemeToggle");
 const btnProfile = document.getElementById("btnProfile");
 const btnPendingApprovals = document.getElementById("btnPendingApprovals");
 const btnCreateProfile = document.getElementById("btnCreateProfile");
@@ -882,6 +944,7 @@ function initSelects() {
 }
 
 function syncYearFilter() {
+  if (!yearFilter) return;
   const filterCtx = getFilterContext();
   const syncYearFilterUtil = getFilterUtil("syncYearFilter");
   if (syncYearFilterUtil) {
@@ -978,9 +1041,12 @@ function render() {
 
   const renderMainRowUtil = getUiRenderUtil("renderMainRow");
   const useRenderer = !!renderMainRowUtil;
-  const renderMainRows = function (r) {
+  const renderMainRows = function (r, idx) {
     if (useRenderer) {
-      renderMainRowUtil(tbody, r, uiCtx);
+      renderMainRowUtil(tbody, r, Object.assign({}, uiCtx, {
+        rowIndex: idx,
+        rowNumber: idx + 1
+      }));
       return;
     }
 
@@ -991,7 +1057,8 @@ function render() {
     const tr = document.createElement("tr");
     const tdId = document.createElement("td");
     const code = document.createElement("code");
-    code.textContent = String(r.id || "");
+    code.textContent = String((idx || 0) + 1);
+    code.title = "ID interno: " + String(r.id || "-");
     tdId.appendChild(code);
     tr.appendChild(tdId);
 
@@ -1040,7 +1107,9 @@ function render() {
     tbody.appendChild(tr);
   };
 
-  rows.forEach(renderMainRows);
+  rows.forEach(function (r, idx) {
+    renderMainRows(r, idx);
+  });
   if (!useRenderer) {
     Array.prototype.forEach.call(tbody.querySelectorAll("button[data-action='view']"), function (btn) {
       btn.addEventListener("click", function () {
@@ -1050,6 +1119,8 @@ function render() {
   }
 
   renderImportDashboard();
+  renderHistoryRecentCard();
+  renderPlanilhaIndicators(rows);
   renderBetaWorkspace(rows);
   renderSupervisorQuickPanel(rows);
   syncShellNavigationState();
@@ -1058,7 +1129,7 @@ function render() {
 // Aplica filtros de status/ano/texto sobre o estado em memoria.
 function getFiltered() {
   const status = statusFilter.value;
-  const year = yearFilter.value;
+  const year = yearFilter ? yearFilter.value : "";
   const q = (searchInput.value || "").trim().toLowerCase();
   const datasetRecords = getWorkspaceDatasetRecords();
 
@@ -1133,6 +1204,16 @@ function getUiShellBindingsContext() {
     statusFilter: statusFilter,
     yearFilter: yearFilter,
     searchInput: searchInput,
+    btnSidebarToggle: btnSidebarToggle,
+    toggleSidebarCollapsed: toggleSidebarCollapsed,
+    syncSidebarCollapsedByViewport: syncSidebarCollapsedByViewport,
+    appSidebar: appSidebar,
+    mainSectorStage: mainSectorStage,
+    btnThemeToggle: btnThemeToggle,
+    toggleThemeMode: toggleThemeMode,
+    sidebarUserMenuTrigger: sidebarUserMenuTrigger,
+    sidebarUserMenuContainer: sidebarUserMenuContainer,
+    sidebarUserMenuActions: sidebarUserMenuActions,
     btnProfile: btnProfile,
     openProfileModal: openProfileModal,
     btnLogout: btnLogout,
@@ -3105,6 +3186,14 @@ function redirectToAuth(page, query) {
 }
 // Encerra sessao local e tenta logout remoto na API.
 async function logoutCurrentUser() {
+  planilhaEntryFocusDone = false;
+  try {
+    if (typeof sessionStorage !== "undefined") {
+      sessionStorage.removeItem(ENTRY_PLANILHA_FOCUS_SESSION_KEY);
+    }
+  } catch (_err) {
+    // no-op
+  }
   return requireModuleFunction(getAuthFlowUtil, "logoutCurrentUser", "authFlowUtils")(getAuthFlowContext());
 }
 
@@ -3433,11 +3522,240 @@ function setWorkspaceSectionVisibility(sectionEl, visible) {
   sectionEl.classList.toggle("hidden", !visible);
 }
 
+function getStoredThemeMode() {
+  try {
+    const stored = String(localStorage.getItem(THEME_MODE_STORAGE_KEY) || "").trim().toLowerCase();
+    if (stored === "dark" || stored === "light") return stored;
+  } catch (_err) {
+    // no-op
+  }
+  if (typeof window !== "undefined" && typeof window.matchMedia === "function") {
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+  return "light";
+}
+
+function getStoredSidebarCollapsed() {
+  try {
+    return String(localStorage.getItem(SIDEBAR_COLLAPSE_STORAGE_KEY) || "").trim() === "1";
+  } catch (_err) {
+    return sidebarCollapsed;
+  }
+}
+
+function canCollapseSidebarByViewport() {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return true;
+  return !window.matchMedia("(max-width: " + String(SIDEBAR_COLLAPSE_BREAKPOINT) + "px)").matches;
+}
+
+function setSidebarOverlayVisible(visible, immediate) {
+  if (!sidebarOverlay) return;
+  if (sidebarOverlayTimer) {
+    clearTimeout(sidebarOverlayTimer);
+    sidebarOverlayTimer = null;
+  }
+  if (visible) {
+    sidebarOverlay.hidden = false;
+    if (typeof window !== "undefined" && typeof window.requestAnimationFrame === "function") {
+      window.requestAnimationFrame(function () {
+        sidebarOverlay.classList.add("is-active");
+      });
+    } else {
+      sidebarOverlay.classList.add("is-active");
+    }
+    return;
+  }
+  sidebarOverlay.classList.remove("is-active");
+  if (immediate) {
+    sidebarOverlay.hidden = true;
+    return;
+  }
+  sidebarOverlayTimer = setTimeout(function () {
+    sidebarOverlay.hidden = true;
+    sidebarOverlayTimer = null;
+  }, 220);
+}
+
+function applySidebarCollapsed(nextCollapsed, persist, options) {
+  const opts = options && typeof options === "object" ? options : {};
+  const previousCollapsed = sidebarCollapsed;
+  const canCollapse = canCollapseSidebarByViewport();
+  const resolved = !!nextCollapsed && canCollapse;
+  sidebarCollapsed = resolved;
+
+  if (appShell) {
+    appShell.classList.toggle("sidebar-collapsed", resolved);
+    appShell.setAttribute("data-sidebar-state", resolved ? "collapsed" : "expanded");
+  }
+  if (appSidebar) {
+    appSidebar.setAttribute("aria-expanded", resolved ? "false" : "true");
+  }
+  if (btnSidebarToggle) {
+    btnSidebarToggle.setAttribute("aria-pressed", resolved ? "true" : "false");
+    btnSidebarToggle.textContent = resolved ? "Abrir" : "Minimizar";
+    btnSidebarToggle.setAttribute("title", resolved ? "Expandir menu lateral" : "Minimizar menu lateral");
+  }
+
+  if (persist === true) {
+    try {
+      localStorage.setItem(SIDEBAR_COLLAPSE_STORAGE_KEY, resolved ? "1" : "0");
+    } catch (_err) {
+      // no-op
+    }
+  }
+  if (opts.sync) {
+    setSidebarOverlayVisible(false, true);
+  } else if (previousCollapsed && !resolved) {
+    setSidebarOverlayVisible(true, false);
+  } else if (!previousCollapsed && resolved) {
+    setSidebarOverlayVisible(false, false);
+  }
+  return resolved;
+}
+
+function syncSidebarCollapsedByViewport() {
+  const canCollapse = canCollapseSidebarByViewport();
+  if (btnSidebarToggle) {
+    btnSidebarToggle.classList.toggle("hidden", !canCollapse);
+  }
+  if (!canCollapse) {
+    applySidebarCollapsed(false, false, { sync: true });
+    return false;
+  }
+  return applySidebarCollapsed(getStoredSidebarCollapsed(), false, { sync: true });
+}
+
+function toggleSidebarCollapsed() {
+  return applySidebarCollapsed(!sidebarCollapsed, true, { source: "toggle" });
+}
+
+function bindSidebarOverlayEvents() {
+  if (!sidebarOverlay || sidebarOverlay.getAttribute("data-overlay-bound") === "1") return;
+  sidebarOverlay.setAttribute("data-overlay-bound", "1");
+  sidebarOverlay.addEventListener("click", function () {
+    if (!sidebarCollapsed) {
+      applySidebarCollapsed(true, true, { source: "overlay" });
+      return;
+    }
+    setSidebarOverlayVisible(false, false);
+  });
+}
+
+function bindSidebarBrandEvents() {
+  if (!appBrandMark || appBrandMark.getAttribute("data-sidebar-brand-bound") === "1") return;
+  appBrandMark.setAttribute("data-sidebar-brand-bound", "1");
+  appBrandMark.setAttribute("tabindex", "0");
+  appBrandMark.setAttribute("role", "button");
+  appBrandMark.setAttribute("aria-label", "Expandir menu lateral");
+  appBrandMark.addEventListener("click", function () {
+    if (!sidebarCollapsed) return;
+    toggleSidebarCollapsed();
+  });
+  appBrandMark.addEventListener("keydown", function (e) {
+    if (!e) return;
+    if (e.key !== "Enter" && e.key !== " ") return;
+    if (!sidebarCollapsed) return;
+    e.preventDefault();
+    toggleSidebarCollapsed();
+  });
+}
+
+function shouldRunPlanilhaEntryFocus() {
+  if (planilhaEntryFocusDone) return false;
+  try {
+    if (typeof sessionStorage !== "undefined" && sessionStorage.getItem(ENTRY_PLANILHA_FOCUS_SESSION_KEY) === "1") {
+      return false;
+    }
+  } catch (_err) {
+    // no-op
+  }
+  return true;
+}
+
+function markPlanilhaEntryFocusDone() {
+  planilhaEntryFocusDone = true;
+  try {
+    if (typeof sessionStorage !== "undefined") {
+      sessionStorage.setItem(ENTRY_PLANILHA_FOCUS_SESSION_KEY, "1");
+    }
+  } catch (_err) {
+    // no-op
+  }
+}
+
+function runPlanilhaEntryFocus() {
+  if (!mainTableCard || !shouldRunPlanilhaEntryFocus()) return;
+  markPlanilhaEntryFocusDone();
+  setShellActiveSector("operation");
+  setShellActiveSection("mainTableCard");
+  render();
+
+  if (typeof scrollShellSectionIntoView === "function") {
+    scrollShellSectionIntoView("mainTableCard");
+  }
+
+  if (appShell) {
+    appShell.classList.add("entry-focus-mode");
+  }
+
+  const navBtn = document.querySelector("[data-shell-section='mainTableCard']");
+  mainTableCard.classList.remove("entry-focus-pulse");
+  if (navBtn) navBtn.classList.remove("entry-focus-pulse");
+  void mainTableCard.offsetWidth;
+  mainTableCard.classList.add("entry-focus-pulse");
+  if (navBtn) navBtn.classList.add("entry-focus-pulse");
+
+  if (planilhaEntryFocusTimer) {
+    clearTimeout(planilhaEntryFocusTimer);
+  }
+  planilhaEntryFocusTimer = setTimeout(function () {
+    mainTableCard.classList.remove("entry-focus-pulse");
+    if (navBtn) navBtn.classList.remove("entry-focus-pulse");
+    if (appShell) appShell.classList.remove("entry-focus-mode");
+    planilhaEntryFocusTimer = null;
+  }, 700);
+}
+
+function applyThemeMode(nextTheme, persist) {
+  const resolved = String(nextTheme || "").trim().toLowerCase() === "dark" ? "dark" : "light";
+  if (typeof document !== "undefined" && document.documentElement) {
+    document.documentElement.setAttribute("data-theme", resolved);
+  }
+  if (persist !== false) {
+    try {
+      localStorage.setItem(THEME_MODE_STORAGE_KEY, resolved);
+    } catch (_err) {
+      // no-op
+    }
+  }
+  syncThemeToggleUi();
+  return resolved;
+}
+
+function syncThemeToggleUi() {
+  if (!btnThemeToggle || typeof document === "undefined" || !document.documentElement) return;
+  const currentTheme = String(document.documentElement.getAttribute("data-theme") || "light").toLowerCase() === "dark"
+    ? "dark"
+    : "light";
+  const isDark = currentTheme === "dark";
+  btnThemeToggle.textContent = isDark ? "Tema claro" : "Tema dark";
+  btnThemeToggle.setAttribute("aria-pressed", isDark ? "true" : "false");
+}
+
+function toggleThemeMode() {
+  const currentTheme = typeof document !== "undefined" && document.documentElement
+    ? String(document.documentElement.getAttribute("data-theme") || "light").toLowerCase()
+    : "light";
+  return applyThemeMode(currentTheme === "dark" ? "light" : "dark", true);
+}
+
 function applyWorkspaceLayoutMode(canUseDataset) {
   const showBetaPanels = isOperationalWorkspace();
   const activeSector = getActiveShellSector();
   const showOperation = canUseDataset && activeSector === "operation";
   const showDedicatedSector = canUseDataset && showBetaPanels && activeSector !== "operation";
+  const showHistoryRecent = showDedicatedSector && activeSector === "history";
+  const showImportReport = showDedicatedSector && activeSector === "imports";
 
   setWorkspaceSectionVisibility(mainOperationStage, showOperation);
   setWorkspaceSectionVisibility(mainSectorStage, showDedicatedSector);
@@ -3445,7 +3763,9 @@ function applyWorkspaceLayoutMode(canUseDataset) {
   setWorkspaceSectionVisibility(operationNoticeGrid, showOperation);
   setWorkspaceSectionVisibility(shellSectorCard, showDedicatedSector);
   setWorkspaceSectionVisibility(mainFiltersCard, showOperation);
-  setWorkspaceSectionVisibility(importReport, showOperation);
+  setWorkspaceSectionVisibility(importReport, showImportReport);
+  setWorkspaceSectionVisibility(historyRecentCard, showHistoryRecent);
+  setWorkspaceSectionVisibility(planilhaIndicatorsDock, showOperation);
   setWorkspaceSectionVisibility(betaWorkspace, showDedicatedSector);
   setWorkspaceSectionVisibility(mainTableCard, showOperation);
 
@@ -4076,6 +4396,110 @@ function setShellActiveSection(sectionId) {
   shellActiveSection = nextId || "mainTableCard";
 }
 
+function scrollMainTableCard(position) {
+  if (!mainTableCard) return;
+  const maxTop = Math.max(0, (mainTableCard.scrollHeight || 0) - (mainTableCard.clientHeight || 0));
+  const top = position === "bottom" ? maxTop : 0;
+  if (typeof mainTableCard.scrollTo === "function") {
+    mainTableCard.scrollTo({ top: top, behavior: "smooth" });
+    return;
+  }
+  mainTableCard.scrollTop = top;
+}
+
+function bindTableQuickActions() {
+  if (btnTableScrollTop && btnTableScrollTop.getAttribute("data-scroll-bound") !== "1") {
+    btnTableScrollTop.setAttribute("data-scroll-bound", "1");
+    btnTableScrollTop.addEventListener("click", function () {
+      setShellActiveSector("operation");
+      setShellActiveSection("mainTableCard");
+      render();
+      scrollMainTableCard("top");
+    });
+  }
+
+  if (btnTableScrollBottom && btnTableScrollBottom.getAttribute("data-scroll-bound") !== "1") {
+    btnTableScrollBottom.setAttribute("data-scroll-bound", "1");
+    btnTableScrollBottom.addEventListener("click", function () {
+      setShellActiveSector("operation");
+      setShellActiveSection("mainTableCard");
+      render();
+      scrollMainTableCard("bottom");
+    });
+  }
+}
+
+function normalizeShellRouteHash(value) {
+  let raw = String(value || "").trim();
+  if (!raw) return "";
+  raw = raw.replace(/^#+/, "");
+  if (!raw) return "";
+  try {
+    raw = decodeURIComponent(raw);
+  } catch (_err) {
+    // no-op
+  }
+  return raw.trim().toLowerCase();
+}
+
+function getShellRouteFragmentForCurrentState() {
+  const activeSector = getActiveShellSector();
+  if (activeSector === "operation") {
+    return SHELL_ROUTE_BY_OPERATION_SECTION[shellActiveSection] || SHELL_ROUTE_DEFAULT;
+  }
+  return SHELL_ROUTE_BY_SECTOR[activeSector] || SHELL_ROUTE_DEFAULT;
+}
+
+function syncShellRouteHash() {
+  if (typeof window === "undefined") return;
+  const nextHash = getShellRouteFragmentForCurrentState();
+  if (!nextHash) return;
+  const currentHash = normalizeShellRouteHash(window.location.hash);
+  if (currentHash === nextHash) return;
+
+  const nextUrl = window.location.pathname + window.location.search + "#" + nextHash;
+  shellRouteHashSyncInProgress = true;
+  try {
+    if (window.history && typeof window.history.replaceState === "function") {
+      window.history.replaceState(null, "", nextUrl);
+    } else {
+      window.location.hash = nextHash;
+    }
+  } finally {
+    setTimeout(function () {
+      shellRouteHashSyncInProgress = false;
+    }, 0);
+  }
+}
+
+function applyShellRouteFromHash() {
+  if (typeof window === "undefined") return false;
+  const routeKey = normalizeShellRouteHash(window.location.hash);
+  if (!routeKey) return false;
+  const route = SHELL_ROUTE_TO_STATE[routeKey];
+  if (!route) return false;
+
+  if (route.sector === "operation") {
+    setShellActiveSector("operation");
+    setShellActiveSection(route.section || "mainTableCard");
+    return true;
+  }
+
+  if (route.sector === "imports" && !canImportData()) {
+    betaWorkspaceTab = "history";
+    betaWorkspaceTabTouched = true;
+    setShellActiveSector("history");
+    setShellActiveSection("betaWorkspace");
+    return true;
+  }
+
+  betaWorkspaceTab = route.tab || route.sector || "history";
+  betaWorkspaceTabTouched = true;
+  setShellActiveSector(route.sector || "history");
+  setShellActiveSection("betaWorkspace");
+  return true;
+}
+
 function syncShellNavigationState() {
   const activeSector = getActiveShellSector();
 
@@ -4107,6 +4531,8 @@ function syncShellNavigationState() {
     btn.classList.toggle("active", isActive);
     btn.setAttribute("aria-pressed", isActive ? "true" : "false");
   });
+
+  syncShellRouteHash();
 }
 
 function getActiveBetaWorkspaceTab() {
@@ -4177,6 +4603,7 @@ function flattenLocalAuditRows(records) {
         emenda_id: getBackendIdForRecord(rec),
         emenda_ref: text(rec && rec.id) || "-",
         emenda_identificacao: text(rec && rec.identificacao) || "-",
+        emenda_objetivo_epi: text(rec && rec.objetivo_epi) || "",
         usuario_nome: text(ev && ev.actor_user) || "sistema",
         setor: text(ev && ev.actor_role) || "-",
         tipo_evento: text(ev && ev.type) || "EVENTO",
@@ -4224,6 +4651,7 @@ function buildAuditSearchBlob(row) {
     text(row && row.valor_novo),
     text(row && row.motivo),
     text(row && row.emenda_identificacao),
+    text(row && row.emenda_objetivo_epi),
     text(row && row.emenda_municipio),
     text(row && row.emenda_deputado),
     text(meta && meta.code),
@@ -4281,6 +4709,10 @@ function applyBetaAuditFilters(rows) {
     if (betaAuditFilters.setor && text(row && row.setor) !== betaAuditFilters.setor) return false;
     if (betaAuditFilters.tipo_evento && text(row && row.tipo_evento) !== betaAuditFilters.tipo_evento) return false;
     if (betaAuditFilters.origem_evento && text(row && row.origem_evento) !== betaAuditFilters.origem_evento) return false;
+    if (betaAuditFilters.objetivo_epi) {
+      const objetivoBlob = normalizeLooseText(text(row && row.emenda_objetivo_epi));
+      if (!objetivoBlob.includes(normalizeLooseText(betaAuditFilters.objetivo_epi))) return false;
+    }
     if (betaAuditFilters.q) {
       const queryText = normalizeLooseText(betaAuditFilters.q);
       if (!buildAuditSearchBlob(row).includes(queryText)) return false;
@@ -4325,6 +4757,7 @@ function buildBetaAuditApiQuery() {
   if (betaAuditFilters.setor) params.set("setor", String(betaAuditFilters.setor));
   if (betaAuditFilters.tipo_evento) params.set("tipo_evento", String(betaAuditFilters.tipo_evento));
   if (betaAuditFilters.origem_evento) params.set("origem_evento", String(betaAuditFilters.origem_evento));
+  if (betaAuditFilters.objetivo_epi) params.set("objetivo_epi", String(betaAuditFilters.objetivo_epi));
   if (betaAuditFilters.q) params.set("q", String(betaAuditFilters.q));
   return params.toString();
 }
@@ -4778,6 +5211,7 @@ function getBetaSupportContext() {
     loading: betaSupportLoading,
     filters: betaSupportFilters,
     lastSyncAt: betaSupportLastSyncAt,
+    lastRequest: betaSupportLastRequest,
     error: betaSupportError,
     selectedThreadId: betaSupportSelectedThreadId,
     messages: betaSupportMessages,
@@ -4810,6 +5244,9 @@ function getBetaSupportContext() {
     },
     setSelectedThreadId: function (threadId) {
       betaSupportSelectedThreadId = Number(threadId || 0);
+    },
+    setLastRequest: function (nextRequest) {
+      betaSupportLastRequest = nextRequest && typeof nextRequest === "object" ? nextRequest : null;
     },
     setMessagesError: function (message) {
       betaSupportMessagesError = String(message || "");
@@ -5083,6 +5520,7 @@ function resetBetaSupportStateLocal() {
   betaSupportMessagesError = "";
   betaSupportLoading = false;
   betaSupportMessagesLoading = false;
+  betaSupportLastRequest = null;
 }
 
 function resetBetaImportStateLocal() {
@@ -5474,6 +5912,7 @@ function getPowerBiDataContext() {
   return {
     filters: betaPowerBiFilters,
     currentRole: CURRENT_ROLE,
+    deputadoCountPolicy: DEPUTADO_COUNT_POLICY,
     betaAuditRows: betaAuditRows,
     text: text,
     normalizeLooseText: normalizeLooseText,
@@ -5491,7 +5930,6 @@ function getBetaWorkspaceContext() {
     clearNodeChildren: clearNodeChildren,
     canViewGlobalAuditApi: canViewGlobalAuditApi,
     showImportGovernance: canImportData(),
-    setTab: setBetaWorkspaceTab,
     renderHistory: renderBetaHistoryPanel,
     renderPowerBi: renderBetaPowerBiPanel,
     renderSupport: renderBetaSupportPanel,
@@ -5611,6 +6049,14 @@ function getAccessProfileContext() {
     apiOnline: apiOnline,
     STORAGE_MODE_LOCAL: STORAGE_MODE_LOCAL,
     currentUserInfo: currentUserInfo,
+    sidebarUserAvatar: sidebarUserAvatar,
+    sidebarUserName: sidebarUserName,
+    sidebarUserRole: sidebarUserRole,
+    sidebarUserMenuName: sidebarUserMenuName,
+    sidebarUserMenuHandle: sidebarUserMenuHandle,
+    sidebarUserMenuTrigger: sidebarUserMenuTrigger,
+    sidebarUserMenuContainer: sidebarUserMenuContainer,
+    sidebarUserMenuActions: sidebarUserMenuActions,
     btnExportAtuais: btnExportAtuais,
     btnExportHistorico: btnExportHistorico,
     btnExportCustom: btnExportCustom,
@@ -5627,6 +6073,7 @@ function getAccessProfileContext() {
     canUseDemoTools: canUseDemoWorkspaceTools,
     getReadOnlyRoleMeta: getReadOnlyRoleMeta,
     canImportData: canImportData,
+    buildUserAvatarLetters: buildUserAvatarLetters,
     renderRoleNotice: renderRoleNotice,
     renderSupervisorQuickPanel: renderSupervisorQuickPanel,
     applyModalAccessProfile: applyModalAccessProfile,
@@ -5733,16 +6180,19 @@ function applyPowerBiDashboardFilters(rows) {
   return source.filter(function (rec) {
     const deputado = text(rec && rec.deputado) || "-";
     const municipio = text(rec && rec.municipio) || "-";
+    const objetivoEpi = text(rec && rec.objetivo_epi) || "-";
     const statusAtual = getRecordCurrentStatus(rec) || "-";
     if (betaPowerBiFilters.deputado && deputado !== betaPowerBiFilters.deputado) return false;
     if (betaPowerBiFilters.municipio && municipio !== betaPowerBiFilters.municipio) return false;
     if (betaPowerBiFilters.status && statusAtual !== betaPowerBiFilters.status) return false;
+    if (betaPowerBiFilters.objetivo_epi && !normalizeLooseText(objetivoEpi).includes(normalizeLooseText(betaPowerBiFilters.objetivo_epi))) return false;
     if (betaPowerBiFilters.q) {
       const blob = normalizeLooseText([
         text(rec && rec.id),
         text(rec && rec.identificacao),
         deputado,
         municipio,
+        objetivoEpi,
         text(rec && rec.cod_acao),
         text(rec && rec.descricao_acao),
         text(rec && rec.plan_a),
@@ -5825,10 +6275,12 @@ function buildPowerBiDashboardData(filteredRows) {
     attention: 0,
     deputados: new Set(),
     municipios: new Set(),
+    objetivos: new Set(),
     latestUpdate: ""
   };
   const byDeputado = {};
   const byMunicipio = {};
+  const byObjetivo = {};
   const byStatus = {};
   const byUser = {};
   const recordDeputadoMap = {};
@@ -5838,6 +6290,7 @@ function buildPowerBiDashboardData(filteredRows) {
     const global = getGlobalProgressState(users);
     const deputado = text(rec && rec.deputado) || "-";
     const municipio = text(rec && rec.municipio) || "-";
+    const objetivoEpi = text(rec && rec.objetivo_epi) || "-";
     const valor = toNumber(rec && rec.valor_atual);
     const statusAtual = getRecordCurrentStatus(rec) || "-";
     const updatedAt = text(rec && rec.updated_at);
@@ -5846,6 +6299,7 @@ function buildPowerBiDashboardData(filteredRows) {
     summary.valorTotal += valor;
     summary.deputados.add(deputado);
     summary.municipios.add(municipio);
+    summary.objetivos.add(objetivoEpi);
     if (updatedAt && (!summary.latestUpdate || updatedAt > summary.latestUpdate)) summary.latestUpdate = updatedAt;
     if (global && global.code === "done") summary.done += 1;
     if (global && global.code === "attention") summary.attention += 1;
@@ -5886,6 +6340,11 @@ function buildPowerBiDashboardData(filteredRows) {
     byMunicipio[municipio].valor += valor;
     if (global && global.code === "attention") byMunicipio[municipio].attention += 1;
 
+    if (!byObjetivo[objetivoEpi]) byObjetivo[objetivoEpi] = { label: objetivoEpi, total: 0, valor: 0, attention: 0 };
+    byObjetivo[objetivoEpi].total += 1;
+    byObjetivo[objetivoEpi].valor += valor;
+    if (global && global.code === "attention") byObjetivo[objetivoEpi].attention += 1;
+
     byStatus[statusAtual] = (byStatus[statusAtual] || 0) + 1;
   });
 
@@ -5919,6 +6378,7 @@ function buildPowerBiDashboardData(filteredRows) {
     summary: summary,
     byDeputado: byDeputado,
     byMunicipio: byMunicipio,
+    byObjetivo: byObjetivo,
     byStatus: byStatus,
     byUser: byUser
   };
@@ -5940,6 +6400,12 @@ function buildExecutiveMunicipiosAoa(model) {
   const moduleFn = getExportExecutiveUtil("buildExecutiveMunicipiosAoa");
   if (moduleFn) return moduleFn(model, getExecutiveExportContext());
   return [["Municipio", "Emendas", "Valor Atual", "Em atencao"]];
+}
+
+function buildExecutiveObjetivosAoa(model) {
+  const moduleFn = getExportExecutiveUtil("buildExecutiveObjetivosAoa");
+  if (moduleFn) return moduleFn(model, getExecutiveExportContext());
+  return [["Objetivo EPI", "Emendas", "Valor Atual", "Em atencao"]];
 }
 
 function buildExecutiveUsersAoa(model) {
@@ -5972,6 +6438,7 @@ async function exportExecutiveDashboardReport(filteredRows) {
   xlsxApi.utils.book_append_sheet(wb, xlsxApi.utils.aoa_to_sheet(buildExecutiveSummaryAoa(model)), "Resumo Executivo");
   xlsxApi.utils.book_append_sheet(wb, xlsxApi.utils.aoa_to_sheet(buildExecutiveDeputadosAoa(model)), "Deputados");
   xlsxApi.utils.book_append_sheet(wb, xlsxApi.utils.aoa_to_sheet(buildExecutiveMunicipiosAoa(model)), "Municipios");
+  xlsxApi.utils.book_append_sheet(wb, xlsxApi.utils.aoa_to_sheet(buildExecutiveObjetivosAoa(model)), "Objetivos EPI");
   xlsxApi.utils.book_append_sheet(wb, xlsxApi.utils.aoa_to_sheet(buildExecutiveUsersAoa(model)), "Usuarios");
   xlsxApi.utils.book_append_sheet(wb, xlsxApi.utils.aoa_to_sheet(baseAoa), "Base Filtrada");
   xlsxApi.writeFile(wb, filename);
@@ -5985,6 +6452,7 @@ async function exportExecutiveDashboardReport(filteredRows) {
       deputado: betaPowerBiFilters.deputado || "",
       municipio: betaPowerBiFilters.municipio || "",
       status: betaPowerBiFilters.status || "",
+      objetivo_epi: betaPowerBiFilters.objetivo_epi || "",
       q: betaPowerBiFilters.q || ""
     },
     geradoEm: isoNow()
@@ -6001,6 +6469,7 @@ async function exportExecutiveDashboardReport(filteredRows) {
       deputado: betaPowerBiFilters.deputado || "",
       municipio: betaPowerBiFilters.municipio || "",
       status: betaPowerBiFilters.status || "",
+      objetivo_epi: betaPowerBiFilters.objetivo_epi || "",
       q: betaPowerBiFilters.q || ""
     },
     modoHeaders: "executivo_dashboard",
@@ -6039,6 +6508,10 @@ function renderBetaWorkspace(filteredRows) {
 }
 
 function bindShellNavigationEvents() {
+  const scheduleScroll = typeof requestAnimationFrame === "function" ? requestAnimationFrame : function (fn) {
+    return setTimeout(fn, 0);
+  };
+
   shellSectionNavButtons.forEach(function (btn) {
     if (btn.getAttribute("data-shell-bound") === "1") return;
     btn.setAttribute("data-shell-bound", "1");
@@ -6048,9 +6521,6 @@ function bindShellNavigationEvents() {
       setShellActiveSector("operation");
       setShellActiveSection(targetId);
       render();
-      const scheduleScroll = typeof requestAnimationFrame === "function" ? requestAnimationFrame : function (fn) {
-        return setTimeout(fn, 0);
-      };
       scheduleScroll(function () {
         scrollShellSectionIntoView(targetId);
       });
@@ -6064,9 +6534,6 @@ function bindShellNavigationEvents() {
     btn.addEventListener("click", function () {
       setShellActiveSector(btn.getAttribute("data-shell-sector"));
       render();
-      const scheduleScroll = typeof requestAnimationFrame === "function" ? requestAnimationFrame : function (fn) {
-        return setTimeout(fn, 0);
-      };
       scheduleScroll(function () {
         scrollShellSectionIntoView("mainOperationStage");
       });
@@ -6080,15 +6547,28 @@ function bindShellNavigationEvents() {
       const nextTab = String(btn.getAttribute("data-shell-beta-tab") || "").trim();
       if (!nextTab) return;
       setBetaWorkspaceTab(nextTab);
-      const scheduleScroll = typeof requestAnimationFrame === "function" ? requestAnimationFrame : function (fn) {
-        return setTimeout(fn, 0);
-      };
       scheduleScroll(function () {
         scrollShellSectionIntoView("mainSectorStage");
       });
     });
   });
 
+  if (!shellRouteListenerBound && typeof window !== "undefined") {
+    shellRouteListenerBound = true;
+    window.addEventListener("hashchange", function () {
+      if (shellRouteHashSyncInProgress) return;
+      if (!applyShellRouteFromHash()) return;
+      render();
+      scheduleScroll(function () {
+        const targetId = getActiveShellSector() === "operation" ? shellActiveSection : "mainSectorStage";
+        scrollShellSectionIntoView(targetId);
+      });
+    });
+  }
+
+  if (applyShellRouteFromHash()) {
+    render();
+  }
   syncShellNavigationState();
 }
 
@@ -6112,6 +6592,17 @@ function renderSupervisorQuickPanel(prefilteredRows) {
   supervisorQuickPanel.appendChild(fallback);
 }
 
+function buildUserAvatarLetters(name) {
+  const raw = String(name || "").trim();
+  if (!raw) return "SE";
+  const parts = raw.split(/\s+/).filter(Boolean);
+  if (!parts.length) return "SE";
+  if (parts.length === 1) {
+    return parts[0].slice(0, 2).toUpperCase();
+  }
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
 // Aplica regras de permissao por perfil e atualiza botoes/indicadores.
 function applyAccessProfile() {
   const moduleFn = getAccessProfileUtil("applyAccessProfile");
@@ -6129,21 +6620,40 @@ function applyAccessProfile() {
   const apiTag = apiOnline ? "API online" : "modo local";
   const storageTag = getStorageMode() === STORAGE_MODE_LOCAL ? "persistencia local" : "sessao";
   const viewTag = isOwner ? " (dono)" : (readOnlyMeta ? readOnlyMeta.viewTag : "");
+  const userName = String(CURRENT_USER || "").trim() || "Usuario";
+  const userRole = String(CURRENT_ROLE || "").trim() || "PERFIL";
+  const userHandle = "@" + userName.toLowerCase().replace(/\s+/g, ".");
 
   if (currentUserInfo) {
-    currentUserInfo.textContent = "Usuario: " + CURRENT_USER + " / " + CURRENT_ROLE + viewTag + " | " + apiTag + " | " + storageTag;
+    currentUserInfo.textContent = apiTag + " | " + storageTag;
+  }
+  if (sidebarUserName) {
+    sidebarUserName.textContent = userName;
+  }
+  if (sidebarUserRole) {
+    sidebarUserRole.textContent = userRole + viewTag;
+  }
+  if (sidebarUserMenuName) {
+    sidebarUserMenuName.textContent = userName;
+  }
+  if (sidebarUserMenuHandle) {
+    sidebarUserMenuHandle.textContent = userHandle;
+  }
+  if (sidebarUserAvatar) {
+    sidebarUserAvatar.textContent = buildUserAvatarLetters(userName);
+    sidebarUserAvatar.setAttribute("title", userName + " (" + userRole + ")");
   }
 
   if (btnExportAtuais) btnExportAtuais.style.display = canUseWorkspaceDataset ? "inline-block" : "none";
   if (btnExportHistorico) btnExportHistorico.style.display = canUseWorkspaceDataset ? "inline-block" : "none";
   if (btnExportCustom) btnExportCustom.style.display = canUseWorkspaceDataset ? "inline-block" : "none";
-  if (btnPendingApprovals) btnPendingApprovals.style.display = isOwner && isWorkspaceOperational ? "inline-block" : "none";
+  if (btnPendingApprovals) btnPendingApprovals.style.display = isOwner && isWorkspaceOperational ? "flex" : "none";
   if (btnCreateProfile) btnCreateProfile.style.display = canCreateProfiles ? "inline-block" : "none";
   if (importLabel) importLabel.style.display = canUseWorkspaceDataset && canImportData() ? "inline-block" : "none";
   if (btnReset) btnReset.style.display = isOwner && canUseDemoTools ? "inline-block" : "none";
   if (btnDemo4Users) btnDemo4Users.style.display = isOwner && canUseDemoTools ? "inline-block" : "none";
-  if (btnProfile) btnProfile.style.display = "inline-block";
-  if (btnLogout) btnLogout.style.display = "inline-block";
+  if (btnProfile) btnProfile.style.display = "flex";
+  if (btnLogout) btnLogout.style.display = "flex";
   if (isWorkspaceOperational) {
     renderRoleNotice();
     renderSupervisorQuickPanel();
@@ -7662,25 +8172,92 @@ function renderImportDashboard() {
   }
 
   if (!ctx.importReportEl) return;
-  ctx.importReportEl.classList.remove("hidden");
 
   const left = latestImportReport ? buildImportSummaryHtml(latestImportReport) : buildImportSummaryPlaceholderHtml();
-  const recent = ctx.getRecentChangesForPanel(HOME_CHANGES_LIMIT);
   const exportSummary = ctx.buildExportSummaryBadgeHtml(ctx.latestExportReport);
 
   clearNodeChildren(ctx.importReportEl);
   appendRenderedMarkup(ctx.importReportEl, exportSummary);
   appendRenderedMarkup(
     ctx.importReportEl,
-    "<div class=\"import-dashboard-grid\">"
+    "<div class=\"import-report-stack\">"
     + "  <section class=\"import-dashboard-left\">" + left + "</section>"
-    + "  <section class=\"import-dashboard-right\">" + buildRecentChangesPanelHtml(recent) + "</section>"
     + "</div>"
   );
 
   if (latestImportReport) {
     ctx.wireImportReportTabs(ctx.importReportEl, "planilha1");
   }
+}
+
+function buildPlanilhaIndicatorsHtml(records) {
+  const source = Array.isArray(records) ? records : [];
+  const numberFmt = new Intl.NumberFormat("pt-BR");
+  const summary = source.reduce(function (acc, rec) {
+    const users = getActiveUsersWithLastMark(rec);
+    const globalState = getGlobalProgressState(users) || {};
+    const status = normalizeLooseText(getRecordCurrentStatus(rec));
+    const hasNoExecution = !users.length
+      || globalState.code === "no_marks"
+      || status.indexOf("pend") >= 0
+      || status.indexOf("aguard") >= 0
+      || status.indexOf("receb") >= 0;
+    const isDone = globalState.code === "done" || status.indexOf("concl") >= 0;
+
+    acc.total += 1;
+    if (isDone) {
+      acc.done += 1;
+      return acc;
+    }
+    if (hasNoExecution) {
+      acc.pending += 1;
+      return acc;
+    }
+    acc.inExecution += 1;
+    return acc;
+  }, {
+    total: 0,
+    done: 0,
+    inExecution: 0,
+    pending: 0
+  });
+
+  return ""
+    + "<div class=\"planilha-indicadores\">"
+    + "  <div class=\"mini-status-row\">"
+    + "    <div class=\"mini-status-card\">"
+    + "      <div class=\"mini-status-label\">Total de Emendas</div>"
+    + "      <div class=\"mini-status-value\">" + numberFmt.format(summary.total) + "</div>"
+    + "      <div class=\"mini-status-text\">Registros visiveis na planilha atual</div>"
+    + "    </div>"
+    + "    <div class=\"mini-status-card\">"
+    + "      <div class=\"mini-status-label\">Concluidas</div>"
+    + "      <div class=\"mini-status-value is-success\">" + numberFmt.format(summary.done) + "</div>"
+    + "      <div class=\"mini-status-text\">Emendas finalizadas no filtro atual</div>"
+    + "    </div>"
+    + "    <div class=\"mini-status-card\">"
+    + "      <div class=\"mini-status-label\">Em Execucao</div>"
+    + "      <div class=\"mini-status-value is-info\">" + numberFmt.format(summary.inExecution) + "</div>"
+    + "      <div class=\"mini-status-text\">Planilhas em trabalho pelos usuarios</div>"
+    + "    </div>"
+    + "    <div class=\"mini-status-card card-pendente\">"
+    + "      <div class=\"mini-status-label\">Pendentes sem Execucao</div>"
+    + "      <div class=\"mini-status-value\">" + numberFmt.format(summary.pending) + "</div>"
+    + "      <div class=\"mini-status-text\">Emendas sem marcacao oficial ativa</div>"
+    + "    </div>"
+    + "  </div>"
+    + "</div>";
+}
+
+function renderPlanilhaIndicators(prefilteredRows) {
+  if (!planilhaIndicatorsDock) return;
+  planilhaIndicatorsDock.innerHTML = buildPlanilhaIndicatorsHtml(prefilteredRows);
+}
+
+function renderHistoryRecentCard() {
+  if (!historyRecentCard) return;
+  const recent = getRecentChangesForPanel(HOME_CHANGES_LIMIT);
+  historyRecentCard.innerHTML = buildRecentChangesPanelHtml(recent);
 }
 
 function buildExportSummaryBadgeHtml(report) {
@@ -7747,7 +8324,7 @@ function buildImportSummaryPlaceholderHtml() {
     + '  <div class="k">Responsavel da ultima alteracao</div><div class="v">' + lastBy + '</div>'
     + '</div>'
     + '<div style="margin-top:12px">'
-    + '  <h4 style="margin-bottom:8px">Resumo por deputado (Planilha1)</h4>'
+    + '  <h4 style="margin-bottom:8px">Reflexo operacional em Planilha1</h4>'
     + planilha1Html
     + '</div>';
 }
@@ -7780,7 +8357,7 @@ function buildImportSummaryHtml(report) {
     + "<p class=\"muted small\">Arquivo: " + ctx.escapeHtml(fileName) + " | Abas lidas: " + ctx.escapeHtml(sheets) + "</p>"
     + "<div class=\"import-tabs\" role=\"tablist\" aria-label=\"Abas do relatorio de importacao\">"
     + "  <button type=\"button\" class=\"import-tab-btn active\" data-import-tab=\"resumo\" role=\"tab\" aria-selected=\"true\">Resumo da importacao</button>"
-    + "  <button type=\"button\" class=\"import-tab-btn\" data-import-tab=\"planilha1\" role=\"tab\" aria-selected=\"false\">Planilha1 (Deputados)</button>"
+    + "  <button type=\"button\" class=\"import-tab-btn\" data-import-tab=\"planilha1\" role=\"tab\" aria-selected=\"false\">Planilha1 (Reflexo)</button>"
     + "  <button type=\"button\" class=\"import-tab-btn\" data-import-tab=\"validacao\" role=\"tab\" aria-selected=\"false\">Validacao</button>"
     + "</div>"
     + "<div class=\"import-tab-panels\">"
@@ -7799,7 +8376,7 @@ function buildImportSummaryHtml(report) {
     + "    </div>"
     + "  </section>"
     + "  <section class=\"import-tab-panel import-report-right\" data-import-panel=\"planilha1\">"
-    + "    <h4 style=\"margin-bottom:8px\">Resumo por deputado (Planilha1)</h4>"
+    + "    <h4 style=\"margin-bottom:8px\">Reflexo operacional em Planilha1</h4>"
     + planilha1Html
     + "  </section>"
     + "  <section class=\"import-tab-panel\" data-import-panel=\"validacao\">"
@@ -8254,11 +8831,8 @@ async function runExportByScope(scope, options) {
   }
 
   const templateReady = !!(lastImportedWorkbookTemplate && lastImportedWorkbookTemplate.buffer);
-  const templateMode = templateReady
-    ? confirm("Exportar em modo TEMPLATE (mesma estrutura do XLSX original, alterando apenas dados)?")
-    : false;
-
-  const modeOriginal = templateMode ? true : confirm("Exportar com headers originais? OK = Originais, Cancelar = Normalizados.");
+  const templateMode = templateReady;
+  const modeOriginal = true;
   const roundTripCheck = confirm("Executar round-trip check apos exportar? (pode ser mais lento)");
   const filename = buildExportFilename(exportScope);
   const filtersSnapshot = buildExportFiltersSnapshot(exportScope, customFilters);
@@ -8432,7 +9006,7 @@ function computeExportWorksheetCols(aoa, headerRowIndex, widthHints) {
       width = Math.max(width, String(value == null ? "" : value).length + 2);
     }
     width = Math.max(width, Number((widthHints || {})[headerKey] || 0));
-    out.push({ wch: clampExportWidth(width, 12, 42) });
+    out.push({ wch: clampExportWidth(width, 12, 54) });
   }
   return out;
 }
@@ -8469,7 +9043,7 @@ function applyExportWorksheetPresentation(ws, aoa, xlsxApi, options) {
     if (rowIndex < headerRowIndex) rowsMeta[rowIndex] = { hpt: 21 };
     else if (rowIndex === headerRowIndex) rowsMeta[rowIndex] = { hpt: 25 };
     else if (rowIndex === totalRowIndex) rowsMeta[rowIndex] = { hpt: 24 };
-    else rowsMeta[rowIndex] = { hpt: 20 };
+    else rowsMeta[rowIndex] = { hpt: 22 };
   }
   ws["!rows"] = rowsMeta;
 
@@ -8492,7 +9066,7 @@ function applyExportWorksheetPresentation(ws, aoa, xlsxApi, options) {
         });
       } else if (r === headerRowIndex) {
         style = buildExportCellStyle({
-          fillColor: modifiedHeaders[headerKey] ? "C7791A" : "0F4C81",
+          fillColor: modifiedHeaders[headerKey] ? "C7791A" : "0A3D91",
           fontColor: "FFFFFF",
           bold: true,
           horizontal: alignLeft ? "left" : "center",
@@ -8500,7 +9074,7 @@ function applyExportWorksheetPresentation(ws, aoa, xlsxApi, options) {
         });
       } else if (r === totalRowIndex) {
         style = buildExportCellStyle({
-          fillColor: "D6EAF8",
+          fillColor: "D9E8FF",
           bold: true,
           horizontal: alignLeft ? "left" : "center",
           fontSize: 11
@@ -8581,18 +9155,11 @@ function exportRecordsToXlsx(records, filename, options) {
     modifiedHeaders: modifiedHeaders,
     widthHints: {
       identificacao: 24,
-      descricao_acao: 34,
-      objetivo_epi: 34,
-      plan_a: 24,
-      plan_b: 24,
+      descricao_acao: 38,
+      objetivo_epi: 40,
+      plan_a: 30,
+      plan_b: 30,
       processo_sei: 18
-    },
-    leftAlignHeaders: {
-      identificacao: true,
-      descricao_acao: true,
-      objetivo_epi: true,
-      plan_a: true,
-      plan_b: true
     }
   });
   applyExportWorksheetPresentation(wsAudit, auditSheetAoa, xlsxApi, {
@@ -8604,14 +9171,6 @@ function exportRecordsToXlsx(records, filename, options) {
       valor_antigo: 22,
       valor_novo: 22,
       motivo: 30
-    },
-    leftAlignHeaders: {
-      identificacao: true,
-      municipio: true,
-      usuarios_ativos: true,
-      valor_antigo: true,
-      valor_novo: true,
-      motivo: true
     }
   });
   const wb = xlsxApi.utils.book_new();
@@ -9390,6 +9949,9 @@ function configureFrontendModules() {
   configureConcurrencyUtil(getConcurrencyConfigContext());
 }
 
+applyThemeMode(getStoredThemeMode(), false);
+syncSidebarCollapsedByViewport();
+
 const initializeAppStartupUtil = getAppStartupUtil("initializeAppStartup");
 if (initializeAppStartupUtil) {
   initializeAppStartupUtil({
@@ -9434,4 +9996,12 @@ if (initializeAppStartupUtil) {
 }
 
 bindShellNavigationEvents();
+bindTableQuickActions();
+bindSidebarOverlayEvents();
+bindSidebarBrandEvents();
+if (typeof window !== "undefined" && typeof window.setTimeout === "function") {
+  window.setTimeout(function () {
+    runPlanilhaEntryFocus();
+  }, 120);
+}
 

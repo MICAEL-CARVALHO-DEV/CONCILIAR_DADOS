@@ -36,6 +36,20 @@
       }
     })();
   </script>
+  <script>
+    (function () {
+      try {
+        var THEME_KEY = "SEC_THEME_MODE";
+        var stored = String(localStorage.getItem(THEME_KEY) || "").trim().toLowerCase();
+        var nextTheme = stored === "dark" || stored === "light"
+          ? stored
+          : ((window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches) ? "dark" : "light");
+        document.documentElement.setAttribute("data-theme", nextTheme);
+      } catch (_themeErr) {
+        document.documentElement.setAttribute("data-theme", "light");
+      }
+    })();
+  </script>
   <link rel="icon" href="data:," />
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -49,53 +63,91 @@
           <strong>SEC Emendas</strong>
           <p class="muted small">Front beta acoplado ao contrato atual, sem romper filtros, tabela ou modais.</p>
         </div>
+        <button
+          id="btnSidebarToggle"
+          class="btn app-sidebar-toggle app-sidebar-toggle-inline"
+          type="button"
+          aria-pressed="false"
+          title="Minimizar menu lateral"
+        >Minimizar</button>
       </div>
 
-      <section class="app-sidebar-panel">
-        <span class="app-panel-label">Base ativa</span>
-        <div class="app-base-chip">
-          <span class="app-live-dot" aria-hidden="true"></span>
-          LOA atual com trilha de auditoria
-        </div>
-        <p class="muted small">A nova casca visual organiza operacao, historico e governanca no mesmo eixo institucional.</p>
-        <span id="currentUserInfo" class="user-chip app-current-user-chip"></span>
-      </section>
+      <div class="app-sidebar-scroll" aria-label="Area rolavel do menu lateral">
+        <section class="app-sidebar-panel">
+          <span class="app-panel-label">Base ativa</span>
+          <div class="app-base-chip">
+            <span class="app-live-dot" aria-hidden="true"></span>
+            LOA atual com trilha de auditoria
+          </div>
+          <p class="muted small">A nova casca visual organiza operacao, historico e governanca no mesmo eixo institucional.</p>
+        </section>
 
-      <section class="app-sidebar-panel">
-        <span class="app-panel-label">Mapa de encaixe</span>
-        <div class="app-sidebar-nav-group">
-          <span class="app-sidebar-nav-caption">Setores</span>
-          <nav class="app-sidebar-nav" aria-label="Setores do workspace principal">
-            <button type="button" class="app-nav-link active" data-shell-sector="operation" aria-pressed="true">Operacao principal</button>
-            <button type="button" class="app-nav-link" data-shell-beta-tab="history" data-shell-sector="history" aria-pressed="false">Historico operacional</button>
-            <button type="button" class="app-nav-link" data-shell-beta-tab="imports" data-shell-sector="imports" aria-pressed="false">Governanca de imports</button>
-            <button type="button" class="app-nav-link" data-shell-beta-tab="support" data-shell-sector="support" aria-pressed="false">Ajuda e suporte</button>
-            <button type="button" class="app-nav-link" data-shell-beta-tab="powerbi" data-shell-sector="powerbi" aria-pressed="false">Visao Power BI</button>
-          </nav>
-        </div>
+        <section class="app-sidebar-panel">
+          <span class="app-panel-label">Mapa de encaixe</span>
+          <div class="app-sidebar-nav-group">
+            <span class="app-sidebar-nav-caption">Setores</span>
+            <nav class="app-sidebar-nav" aria-label="Setores do workspace principal">
+              <button type="button" class="app-nav-link active" data-shell-sector="operation" aria-pressed="true">Operacao principal</button>
+              <button type="button" class="app-nav-link" data-shell-beta-tab="history" data-shell-sector="history" aria-pressed="false">Historico operacional</button>
+              <button type="button" class="app-nav-link" data-shell-beta-tab="imports" data-shell-sector="imports" aria-pressed="false">Governanca de imports</button>
+              <button type="button" class="app-nav-link" data-shell-beta-tab="support" data-shell-sector="support" aria-pressed="false">Ajuda e suporte</button>
+              <button type="button" class="app-nav-link" data-shell-beta-tab="powerbi" data-shell-sector="powerbi" aria-pressed="false">Visao Power BI</button>
+            </nav>
+          </div>
 
-        <div id="operationShortcutNav" class="app-sidebar-nav-group">
-          <span class="app-sidebar-nav-caption">Atalhos da operacao</span>
-          <nav class="app-sidebar-nav" aria-label="Rotas do workspace beta">
-            <button type="button" class="app-nav-link active" data-shell-section="mainTableCard" aria-pressed="true">Planilha principal</button>
-            <button type="button" class="app-nav-link" data-shell-section="workspaceContextBar" aria-pressed="false">Contexto e base</button>
-            <button type="button" class="app-nav-link" data-shell-section="mainFiltersCard" aria-pressed="false">Filtros oficiais</button>
-            <button type="button" class="app-nav-link" data-shell-section="importReport" aria-pressed="false">Resumo de importacao</button>
-          </nav>
-        </div>
-      </section>
+          <div id="operationShortcutNav" class="app-sidebar-nav-group">
+            <span class="app-sidebar-nav-caption">Atalhos da operacao</span>
+            <nav class="app-sidebar-nav" aria-label="Rotas do workspace beta">
+              <button type="button" class="app-nav-link active" data-shell-section="mainTableCard" aria-pressed="true">Planilha principal</button>
+              <button type="button" class="app-nav-link" data-shell-section="workspaceContextBar" aria-pressed="false">Contexto e base</button>
+              <button type="button" class="app-nav-link" data-shell-section="mainFiltersCard" aria-pressed="false">Filtros oficiais</button>
+              <button type="button" class="app-nav-link" data-shell-section="planilhaIndicatorsDock" aria-pressed="false">Indicadores da planilha</button>
+            </nav>
+          </div>
+        </section>
 
-      <section class="app-sidebar-panel app-sidebar-actions-panel">
-        <span class="app-panel-label">Operacao</span>
-        <div class="actions app-sidebar-actions">
-          <label class="btn primary file-btn" for="fileCsv">Importar XLSX</label>
-          <input id="fileCsv" type="file" accept=".xlsx" />
-          <button id="btnExportAtuais" class="btn primary">Exportar (Atuais)</button>
-          <button id="btnExportHistorico" class="btn">Exportar (Com historico)</button>
-          <button id="btnReset" class="btn danger">Reset Demo</button>
+        <section class="app-sidebar-panel app-sidebar-actions-panel">
+          <span class="app-panel-label">Operacao</span>
+          <div class="actions app-sidebar-actions">
+            <label class="btn primary file-btn" for="fileCsv">Importar XLSX</label>
+            <input id="fileCsv" type="file" accept=".xlsx" />
+            <button id="btnExportAtuais" class="btn primary">Exportar (Atuais)</button>
+            <button id="btnExportHistorico" class="btn">Exportar (Com historico)</button>
+            <button id="btnReset" class="btn danger">Reset Demo</button>
+          </div>
+        </section>
+      </div>
+
+      <section id="sidebarUserMenuContainer" class="app-sidebar-footer" aria-label="Usuario atual">
+        <div
+          id="sidebarUserMenuTrigger"
+          class="app-sidebar-user"
+          role="button"
+          tabindex="0"
+          aria-expanded="false"
+          aria-controls="sidebarUserMenuActions"
+        >
+          <div id="sidebarUserAvatar" class="app-sidebar-user-avatar" aria-hidden="true">SE</div>
+          <div class="app-sidebar-user-copy">
+            <strong id="sidebarUserName">Usuario</strong>
+            <span id="sidebarUserRole">Perfil</span>
+            <span id="currentUserInfo" class="user-chip app-current-user-chip"></span>
+          </div>
+        </div>
+        <div id="sidebarUserMenuActions" class="app-sidebar-user-menu" role="menu" aria-hidden="true">
+          <div class="app-sidebar-user-menu-header">
+            <strong id="sidebarUserMenuName">Usuario</strong>
+            <span id="sidebarUserMenuHandle">@usuario</span>
+          </div>
+          <button id="btnProfile" class="app-sidebar-user-menu-item" type="button" role="menuitem">Meu perfil</button>
+          <button id="btnPendingApprovals" class="app-sidebar-user-menu-item" type="button" role="menuitem" style="display:none">Cadastros</button>
+          <button id="btnThemeToggle" class="app-sidebar-user-menu-item app-theme-toggle" type="button" role="menuitem" aria-pressed="false">Tema dark</button>
+          <div class="app-sidebar-user-menu-divider" aria-hidden="true"></div>
+          <button id="btnLogout" class="app-sidebar-user-menu-item danger" type="button" role="menuitem">Sair</button>
         </div>
       </section>
     </aside>
+    <button id="sidebarOverlay" class="app-sidebar-overlay" type="button" aria-label="Fechar menu lateral" hidden></button>
 
     <section class="app-shell-main">
       <header class="topbar app-topbar">
@@ -112,9 +164,6 @@
               <span>Contrato funcional preservado</span>
             </div>
           </div>
-          <button id="btnPendingApprovals" class="btn" style="display:none">Cadastros em analise</button>
-          <button id="btnProfile" class="btn">Meu perfil</button>
-          <button id="btnLogout" class="btn danger">Sair</button>
         </div>
       </header>
 
@@ -135,15 +184,14 @@
           </div>
 
           <section id="mainFiltersCard" class="filters card app-filters-card">
-            <div class="field">
-              <label for="yearFilter">Ano</label>
-              <select id="yearFilter"></select>
-            </div>
-
             <section class="app-sidebar-panel app-sidebar-filter-panel">
               <div class="field app-sidebar-field">
                 <label for="statusFilter">Andamento global</label>
                 <select id="statusFilter" class="app-sidebar-select"></select>
+              </div>
+              <div class="field app-sidebar-field">
+                <label for="yearFilter">Ano</label>
+                <select id="yearFilter" class="app-sidebar-select"></select>
               </div>
               <p class="muted small">Este filtro continua sendo o filtro oficial da tabela principal e dos paineis derivados.</p>
             </section>
@@ -159,18 +207,11 @@
             </div>
           </section>
 
-          <section
-            id="importReport"
-            class="card app-support-card app-operacao-report"
-            data-empty-title="Resumo de importacao"
-            data-empty-copy="Assim que um lote rodar, validacoes, abas e alertas entram aqui com prioridade operacional logo antes da tabela."
-          ></section>
-
           <section id="mainTableCard" class="card table-wrap app-table-card">
             <table class="table">
               <thead>
                 <tr>
-                  <th>ID</th>
+                  <th>Linha</th>
                   <th>Identificacao</th>
                   <th>Municipio</th>
                   <th>Deputado</th>
@@ -185,10 +226,31 @@
               <tbody id="tbody"></tbody>
             </table>
           </section>
+
+          <section
+            id="planilhaIndicatorsDock"
+            class="planilha-indicadores-dock hidden"
+            data-empty-title="Indicadores da planilha"
+            data-empty-copy="Assim que a base carregar, os indicadores do filtro atual ficam presos no rodape operacional."
+          ></section>
         </section>
 
         <section id="mainSectorStage" class="app-stage app-stage-sector hidden">
           <section id="shellSectorCard" class="card app-sector-card hidden"></section>
+
+          <section
+            id="historyRecentCard"
+            class="card app-support-card app-history-recent-card hidden"
+            data-empty-title="Historico recente"
+            data-empty-copy="As ultimas alteracoes operacionais passam a viver aqui, com leitura dedicada no setor de historico."
+          ></section>
+
+          <section
+            id="importReport"
+            class="card app-support-card app-operacao-report hidden"
+            data-empty-title="Governanca de imports"
+            data-empty-copy="Assim que um lote rodar, validacoes, abas e alertas entram aqui dentro do setor de governanca."
+          ></section>
 
           <section
             id="betaWorkspace"

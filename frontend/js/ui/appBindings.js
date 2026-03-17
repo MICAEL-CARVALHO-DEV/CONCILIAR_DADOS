@@ -71,6 +71,16 @@
     var statusFilter = opts.statusFilter || null;
     var yearFilter = opts.yearFilter || null;
     var searchInput = opts.searchInput || null;
+    var btnSidebarToggle = opts.btnSidebarToggle || null;
+    var toggleSidebarCollapsed = typeof opts.toggleSidebarCollapsed === "function" ? opts.toggleSidebarCollapsed : noop;
+    var syncSidebarCollapsedByViewport = typeof opts.syncSidebarCollapsedByViewport === "function" ? opts.syncSidebarCollapsedByViewport : noop;
+    var appSidebar = opts.appSidebar || null;
+    var mainSectorStage = opts.mainSectorStage || null;
+    var btnThemeToggle = opts.btnThemeToggle || null;
+    var toggleThemeMode = typeof opts.toggleThemeMode === "function" ? opts.toggleThemeMode : noop;
+    var sidebarUserMenuTrigger = opts.sidebarUserMenuTrigger || null;
+    var sidebarUserMenuContainer = opts.sidebarUserMenuContainer || null;
+    var sidebarUserMenuActions = opts.sidebarUserMenuActions || null;
     var btnProfile = opts.btnProfile || null;
     var btnLogout = opts.btnLogout || null;
     var btnDemo4Users = opts.btnDemo4Users || null;
@@ -80,18 +90,100 @@
     var btnKvSave = opts.btnKvSave || null;
     var modalAutoCloseTimerRef = typeof opts.setModalAutoCloseTimer === "function" ? opts.setModalAutoCloseTimer : noop;
     var authLoginPage = String(opts.authLoginPage || "frontend/pages/login.html");
+    var sidebarMenuOpen = false;
+    var sidebarInteractionActive = false;
+    var sidebarFocusStrong = false;
+
+    function setSidebarFocusStrong(nextStrong) {
+      var body = global && global.document ? global.document.body : null;
+      var isStrong = !!nextStrong;
+      if (sidebarFocusStrong === isStrong) return;
+      sidebarFocusStrong = isStrong;
+      if (body) body.classList.toggle("sidebar-focus-strong", isStrong);
+      if (mainSectorStage) mainSectorStage.classList.toggle("sidebar-focus-strong", isStrong);
+      if (pendingUsersModal) pendingUsersModal.classList.toggle("sidebar-focus-strong", isStrong);
+    }
+
+    function syncSidebarFocusStrongState() {
+      setSidebarFocusStrong(sidebarInteractionActive || sidebarMenuOpen);
+    }
+
+    function setSidebarUserMenuOpen(nextOpen) {
+      if (!sidebarUserMenuContainer || !sidebarUserMenuTrigger || !sidebarUserMenuActions) return;
+      sidebarMenuOpen = !!nextOpen;
+      sidebarUserMenuContainer.classList.toggle("is-menu-open", sidebarMenuOpen);
+      sidebarUserMenuTrigger.setAttribute("aria-expanded", sidebarMenuOpen ? "true" : "false");
+      sidebarUserMenuActions.setAttribute("aria-hidden", sidebarMenuOpen ? "false" : "true");
+      syncSidebarFocusStrongState();
+    }
+
+    function closeSidebarUserMenu() {
+      setSidebarUserMenuOpen(false);
+    }
 
     if (statusFilter) statusFilter.addEventListener("change", render);
     if (yearFilter) yearFilter.addEventListener("change", render);
     if (searchInput) searchInput.addEventListener("input", debounce(render, 120));
+    syncSidebarCollapsedByViewport();
+    if (btnSidebarToggle && btnSidebarToggle.getAttribute("data-sidebar-bound") !== "1") {
+      btnSidebarToggle.setAttribute("data-sidebar-bound", "1");
+      btnSidebarToggle.addEventListener("click", function () { toggleSidebarCollapsed(); });
+    }
+    if (appSidebar && appSidebar.getAttribute("data-sidebar-focus-strong-bound") !== "1") {
+      appSidebar.setAttribute("data-sidebar-focus-strong-bound", "1");
+      appSidebar.addEventListener("mouseenter", function () {
+        sidebarInteractionActive = true;
+        syncSidebarFocusStrongState();
+      });
+      appSidebar.addEventListener("mouseleave", function () {
+        sidebarInteractionActive = false;
+        syncSidebarFocusStrongState();
+      });
+      appSidebar.addEventListener("focusin", function () {
+        sidebarInteractionActive = true;
+        syncSidebarFocusStrongState();
+      });
+      appSidebar.addEventListener("focusout", function (e) {
+        var nextTarget = e && e.relatedTarget ? e.relatedTarget : null;
+        if (nextTarget && appSidebar.contains(nextTarget)) return;
+        sidebarInteractionActive = false;
+        syncSidebarFocusStrongState();
+      });
+    }
+    if (!global.__SEC_SIDEBAR_RESIZE_BOUND__) {
+      global.__SEC_SIDEBAR_RESIZE_BOUND__ = true;
+      global.addEventListener("resize", debounce(syncSidebarCollapsedByViewport, 150));
+    }
+    if (btnThemeToggle) {
+      btnThemeToggle.addEventListener("click", function () {
+        toggleThemeMode();
+        closeSidebarUserMenu();
+      });
+    }
+
+    if (sidebarUserMenuTrigger && sidebarUserMenuTrigger.getAttribute("data-user-menu-bound") !== "1") {
+      sidebarUserMenuTrigger.setAttribute("data-user-menu-bound", "1");
+      sidebarUserMenuTrigger.addEventListener("click", function () {
+        setSidebarUserMenuOpen(!sidebarMenuOpen);
+      });
+      sidebarUserMenuTrigger.addEventListener("keydown", function (e) {
+        if (!e) return;
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          setSidebarUserMenuOpen(!sidebarMenuOpen);
+        }
+      });
+    }
 
     if (btnProfile) {
       btnProfile.addEventListener("click", function () {
+        closeSidebarUserMenu();
         openProfileModal();
       });
     }
     if (btnLogout) {
       btnLogout.addEventListener("click", async function () {
+        closeSidebarUserMenu();
         await logoutCurrentUser();
         redirectToAuth(authLoginPage, "logout=1");
       });
@@ -166,7 +258,19 @@
       }
       if (pendingUsersModal && pendingUsersModal.classList.contains("show")) {
         closePendingUsersModal();
+        return;
       }
+
+      if (sidebarMenuOpen) {
+        closeSidebarUserMenu();
+      }
+    });
+
+    document.addEventListener("click", function (e) {
+      if (!sidebarMenuOpen || !sidebarUserMenuContainer) return;
+      var target = e && e.target ? e.target : null;
+      if (target && sidebarUserMenuContainer.contains(target)) return;
+      closeSidebarUserMenu();
     });
 
     global.addEventListener("beforeunload", function (e) {
@@ -281,6 +385,7 @@
 
     if (btnPendingApprovals) {
       btnPendingApprovals.addEventListener("click", function () {
+        closeSidebarUserMenu();
         openPendingUsersModal();
       });
     }
