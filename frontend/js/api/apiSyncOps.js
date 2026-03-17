@@ -187,9 +187,10 @@
 
   async function syncImportBatchToApi(file, report, ctx) {
     if (!ctx.isApiEnabled()) return null;
+    var authoritativeHash = report && report.fileHash ? String(report.fileHash).trim().toLowerCase() : "";
     var payload = {
       arquivo_nome: file && file.name ? file.name : (report.fileName || "importacao"),
-      arquivo_hash: ctx.quickHashString(
+      arquivo_hash: authoritativeHash || ctx.quickHashString(
         (file && file.name ? file.name : "") + "|"
         + (file && file.size ? file.size : 0) + "|"
         + (file && file.lastModified ? file.lastModified : 0) + "|"
@@ -217,7 +218,13 @@
       ctx.setApiOnline(true);
       ctx.setApiLastError("");
       ctx.applyAccessProfile();
-      return resp && resp.id != null ? Number(resp.id) : null;
+      return {
+        loteId: resp && resp.id != null ? Number(resp.id) : null,
+        changed: !(resp && Object.prototype.hasOwnProperty.call(resp, "changed")) || resp.changed !== false,
+        reason: resp && resp.reason ? String(resp.reason) : "",
+        existingLotId: resp && resp.lote_id_existente != null ? Number(resp.lote_id_existente) : null,
+        arquivoHash: payload.arquivo_hash
+      };
     } catch (err) {
       handleApiSyncError(err, "lote de importacao", ctx);
       return null;

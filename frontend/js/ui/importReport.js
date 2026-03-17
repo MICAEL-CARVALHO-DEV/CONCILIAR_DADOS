@@ -106,8 +106,6 @@
 
   function renderImportDashboard(stateRecords, latestImportReport, lastImportedPlanilha1Aoa, importReportEl, fmtDateTimeFn, escapeHtmlFn, buildPlanilha1AoaFn, normalizeLooseTextFn, buildPlanilha1HtmlFn, getRecentChangesForPanelFn, wireImportReportTabsFn, latestExportReport, buildExportSummaryBadgeHtmlFn, exportScopeLabelFn, recentChangesLimit) {
     if (!importReportEl) return;
-    importReportEl.classList.remove("hidden");
-    var recentLimit = Number.isFinite(Number(recentChangesLimit)) ? Number(recentChangesLimit) : 10;
 
     var left = latestImportReport ? buildImportSummaryHtml(
       latestImportReport,
@@ -129,15 +127,7 @@
       getRecentChangesForPanelFn
     );
 
-    var recent = typeof getRecentChangesForPanelFn === "function" ? getRecentChangesForPanelFn(recentLimit) : [];
     var badgeBuilder = typeof buildExportSummaryBadgeHtmlFn === "function" ? buildExportSummaryBadgeHtmlFn : buildExportSummaryBadgeHtml;
-    var right = buildRecentChangesPanelHtml(
-      recent,
-      escapeHtmlFn,
-      fmtDateTimeFn,
-      typeof describeEventForPanel === "function" ? describeEventForPanel : null,
-      text
-    );
 
     importReportEl.innerHTML =
       badgeBuilder(
@@ -146,7 +136,7 @@
         exportScopeLabelFn,
         fmtDateTimeFn
       ) +
-      "<div class=\"import-dashboard-grid\"><section class=\"import-dashboard-left\">" + left + "</section><section class=\"import-dashboard-right\">" + right + "</section></div>";
+      "<div class=\"import-report-stack\"><section class=\"import-dashboard-left\">" + left + "</section></div>";
 
     if (latestImportReport && typeof wireImportReportTabsFn === "function") {
       wireImportReportTabsFn(importReportEl, "planilha1");
@@ -181,7 +171,7 @@
         { label: "Responsavel da ultima alteracao", value: lastBy }
       ], escapeHtml) +
       '<div style="margin-top:12px">' +
-      '  <h4 style="margin-bottom:8px">Resumo por deputado (Planilha1)</h4>' +
+      '  <h4 style="margin-bottom:8px">Reflexo operacional em Planilha1</h4>' +
       planilha1Html +
       '</div>';
   }
@@ -202,7 +192,7 @@
       "<p class=\"muted small\">Arquivo: " + escapeHtml(fileName) + " | Abas lidas: " + escapeHtml(sheets) + "</p>" +
       "<div class=\"import-tabs\" role=\"tablist\" aria-label=\"Abas do relatorio de importacao\">" +
       "  <button type=\"button\" class=\"import-tab-btn active\" data-import-tab=\"resumo\" role=\"tab\" aria-selected=\"true\">Resumo da importacao</button>" +
-      "  <button type=\"button\" class=\"import-tab-btn\" data-import-tab=\"planilha1\" role=\"tab\" aria-selected=\"false\">Planilha1 (Deputados)</button>" +
+      "  <button type=\"button\" class=\"import-tab-btn\" data-import-tab=\"planilha1\" role=\"tab\" aria-selected=\"false\">Planilha1 (Reflexo)</button>" +
       "  <button type=\"button\" class=\"import-tab-btn\" data-import-tab=\"validacao\" role=\"tab\" aria-selected=\"false\">Validacao</button>" +
       "</div>" +
       "<div class=\"import-tab-panels\">" +
@@ -221,7 +211,7 @@
       ], escapeHtml) +
       "  </section>" +
       "  <section class=\"import-tab-panel import-report-right\" data-import-panel=\"planilha1\">" +
-      "    <h4 style=\"margin-bottom:8px\">Resumo por deputado (Planilha1)</h4>" +
+      "    <h4 style=\"margin-bottom:8px\">Reflexo operacional em Planilha1</h4>" +
       planilha1Html +
       "  </section>" +
       "  <section class=\"import-tab-panel\" data-import-panel=\"validacao\">" +

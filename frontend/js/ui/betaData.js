@@ -15,6 +15,7 @@
           emenda_id: ctx.getBackendIdForRecord(rec),
           emenda_ref: ctx.text(rec && rec.id) || "-",
           emenda_identificacao: ctx.text(rec && rec.identificacao) || "-",
+          emenda_objetivo_epi: ctx.text(rec && rec.objetivo_epi) || "",
           usuario_nome: ctx.text(ev && ev.actor_user) || "sistema",
           setor: ctx.text(ev && ev.actor_role) || "-",
           tipo_evento: ctx.text(ev && ev.type) || "EVENTO",
@@ -62,6 +63,7 @@
       ctx.text(row && row.valor_novo),
       ctx.text(row && row.motivo),
       ctx.text(row && row.emenda_identificacao),
+      ctx.text(row && row.emenda_objetivo_epi),
       ctx.text(row && row.emenda_municipio),
       ctx.text(row && row.emenda_deputado),
       ctx.text(meta && meta.code),
@@ -111,6 +113,10 @@
       if (ctx.filters.setor && ctx.text(row && row.setor) !== ctx.filters.setor) return false;
       if (ctx.filters.tipo_evento && ctx.text(row && row.tipo_evento) !== ctx.filters.tipo_evento) return false;
       if (ctx.filters.origem_evento && ctx.text(row && row.origem_evento) !== ctx.filters.origem_evento) return false;
+      if (ctx.filters.objetivo_epi) {
+        var objetivoBlob = ctx.normalizeLooseText(ctx.text(row && row.emenda_objetivo_epi));
+        if (!objetivoBlob.includes(ctx.normalizeLooseText(ctx.filters.objetivo_epi))) return false;
+      }
       if (ctx.filters.q) {
         var queryText = ctx.normalizeLooseText(ctx.filters.q);
         if (!buildAuditSearchBlob(row, ctx).includes(queryText)) return false;

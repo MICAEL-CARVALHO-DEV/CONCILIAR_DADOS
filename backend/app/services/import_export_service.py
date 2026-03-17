@@ -77,6 +77,7 @@ HEADER_HINTS = {
     "cod_da_acao",
     "descritor_da_acao",
 }
+ACTIVE_IMPORT_LOT_STATUSES = ("APLICADO", "CORRIGIDO")
 
 
 def _as_text(value) -> str:
@@ -785,6 +786,19 @@ def _can_govern_specific_lote(lote: ImportLote | None, actor: dict | None) -> bo
     return _actor_matches_lote(lote, actor)
 
 
+def _normalize_import_hash(value) -> str:
+    return _as_text(value).lower()
+
+
+def _get_latest_active_import_lot(*, db: Session) -> ImportLote | None:
+    return (
+        db.query(ImportLote)
+        .filter(ImportLote.status_governanca.in_(ACTIVE_IMPORT_LOT_STATUSES))
+        .order_by(ImportLote.created_at.desc(), ImportLote.id.desc())
+        .first()
+    )
+
+
 def _ensure_lote_access(lote: ImportLote | None, actor: dict | None) -> ImportLote:
     if not lote:
         raise HTTPException(status_code=404, detail="lote de importacao nao encontrado")
@@ -826,9 +840,22 @@ def create_import_lot_service(
     utcnow: Callable[[], datetime],
     broadcast_update: Callable[[str, int | None], None],
 ) -> dict:
+    incoming_hash = _normalize_import_hash(payload.arquivo_hash)
+    if incoming_hash:
+        latest_active_lote = _get_latest_active_import_lot(db=db)
+        if latest_active_lote and _normalize_import_hash(latest_active_lote.arquivo_hash) == incoming_hash:
+            return {
+                "ok": True,
+                "changed": False,
+                "reason": "same_hash",
+                "id": None,
+                "lote_id_existente": latest_active_lote.id,
+                "arquivo_hash": incoming_hash,
+            }
+
     lote = ImportLote(
         arquivo_nome=payload.arquivo_nome,
-        arquivo_hash=payload.arquivo_hash or "",
+        arquivo_hash=incoming_hash,
         linhas_lidas=max(0, int(payload.linhas_lidas or 0)),
         linhas_validas=max(0, int(payload.linhas_validas or 0)),
         linhas_ignoradas=max(0, int(payload.linhas_ignoradas or 0)),
@@ -874,7 +901,7 @@ def create_import_lot_service(
     db.commit()
     db.refresh(lote)
     broadcast_update("import_lote", lote.id)
-    return {"ok": True, "id": lote.id}
+    return {"ok": True, "id": lote.id, "changed": True, "reason": "applied", "arquivo_hash": lote.arquivo_hash}
 
 
 def list_import_lots_service(*, limit: int, actor: dict, db: Session) -> list[ImportLote]:

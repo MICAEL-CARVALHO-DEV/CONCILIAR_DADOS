@@ -221,6 +221,27 @@ def ensure_legacy_schema(engine) -> None:
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_support_messages_thread_id ON support_messages(thread_id)"))
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_support_messages_created_at ON support_messages(created_at)"))
 
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                "CREATE TABLE IF NOT EXISTS deputado_count_adjustments ("
+                "id INTEGER PRIMARY KEY, "
+                "deputado VARCHAR(120) NOT NULL, "
+                "total_ajustado INTEGER NOT NULL DEFAULT 0, "
+                "escopo VARCHAR(20) NOT NULL DEFAULT 'GLOBAL', "
+                "motivo TEXT NOT NULL DEFAULT '', "
+                "usuario_id INTEGER NULL, "
+                "usuario_nome VARCHAR(120) NOT NULL DEFAULT '', "
+                "setor VARCHAR(40) NOT NULL DEFAULT '', "
+                "created_at TIMESTAMP NOT NULL, "
+                "updated_at TIMESTAMP NOT NULL"
+                ")"
+            )
+        )
+        conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ux_deputado_count_adjustments_deputado ON deputado_count_adjustments(deputado)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_deputado_count_adjustments_escopo ON deputado_count_adjustments(escopo)"))
+        conn.execute(text("CREATE INDEX IF NOT EXISTS ix_deputado_count_adjustments_updated_at ON deputado_count_adjustments(updated_at)"))
+
 
 def versioned_id_interno(base_id: str, version_num: int, db: Session) -> str:
     raw_base = (base_id or "").strip() or "EMENDA"

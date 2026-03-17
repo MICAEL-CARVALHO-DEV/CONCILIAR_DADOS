@@ -159,6 +159,12 @@
       return { label: value, value: value };
     })), filters.origem_evento || "");
 
+    var objetivoInput = document.createElement("input");
+    objetivoInput.type = "text";
+    objetivoInput.placeholder = "objetivo principal, eixo, andamento...";
+    objetivoInput.value = filters.objetivo_epi || "";
+    appendField("Objetivo EPI", objetivoInput, true);
+
     var searchInput = document.createElement("input");
     searchInput.type = "text";
     searchInput.placeholder = "usuario, motivo, campo, valor, emenda...";
@@ -205,6 +211,7 @@
         setor: String(roleSelect.value || ""),
         tipo_evento: String(eventSelect.value || ""),
         origem_evento: String(originSelect.value || ""),
+        objetivo_epi: String(objetivoInput.value || "").trim(),
         q: String(searchInput.value || "").trim()
       });
       if (canViewGlobalAuditApi()) {

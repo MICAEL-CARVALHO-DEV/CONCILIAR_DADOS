@@ -175,9 +175,20 @@
           opts.syncYearFilter();
           opts.render();
           opts.showImportReport(report);
+          var importChanged = true;
+          var importSkipReason = "";
           if (shouldSyncImportToApi) {
-            var loteId = await opts.syncImportBatchToApi(file, report);
-            if (loteId) {
+            var loteSyncResult = await opts.syncImportBatchToApi(file, report);
+            var loteId = null;
+            if (loteSyncResult && typeof loteSyncResult === "object") {
+              loteId = loteSyncResult.loteId != null ? Number(loteSyncResult.loteId) : null;
+              importChanged = loteSyncResult.changed !== false;
+              importSkipReason = loteSyncResult.reason ? String(loteSyncResult.reason) : "";
+            } else if (loteSyncResult) {
+              loteId = Number(loteSyncResult);
+            }
+
+            if (loteId && importChanged) {
               await opts.syncImportLinesToApi(loteId, report.rowDetails || []);
               if (typeof opts.refreshImportLots === "function") {
                 Promise.resolve(opts.refreshImportLots(false)).catch(function () { /* no-op */ });
@@ -186,9 +197,16 @@
           }
 
           var extraDemoInfo = removedDemo > 0 ? (" | Demos removidos: " + String(removedDemo)) : "";
-          var syncInfo = shouldSyncImportToApi
-            ? " | Sincronizado com API oficial."
-            : " | Importacao isolada neste workspace (sem enviar lote para API oficial).";
+          var syncInfo = " | Importacao isolada neste workspace (sem enviar lote para API oficial).";
+          if (shouldSyncImportToApi) {
+            syncInfo = importChanged
+              ? " | Sincronizado com API oficial."
+              : (
+                importSkipReason === "same_hash"
+                  ? " | Planilha oficial sem alteracao: lote/linhas nao reenviados."
+                  : " | API oficial sem novo lote nesta execucao."
+              );
+          }
           globalScope.alert("Importacao concluida. Criados: " + report.created + " | Atualizados: " + report.updated + " | Sem alteracao: " + report.unchanged + " | Linhas lidas: " + report.totalRows + extraDemoInfo + syncInfo);
         } catch (err) {
           globalScope.console.error(err);

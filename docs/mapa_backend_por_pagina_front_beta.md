@@ -21,6 +21,8 @@ Responsabilidade:
 - `GET /emendas`
 - `GET /emendas/{emenda_id}`
 - `GET /dashboard/resumo`
+- `GET /dashboard/deputados/ajustes`
+- `GET /dashboard/deputados/politica`
 - `GET /imports/resumo`
 
 ### Endpoints operacionais complementares
@@ -31,9 +33,13 @@ Responsabilidade:
 - `POST /emendas/{emenda_id}/status`
 - `POST /emendas/{emenda_id}/eventos`
 - `POST /emendas/{emenda_id}/versionar`
+- `PUT /dashboard/deputados/ajustes` (ajuste manual global, `PROGRAMADOR`)
+- `DELETE /dashboard/deputados/ajustes` (remover ajuste manual, `PROGRAMADOR`)
 
 ### Uso recomendado
 - `GET /dashboard/resumo`: cards de topo, totalizadores, ultimo evento, top deputados
+- `GET /dashboard/deputados/politica`: regra oficial da contagem de deputado (`BASE_ATUAL`) e governanca do ajuste manual
+- `GET /dashboard/deputados/ajustes`: listar overrides manuais auditados da contagem
 - `GET /imports/resumo`: resumo operacional da ultima importacao e contadores
 - `GET /emendas`: tabela principal
 - `GET /emendas/{id}`: modal detalhado

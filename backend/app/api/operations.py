@@ -1,9 +1,12 @@
 from fastapi import APIRouter, Depends, File, Query, UploadFile
 
-from ..core.dependencies import _actor_from_headers, _require_monitor
+from ..core.dependencies import _actor_from_headers, _require_monitor, _require_owner
 from ..db import get_db
 from ..schemas import (
     AuditSummaryOut,
+    DashboardDeputadoCountAdjustmentIn,
+    DashboardDeputadoCountAdjustmentOut,
+    DashboardDeputadoCountPolicyOut,
     ImportSummaryOut,
     DashboardSummaryOut,
     ExportLogCreate,
@@ -39,6 +42,46 @@ def create_operations_router(resolve_event_origin, utcnow, broadcast_update, mas
         return dashboard_service.build_dashboard_summary_service(
             ano=ano,
             limite_deputados=limite_deputados,
+            db=db,
+        )
+
+    @router.get("/dashboard/deputados/ajustes", response_model=list[DashboardDeputadoCountAdjustmentOut])
+    def listar_ajustes_contagem_deputado(
+        _actor: dict = Depends(_require_monitor),
+        db=Depends(get_db),
+    ):
+        return dashboard_service.list_deputado_count_adjustments_service(db=db)
+
+    @router.get("/dashboard/deputados/politica", response_model=DashboardDeputadoCountPolicyOut)
+    def obter_politica_contagem_deputado(
+        _actor: dict = Depends(_require_monitor),
+    ):
+        return dashboard_service.get_deputado_count_policy()
+
+    @router.put("/dashboard/deputados/ajustes", response_model=DashboardDeputadoCountAdjustmentOut)
+    def salvar_ajuste_contagem_deputado(
+        payload: DashboardDeputadoCountAdjustmentIn,
+        actor: dict = Depends(_require_owner),
+        db=Depends(get_db),
+    ):
+        return dashboard_service.upsert_deputado_count_adjustment_service(
+            deputado=payload.deputado,
+            total_ajustado=payload.total_ajustado,
+            motivo=payload.motivo,
+            actor=actor,
+            db=db,
+            utcnow=utcnow,
+        )
+
+    @router.delete("/dashboard/deputados/ajustes")
+    def remover_ajuste_contagem_deputado(
+        deputado: str = Query(...),
+        actor: dict = Depends(_require_owner),
+        db=Depends(get_db),
+    ):
+        return dashboard_service.delete_deputado_count_adjustment_service(
+            deputado=deputado,
+            actor=actor,
             db=db,
         )
 
@@ -176,8 +219,10 @@ def create_operations_router(resolve_event_origin, utcnow, broadcast_update, mas
         limit: int = Query(default=150, ge=1, le=500),
         ano: int | None = Query(default=None, ge=2000, le=2100),
         mes: int | None = Query(default=None, ge=1, le=12),
+        objetivo_epi: str | None = Query(default=None),
         usuario: str | None = Query(default=None),
         setor: str | None = Query(default=None),
+        perfil: str | None = Query(default=None),
         tipo_evento: str | None = Query(default=None),
         origem_evento: str | None = Query(default=None),
         q: str | None = Query(default=None),
@@ -188,8 +233,9 @@ def create_operations_router(resolve_event_origin, utcnow, broadcast_update, mas
             limit=limit,
             ano=ano,
             mes=mes,
+            objetivo_epi=objetivo_epi,
             usuario=usuario,
-            setor=setor,
+            setor=setor or perfil,
             tipo_evento=tipo_evento,
             origem_evento=origem_evento,
             q=q,
@@ -201,8 +247,10 @@ def create_operations_router(resolve_event_origin, utcnow, broadcast_update, mas
     def audit_resumo(
         ano: int | None = Query(default=None, ge=2000, le=2100),
         mes: int | None = Query(default=None, ge=1, le=12),
+        objetivo_epi: str | None = Query(default=None),
         usuario: str | None = Query(default=None),
         setor: str | None = Query(default=None),
+        perfil: str | None = Query(default=None),
         tipo_evento: str | None = Query(default=None),
         origem_evento: str | None = Query(default=None),
         q: str | None = Query(default=None),
@@ -213,8 +261,9 @@ def create_operations_router(resolve_event_origin, utcnow, broadcast_update, mas
         return audit_service.build_audit_summary_service(
             ano=ano,
             mes=mes,
+            objetivo_epi=objetivo_epi,
             usuario=usuario,
-            setor=setor,
+            setor=setor or perfil,
             tipo_evento=tipo_evento,
             origem_evento=origem_evento,
             q=q,

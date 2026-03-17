@@ -21,16 +21,19 @@
     return source.filter(function (rec) {
       var deputado = ctx.text(rec && rec.deputado) || "-";
       var municipio = ctx.text(rec && rec.municipio) || "-";
+      var objetivoEpi = ctx.text(rec && rec.objetivo_epi) || "-";
       var statusAtual = ctx.getRecordCurrentStatus(rec) || "-";
       if (ctx.filters.deputado && deputado !== ctx.filters.deputado) return false;
       if (ctx.filters.municipio && municipio !== ctx.filters.municipio) return false;
       if (ctx.filters.status && statusAtual !== ctx.filters.status) return false;
+      if (ctx.filters.objetivo_epi && !ctx.normalizeLooseText(objetivoEpi).includes(ctx.normalizeLooseText(ctx.filters.objetivo_epi))) return false;
       if (ctx.filters.q) {
         var blob = ctx.normalizeLooseText([
           ctx.text(rec && rec.id),
           ctx.text(rec && rec.identificacao),
           deputado,
           municipio,
+          objetivoEpi,
           ctx.text(rec && rec.cod_acao),
           ctx.text(rec && rec.descricao_acao),
           ctx.text(rec && rec.plan_a),
@@ -97,10 +100,12 @@
       attention: 0,
       deputados: new Set(),
       municipios: new Set(),
+      objetivos: new Set(),
       latestUpdate: ""
     };
     var byDeputado = {};
     var byMunicipio = {};
+    var byObjetivo = {};
     var byStatus = {};
     var byUser = {};
     var recordDeputadoMap = {};
@@ -110,6 +115,7 @@
       var global = ctx.getGlobalProgressState(users);
       var deputado = ctx.text(rec && rec.deputado) || "-";
       var municipio = ctx.text(rec && rec.municipio) || "-";
+      var objetivoEpi = ctx.text(rec && rec.objetivo_epi) || "-";
       var valor = ctx.toNumber(rec && rec.valor_atual);
       var statusAtual = ctx.getRecordCurrentStatus(rec) || "-";
       var updatedAt = ctx.text(rec && rec.updated_at);
@@ -118,6 +124,7 @@
       summary.valorTotal += valor;
       summary.deputados.add(deputado);
       summary.municipios.add(municipio);
+      summary.objetivos.add(objetivoEpi);
       if (updatedAt && (!summary.latestUpdate || updatedAt > summary.latestUpdate)) summary.latestUpdate = updatedAt;
       if (global && global.code === "done") summary.done += 1;
       if (global && global.code === "attention") summary.attention += 1;
@@ -158,6 +165,11 @@
       byMunicipio[municipio].valor += valor;
       if (global && global.code === "attention") byMunicipio[municipio].attention += 1;
 
+      if (!byObjetivo[objetivoEpi]) byObjetivo[objetivoEpi] = { label: objetivoEpi, total: 0, valor: 0, attention: 0 };
+      byObjetivo[objetivoEpi].total += 1;
+      byObjetivo[objetivoEpi].valor += valor;
+      if (global && global.code === "attention") byObjetivo[objetivoEpi].attention += 1;
+
       byStatus[statusAtual] = (byStatus[statusAtual] || 0) + 1;
     });
 
@@ -188,9 +200,16 @@
       rows: rows,
       scopedAuditRows: scopedAuditRows,
       isExecutiveRole: isExecutiveRole,
+      deputadoCountPolicy: ctx.deputadoCountPolicy || {
+        origem_oficial: "BASE_ATUAL",
+        escopo_ajuste: "GLOBAL",
+        perfil_ajuste: "PROGRAMADOR",
+        observacao: "Contagem oficial usa emendas atuais da base consolidada com ajuste manual global auditado."
+      },
       summary: summary,
       byDeputado: byDeputado,
       byMunicipio: byMunicipio,
+      byObjetivo: byObjetivo,
       byStatus: byStatus,
       byUser: byUser
     };

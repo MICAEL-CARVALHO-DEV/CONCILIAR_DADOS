@@ -149,8 +149,30 @@ Assert-HasKeys -Payload $dashboard -Keys @(
   "ultima_atualizacao",
   "status_counts",
   "top_deputados",
-  "latest_event"
+  "latest_event",
+  "contagem_deputado_policy"
 ) -Label "dashboard/resumo"
+Assert-HasKeys -Payload $dashboard.contagem_deputado_policy -Keys @(
+  "origem_oficial",
+  "escopo_ajuste",
+  "perfil_ajuste",
+  "observacao"
+) -Label "dashboard/resumo.contagem_deputado_policy"
+if ([string]$dashboard.contagem_deputado_policy.origem_oficial -ne "BASE_ATUAL") {
+  throw "dashboard/resumo.contagem_deputado_policy.origem_oficial deveria ser BASE_ATUAL"
+}
+
+Write-Host "[smoke-resumo] consultando /dashboard/deputados/politica"
+$dashboardPolicy = Invoke-Json -Method "GET" -Url "$base/dashboard/deputados/politica" -Headers $headers -Body $null
+Assert-HasKeys -Payload $dashboardPolicy -Keys @(
+  "origem_oficial",
+  "escopo_ajuste",
+  "perfil_ajuste",
+  "observacao"
+) -Label "dashboard/deputados/politica"
+if ([string]$dashboardPolicy.origem_oficial -ne "BASE_ATUAL") {
+  throw "dashboard/deputados/politica.origem_oficial deveria ser BASE_ATUAL"
+}
 
 Write-Host "[smoke-resumo] consultando /imports/resumo"
 $imports = Invoke-Json -Method "GET" -Url "$base/imports/resumo" -Headers $headers -Body $null

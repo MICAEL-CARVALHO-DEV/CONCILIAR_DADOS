@@ -9,11 +9,16 @@ from sqlalchemy.orm import Session
 from ..models import Emenda, Historico
 
 
+def _normalize_loose_text(value: str | None) -> str:
+    return str(value or "").strip().lower()
+
+
 def _apply_audit_filters(
     query,
     *,
     ano: int | None,
     mes: int | None,
+    objetivo_epi: str | None,
     usuario: str | None,
     setor: str | None,
     tipo_evento: str | None,
@@ -28,14 +33,16 @@ def _apply_audit_filters(
             end = datetime(ano + 1, 1, 1)
         query = query.filter(Historico.data_hora >= start, Historico.data_hora < end)
 
+    if objetivo_epi:
+        query = query.filter(Emenda.objetivo_epi.ilike(f"%{objetivo_epi.strip()}%"))
     if usuario:
-        query = query.filter(Historico.usuario_nome.ilike(f"%{usuario.strip()}%"))
+        query = query.filter(func.lower(Historico.usuario_nome) == _normalize_loose_text(usuario))
     if setor:
-        query = query.filter(Historico.setor.ilike(f"%{setor.strip()}%"))
+        query = query.filter(func.upper(Historico.setor) == str(setor).strip().upper())
     if tipo_evento:
-        query = query.filter(Historico.tipo_evento.ilike(f"%{tipo_evento.strip()}%"))
+        query = query.filter(func.upper(Historico.tipo_evento) == str(tipo_evento).strip().upper())
     if origem_evento:
-        query = query.filter(Historico.origem_evento.ilike(f"%{origem_evento.strip()}%"))
+        query = query.filter(func.upper(Historico.origem_evento) == str(origem_evento).strip().upper())
     if q:
         pattern = f"%{q.strip()}%"
         query = query.filter(
@@ -53,6 +60,7 @@ def _apply_audit_filters(
                 Emenda.municipio.ilike(pattern),
                 Emenda.cod_acao.ilike(pattern),
                 Emenda.descricao_acao.ilike(pattern),
+                Emenda.objetivo_epi.ilike(pattern),
             )
         )
 
@@ -64,6 +72,7 @@ def list_audit_log_service(
     limit: int,
     ano: int | None,
     mes: int | None,
+    objetivo_epi: str | None,
     usuario: str | None,
     setor: str | None,
     tipo_evento: str | None,
@@ -77,6 +86,7 @@ def list_audit_log_service(
         query,
         ano=ano,
         mes=mes,
+        objetivo_epi=objetivo_epi,
         usuario=usuario,
         setor=setor,
         tipo_evento=tipo_evento,
@@ -96,6 +106,7 @@ def list_audit_log_service(
                 "emenda_ano": emenda.ano,
                 "emenda_municipio": emenda.municipio,
                 "emenda_deputado": emenda.deputado,
+                "emenda_objetivo_epi": emenda.objetivo_epi,
                 "usuario_id": hist.usuario_id,
                 "usuario_nome": hist.usuario_nome,
                 "setor": hist.setor,
@@ -115,6 +126,7 @@ def build_audit_summary_service(
     *,
     ano: int | None,
     mes: int | None,
+    objetivo_epi: str | None,
     usuario: str | None,
     setor: str | None,
     tipo_evento: str | None,
@@ -128,6 +140,7 @@ def build_audit_summary_service(
         base_query,
         ano=ano,
         mes=mes,
+        objetivo_epi=objetivo_epi,
         usuario=usuario,
         setor=setor,
         tipo_evento=tipo_evento,

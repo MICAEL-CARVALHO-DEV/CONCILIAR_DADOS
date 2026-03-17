@@ -129,7 +129,7 @@
         width = Math.max(width, String(value == null ? "" : value).length + 2);
       }
       width = Math.max(width, Number((widthHints || {})[headerKey] || 0));
-      out.push({ wch: clamp(width, 12, 42) });
+      out.push({ wch: clamp(width, 12, 54) });
     }
     return out;
   }
@@ -166,7 +166,7 @@
       if (rowIndex < headerRowIndex) rowsMeta[rowIndex] = { hpt: 21 };
       else if (rowIndex === headerRowIndex) rowsMeta[rowIndex] = { hpt: 25 };
       else if (rowIndex === totalRowIndex) rowsMeta[rowIndex] = { hpt: 24 };
-      else rowsMeta[rowIndex] = { hpt: 20 };
+      else rowsMeta[rowIndex] = { hpt: 22 };
     }
     ws["!rows"] = rowsMeta;
 
@@ -189,7 +189,7 @@
           });
         } else if (r === headerRowIndex) {
           style = buildCellStyle({
-            fillColor: modifiedHeaders[headerKey] ? "C7791A" : "0F4C81",
+            fillColor: modifiedHeaders[headerKey] ? "C7791A" : "0A3D91",
             fontColor: "FFFFFF",
             bold: true,
             horizontal: alignLeft ? "left" : "center",
@@ -197,7 +197,7 @@
           });
         } else if (r === totalRowIndex) {
           style = buildCellStyle({
-            fillColor: "D6EAF8",
+            fillColor: "D9E8FF",
             bold: true,
             horizontal: alignLeft ? "left" : "center",
             fontSize: 11
@@ -272,19 +272,12 @@
       modifiedHeaders: modifiedHeaders,
       widthHints: {
         identificacao: 24,
-        descricao_acao: 34,
-        objetivo_epi: 34,
-        plan_a: 24,
-        plan_b: 24,
+        descricao_acao: 38,
+        objetivo_epi: 40,
+        plan_a: 30,
+        plan_b: 30,
         usuarios_ativos: 24,
         processo_sei: 18
-      },
-      leftAlignHeaders: {
-        identificacao: true,
-        descricao_acao: true,
-        objetivo_epi: true,
-        plan_a: true,
-        plan_b: true
       }
     });
     applyWorksheetPresentation(wsAudit, auditSheetAoa, xlsxApi, {
@@ -296,14 +289,6 @@
         valor_antigo: 22,
         valor_novo: 22,
         motivo: 30
-      },
-      leftAlignHeaders: {
-        identificacao: true,
-        municipio: true,
-        usuarios_ativos: true,
-        valor_antigo: true,
-        valor_novo: true,
-        motivo: true
       }
     });
 

@@ -558,6 +558,11 @@ class DashboardStatusMetricOut(BaseModel):
 class DashboardDeputadoMetricOut(BaseModel):
     deputado: str
     total: int
+    base_total: int | None = None
+    ajuste_manual: bool = False
+    ajuste_motivo: str | None = None
+    ajustado_por: str | None = None
+    ajustado_em: datetime | None = None
 
 
 class DashboardLatestEventOut(BaseModel):
@@ -566,6 +571,13 @@ class DashboardLatestEventOut(BaseModel):
     setor: str
     emenda_identificacao: str
     data_hora: datetime
+
+
+class DashboardDeputadoCountPolicyOut(BaseModel):
+    origem_oficial: str
+    escopo_ajuste: str
+    perfil_ajuste: str
+    observacao: str
 
 
 class DashboardSummaryOut(BaseModel):
@@ -577,6 +589,41 @@ class DashboardSummaryOut(BaseModel):
     status_counts: list[DashboardStatusMetricOut]
     top_deputados: list[DashboardDeputadoMetricOut]
     latest_event: DashboardLatestEventOut | None = None
+    contagem_deputado_policy: DashboardDeputadoCountPolicyOut
+
+
+class DashboardDeputadoCountAdjustmentIn(BaseModel):
+    deputado: str = Field(min_length=1, max_length=120)
+    total_ajustado: int = Field(ge=0)
+    motivo: str = Field(min_length=3, max_length=2000)
+
+    @field_validator("deputado")
+    @classmethod
+    def validate_deputado(cls, value: str) -> str:
+        v = (value or "").strip()
+        if not v:
+            raise ValueError("deputado invalido")
+        return v
+
+    @field_validator("motivo")
+    @classmethod
+    def validate_motivo(cls, value: str) -> str:
+        v = (value or "").strip()
+        if len(v) < 3:
+            raise ValueError("motivo invalido")
+        return v
+
+
+class DashboardDeputadoCountAdjustmentOut(BaseModel):
+    deputado: str
+    total_ajustado: int
+    escopo: str
+    motivo: str
+    usuario_id: int | None = None
+    usuario_nome: str
+    setor: str
+    created_at: datetime
+    updated_at: datetime
 
 
 class AuditSummaryMetricOut(BaseModel):

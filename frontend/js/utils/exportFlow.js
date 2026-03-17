@@ -59,10 +59,8 @@
     }
 
     var templateReady = !!dep.templateReady;
-    var templateMode = templateReady
-      ? confirmFn("Exportar em modo TEMPLATE (mesma estrutura do XLSX original, alterando apenas dados)?")
-      : false;
-    var modeOriginal = templateMode ? true : confirmFn("Exportar com headers originais? OK = Originais, Cancelar = Normalizados.");
+    var templateMode = templateReady;
+    var modeOriginal = true;
     var roundTripCheck = confirmFn("Executar round-trip check apos exportar? (pode ser mais lento)");
     var filename = typeof dep.buildExportFilename === "function" ? dep.buildExportFilename(exportScope) : "";
     var filtersSnapshot = typeof dep.buildExportFiltersSnapshot === "function"

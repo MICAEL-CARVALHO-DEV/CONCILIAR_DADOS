@@ -89,11 +89,13 @@
     var rerender = typeof opts.rerender === "function" ? opts.rerender : noop;
     var setSupportFilters = typeof opts.setSupportFilters === "function" ? opts.setSupportFilters : noop;
     var setSelectedThreadId = typeof opts.setSelectedThreadId === "function" ? opts.setSelectedThreadId : noop;
+    var setLastRequest = typeof opts.setLastRequest === "function" ? opts.setLastRequest : noop;
     var setMessagesError = typeof opts.setMessagesError === "function" ? opts.setMessagesError : noop;
 
     var threads = safeArray(opts.threads);
     var messages = safeArray(opts.messages);
     var filters = opts.filters && typeof opts.filters === "object" ? opts.filters : {};
+    var lastRequest = opts.lastRequest && typeof opts.lastRequest === "object" ? opts.lastRequest : null;
     var supportCategories = safeArray(opts.supportCategories);
     var supportThreadStatus = safeArray(opts.supportThreadStatus);
     var supportFilterDefaults = opts.supportFilterDefaults && typeof opts.supportFilterDefaults === "object" ? opts.supportFilterDefaults : {};
@@ -231,7 +233,19 @@
       composerFeedback.textContent = "Enviando chamado...";
       try {
         var created = await apiRequest("POST", "/support/threads", payload, "UI");
+        var emendaLabel = "";
+        if (emendaSelect.value) {
+          var selectedOption = emendaSelect.options && emendaSelect.selectedIndex >= 0 ? emendaSelect.options[emendaSelect.selectedIndex] : null;
+          emendaLabel = selectedOption ? String(selectedOption.textContent || "") : "";
+        }
         setSelectedThreadId(Number(created && created.id ? created.id : 0));
+        setLastRequest({
+          id: Number(created && created.id ? created.id : 0),
+          subject: payload.subject,
+          categoria: payload.categoria,
+          emendaLabel: emendaLabel,
+          createdAt: created && created.created_at ? created.created_at : ""
+        });
         subjectInput.value = "";
         categorySelect.value = "OPERACAO";
         emendaSelect.value = "";
@@ -245,6 +259,26 @@
     });
 
     if (!isSupportManagerUser()) {
+      if (lastRequest) {
+        var requestCard = document.createElement("div");
+        requestCard.className = "beta-panel-card beta-support-request-card";
+        var requestTitle = document.createElement("h4");
+        requestTitle.textContent = "Solicitacao registrada";
+        requestCard.appendChild(requestTitle);
+        [
+          "Protocolo: #" + String(lastRequest.id || "-"),
+          "Assunto: " + text(lastRequest.subject || "-"),
+          "Categoria: " + text(lastRequest.categoria || "-"),
+          "Emenda relacionada: " + (text(lastRequest.emendaLabel || "") || "Nao vinculada"),
+          "Envio: " + (lastRequest.createdAt ? fmtDateTime(lastRequest.createdAt) : "agora")
+        ].forEach(function (line) {
+          var item = document.createElement("div");
+          item.className = "beta-metric-line";
+          item.textContent = line;
+          requestCard.appendChild(item);
+        });
+        target.appendChild(requestCard);
+      }
       var restrictedNote = document.createElement("p");
       restrictedNote.className = "muted small";
       restrictedNote.textContent = "Nesta fase, usuarios operacionais usam apenas a solicitacao. Historico completo, respostas e fechamento ficam concentrados no PROGRAMADOR.";

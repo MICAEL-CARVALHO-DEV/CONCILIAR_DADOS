@@ -33,17 +33,19 @@ Success: Qualquer duvida de "o que falta" e respondida aqui, sem precisar cruzar
   Parcialmente decidido:
   - ajuste manual fica habilitado
   - escopo do ajuste: global
-  - quem pode ajustar: todos
+  - base tecnica atual: ajuste global auditado via `PUT /dashboard/deputados/ajustes`
+  - permissao tecnica atual: somente `PROGRAMADOR` (seguranca para beta)
   Ainda falta decidir com a funcionaria: origem oficial da contagem (`base atual`, `historico` ou outra origem).
-- [DOING] `C25-B` nome final do bloco/rotulo.
-  Regra funcional ja fechada como `operacional`, mas ainda existe ajuste de nomenclatura pedido pelo usuario (`Objetivo EPI` e `Planilha1`, com possibilidade de renomear no front).
-- [DOING] `C27` regra oficial do export da operacao.
-  Direcao atual:
-  - manter a logica atual como base
-  - nao forcar `template mode` por enquanto
-  - melhorar layout visual do arquivo final
-  - acabamento visual do export atual ja esta codificado sem trocar a logica base
-  Ainda falta cravar a regra final: manter export atual de vez ou migrar para modo oficial mais rigido depois da beta.
+- [DONE] `C25-B` nome final do bloco/rotulo.
+  Fechado assim:
+  - `Objetivo EPI` = eixo principal da operacao
+  - `Planilha1` = reflexo operacional/resumo por deputado
+  - front atualizado para refletir esse encaixe sem mudar o contrato do campo
+- [DONE] `C27` regra oficial do export da operacao.
+  Fechado assim:
+  - `template mode` passa a ser o padrao quando existe XLSX original importado
+  - sem template, o export segue pela trilha atual com headers originais e visual reforcado
+  - layout visual do arquivo final foi reforcado sem trocar o contrato do dado exportado
 
 ### B) Validacao final (manual/visual)
 - [TODO] `C48` validar filtros fortes do historico operacional.
@@ -70,19 +72,17 @@ Success: Qualquer duvida de "o que falta" e respondida aqui, sem precisar cruzar
 
 ## Ordem recomendada para resolver agora
 1. `C49-A` (origem oficial da contagem)
-2. `C27` (fechar regra final do export)
-3. `C48`
-4. `C49`
-5. `C50-A`
-6. warning `aria-hidden`
-7. `C45-A`
+2. `C48`
+3. `C49`
+4. `C50-A`
+5. warning `aria-hidden`
+6. `C45-A`
 
 ## Formato de resposta rapida (para voce me enviar)
 1. `C49-A`: <origem oficial da contagem>
-2. `C27`: <export atual definitivo ou nova regra>
-3. `C48`: <passou/falhou>
-4. `C50-A`: <passou/falhou>
-5. `C45-A`: <passou/falhou>
+2. `C48`: <passou/falhou>
+3. `C50-A`: <passou/falhou>
+4. `C45-A`: <passou/falhou>
 
 ## Criterio de fechamento da beta
 Beta fecha quando:

@@ -9,9 +9,7 @@
     if (!rec) return;
 
     var templateReady = !!(ctx.lastImportedWorkbookTemplate && ctx.lastImportedWorkbookTemplate.buffer);
-    var templateMode = templateReady
-      ? globalScope.confirm("Exportar este registro em modo TEMPLATE (mesma estrutura do XLSX original)?")
-      : false;
+    var templateMode = templateReady;
     var roundTripCheck = globalScope.confirm("Executar round-trip check apos exportar? (pode ser mais lento)");
     var filename = "emenda_" + rec.id + "_" + ctx.dateStamp() + ".xlsx";
 

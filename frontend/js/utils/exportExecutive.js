@@ -26,6 +26,7 @@
       ["Filtro deputado", filters.deputado || "Todos"],
       ["Filtro municipio", filters.municipio || "Todos"],
       ["Filtro status", filters.status || "Todos"],
+      ["Filtro Objetivo EPI", filters.objetivo_epi || "Todos"],
       ["Busca", filters.q || "-"],
       [],
       ["Indicador", "Valor"],
@@ -33,6 +34,7 @@
       ["Valor atual total", Number(summary.valorTotal || 0)],
       ["Deputados monitorados", summary.deputados ? summary.deputados.size : 0],
       ["Municipios cobertos", summary.municipios ? summary.municipios.size : 0],
+      ["Objetivos ativos", summary.objetivos ? summary.objetivos.size : 0],
       ["Concluidas", Number(summary.done || 0)],
       ["Em atencao", Number(summary.attention || 0)],
       ["Ultima atualizacao", summary.latestUpdate ? fmtDateTime(summary.latestUpdate) : "-"],
@@ -85,6 +87,19 @@
     }));
   }
 
+  function buildExecutiveObjetivosAoa(model) {
+    var byObjetivo = model && model.byObjetivo ? model.byObjetivo : {};
+    var objetivos = Object.keys(byObjetivo).map(function (key) {
+      return byObjetivo[key];
+    }).sort(function (a, b) {
+      if (b.total !== a.total) return b.total - a.total;
+      return b.valor - a.valor;
+    });
+    return [["Objetivo EPI", "Emendas", "Valor Atual", "Em atencao"]].concat(objetivos.map(function (item) {
+      return [item.label, item.total || 0, Number(item.valor || 0), item.attention || 0];
+    }));
+  }
+
   function buildExecutiveUsersAoa(model, options) {
     var opts = options || {};
     var byUser = model && model.byUser ? model.byUser : {};
@@ -104,6 +119,7 @@
     buildExecutiveSummaryAoa: buildExecutiveSummaryAoa,
     buildExecutiveDeputadosAoa: buildExecutiveDeputadosAoa,
     buildExecutiveMunicipiosAoa: buildExecutiveMunicipiosAoa,
+    buildExecutiveObjetivosAoa: buildExecutiveObjetivosAoa,
     buildExecutiveUsersAoa: buildExecutiveUsersAoa
   };
 })(window);

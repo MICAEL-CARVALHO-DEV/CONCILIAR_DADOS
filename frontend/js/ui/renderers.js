@@ -162,6 +162,11 @@
     var renderMemberChips = typeof opts.renderMemberChips === "function" ? opts.renderMemberChips : null;
     var onView = typeof opts.onView === "function" ? opts.onView : null;
     var getLastEventDays = typeof opts.getLastEventDays === "function" ? opts.getLastEventDays : function () { return Number.POSITIVE_INFINITY; };
+    var rowNumber = Number(
+      opts.rowNumber != null
+        ? opts.rowNumber
+        : (opts.rowIndex != null ? (Number(opts.rowIndex) + 1) : NaN)
+    );
 
     var record = rec || {};
     var users = [];
@@ -176,7 +181,8 @@
 
     var tdId = document.createElement("td");
     var code = document.createElement("code");
-    code.textContent = String(record.id || "");
+    code.textContent = Number.isFinite(rowNumber) && rowNumber > 0 ? String(rowNumber) : String(record.id || "");
+    code.title = "ID interno: " + String(record.id || "-");
     tdId.appendChild(code);
     tr.appendChild(tdId);
 

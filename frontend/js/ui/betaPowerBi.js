@@ -70,6 +70,15 @@
     var byMunicipio = model.byMunicipio && typeof model.byMunicipio === "object" ? model.byMunicipio : {};
     var byStatus = model.byStatus && typeof model.byStatus === "object" ? model.byStatus : {};
     var byUser = model.byUser && typeof model.byUser === "object" ? model.byUser : {};
+    var byObjetivo = model.byObjetivo && typeof model.byObjetivo === "object" ? model.byObjetivo : {};
+    var deputadoCountPolicy = model.deputadoCountPolicy && typeof model.deputadoCountPolicy === "object"
+      ? model.deputadoCountPolicy
+      : {
+          origem_oficial: "BASE_ATUAL",
+          escopo_ajuste: "GLOBAL",
+          perfil_ajuste: "PROGRAMADOR",
+          observacao: "Contagem oficial usa emendas atuais da base consolidada com ajuste manual global auditado."
+        };
 
     var intro = document.createElement("div");
     intro.className = "beta-panel-card";
@@ -82,6 +91,20 @@
       : "Visao compartilhada em leitura. O detalhamento executivo e a governanca operacional continuam centralizados em APG, SUPERVISAO, POWERBI e PROGRAMADOR.";
     intro.appendChild(introTitle);
     intro.appendChild(introText);
+    var introBadges = document.createElement("div");
+    introBadges.className = "beta-head-actions beta-inline-badges";
+    [
+      "Modo leitura",
+      "Fonte principal: Objetivo EPI",
+      "Reflexo executivo da operacao",
+      "Contagem deputado: " + safeText(deputadoCountPolicy.origem_oficial || "BASE_ATUAL")
+    ].forEach(function (labelText) {
+      var badge = document.createElement("span");
+      badge.className = "beta-source-badge";
+      badge.textContent = labelText;
+      introBadges.appendChild(badge);
+    });
+    intro.appendChild(introBadges);
     if (isExecutiveRole) {
       var executiveActions = document.createElement("div");
       executiveActions.className = "beta-history-filter-actions";
@@ -122,13 +145,25 @@
     var municipioSelect = appendSelectField("Municipio", filterOptions.municipios, filters.municipio);
     var statusSelect = appendSelectField("Status atual", filterOptions.statuses, filters.status);
 
+    var objetivoField = document.createElement("div");
+    objetivoField.className = "field";
+    var objetivoLabel = document.createElement("label");
+    objetivoLabel.textContent = "Objetivo EPI";
+    var objetivoInput = document.createElement("input");
+    objetivoInput.type = "text";
+    objetivoInput.placeholder = "Filtrar por objetivo principal";
+    objetivoInput.value = filters.objetivo_epi || "";
+    objetivoField.appendChild(objetivoLabel);
+    objetivoField.appendChild(objetivoInput);
+    filterWrap.appendChild(objetivoField);
+
     var searchField = document.createElement("div");
     searchField.className = "field grow";
     var searchLabel = document.createElement("label");
-    searchLabel.textContent = "Busca no dashboard";
+    searchLabel.textContent = "Busca complementar";
     var searchInput = document.createElement("input");
     searchInput.type = "text";
-    searchInput.placeholder = "emenda, deputado, municipio, acao, plano...";
+    searchInput.placeholder = "emenda, objetivo epi, deputado, municipio, acao...";
     searchInput.value = filters.q || "";
     searchField.appendChild(searchLabel);
     searchField.appendChild(searchInput);
@@ -159,6 +194,7 @@
         deputado: String(deputadoSelect.value || ""),
         municipio: String(municipioSelect.value || ""),
         status: String(statusSelect.value || ""),
+        objetivo_epi: String(objetivoInput.value || "").trim(),
         q: String(searchInput.value || "").trim()
       });
       rerender();
@@ -174,6 +210,11 @@
     });
 
     searchInput.addEventListener("keydown", function (event) {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      applyBtn.click();
+    });
+    objetivoInput.addEventListener("keydown", function (event) {
       if (event.key !== "Enter") return;
       event.preventDefault();
       applyBtn.click();
@@ -210,6 +251,7 @@
     addKpi("Valor atual total", "R$ " + fmtMoney(summary.valorTotal || 0));
     addKpi("Deputados monitorados", String(summary.deputados ? summary.deputados.size : 0));
     addKpi("Municipios cobertos", String(summary.municipios ? summary.municipios.size : 0));
+    addKpi("Objetivos ativos", String(summary.objetivos ? summary.objetivos.size : 0));
     addKpi("Concluidas", String(summary.done || 0));
     addKpi("Em atencao", String(summary.attention || 0));
     target.appendChild(kpiGrid);
@@ -267,6 +309,11 @@
       return b.valor - a.valor;
     }).slice(0, 10);
 
+    var objetivos = Object.keys(byObjetivo).map(function (key) { return byObjetivo[key]; }).sort(function (a, b) {
+      if (b.total !== a.total) return b.total - a.total;
+      return b.valor - a.valor;
+    }).slice(0, 10);
+
     var users = Object.keys(byUser).map(function (key) { return byUser[key]; }).sort(function (a, b) {
       if (b.total !== a.total) return b.total - a.total;
       return String(b.lastAt || "").localeCompare(String(a.lastAt || ""));
@@ -281,6 +328,14 @@
     });
 
     appendSummaryTable("Controle por municipio", ["Municipio", "Emendas", "Valor atual", "Atencao"], municipios, function (tr, item) {
+      [item.label, String(item.total), "R$ " + fmtMoney(item.valor), String(item.attention)].forEach(function (value) {
+        var td = document.createElement("td");
+        td.textContent = value;
+        tr.appendChild(td);
+      });
+    });
+
+    appendSummaryTable("Controle por Objetivo EPI", ["Objetivo EPI", "Emendas", "Valor atual", "Atencao"], objetivos, function (tr, item) {
       [item.label, String(item.total), "R$ " + fmtMoney(item.valor), String(item.attention)].forEach(function (value) {
         var td = document.createElement("td");
         td.textContent = value;
@@ -308,7 +363,12 @@
       "Ultima atualizacao: " + (summary.latestUpdate ? fmtDateTime(summary.latestUpdate) : "-"),
       "Filtro superior aplicado sobre " + String(sourceRows.length) + " emendas.",
       "Filtro interno do dashboard retornou " + String(rows.length) + " emendas.",
-      "Todos podem visualizar o dashboard; a leitura executiva e a governanca continuam centralizadas em APG, SUPERVISAO, POWERBI e PROGRAMADOR."
+      "Objetivos EPI ativos no recorte: " + String(summary.objetivos ? summary.objetivos.size : 0) + ".",
+      "Contagem oficial de deputado: " + safeText(deputadoCountPolicy.origem_oficial || "BASE_ATUAL") + ".",
+      "Ajuste manual de contagem: escopo " + safeText(deputadoCountPolicy.escopo_ajuste || "GLOBAL") + " por " + safeText(deputadoCountPolicy.perfil_ajuste || "PROGRAMADOR") + ".",
+      safeText(deputadoCountPolicy.observacao || ""),
+      "Objetivo EPI alimenta o recorte principal do dashboard e orienta a leitura executiva.",
+      "Todos podem visualizar o dashboard; alteracoes continuam na operacao e na governanca."
     ].forEach(function (line) {
       var item = document.createElement("div");
       item.className = "beta-metric-line";

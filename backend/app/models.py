@@ -192,6 +192,21 @@ class ExportLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
 
+class DeputadoCountAdjustment(Base):
+    __tablename__ = "deputado_count_adjustments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    deputado: Mapped[str] = mapped_column(String(120), unique=True, index=True, nullable=False)
+    total_ajustado: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    escopo: Mapped[str] = mapped_column(String(20), default="GLOBAL", nullable=False)
+    motivo: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    usuario_id: Mapped[Optional[int]] = mapped_column(ForeignKey("usuarios.id"), nullable=True)
+    usuario_nome: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    setor: Mapped[str] = mapped_column(String(40), default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+
+
 class Historico(Base):
     __tablename__ = "historico"
 

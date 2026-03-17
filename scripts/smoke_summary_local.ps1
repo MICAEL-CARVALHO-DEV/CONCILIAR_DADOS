@@ -333,9 +333,38 @@ with TestClient(app) as client:
             "status_counts",
             "top_deputados",
             "latest_event",
+            "contagem_deputado_policy",
         ],
         "dashboard/resumo",
     )
+    assert_keys(
+        dashboard_json.get("contagem_deputado_policy") or {},
+        [
+            "origem_oficial",
+            "escopo_ajuste",
+            "perfil_ajuste",
+            "observacao",
+        ],
+        "dashboard/resumo.contagem_deputado_policy",
+    )
+    if str((dashboard_json.get("contagem_deputado_policy") or {}).get("origem_oficial") or "").strip().upper() != "BASE_ATUAL":
+        raise AssertionError("contagem_deputado_policy.origem_oficial deveria ser BASE_ATUAL")
+
+    dashboard_policy = client.get("/dashboard/deputados/politica", headers=headers)
+    dashboard_policy.raise_for_status()
+    dashboard_policy_json = dashboard_policy.json()
+    assert_keys(
+        dashboard_policy_json,
+        [
+            "origem_oficial",
+            "escopo_ajuste",
+            "perfil_ajuste",
+            "observacao",
+        ],
+        "dashboard/deputados/politica",
+    )
+    if str(dashboard_policy_json.get("origem_oficial") or "").strip().upper() != "BASE_ATUAL":
+        raise AssertionError("/dashboard/deputados/politica deveria fixar origem_oficial em BASE_ATUAL")
 
     imports = client.get("/imports/resumo", headers=headers)
     imports.raise_for_status()
@@ -409,11 +438,103 @@ with TestClient(app) as client:
         "support/resumo",
     )
 
+    ajuste_deputado = "DEP-AJUSTE-SMOKE"
+    ajuste_put = client.put(
+        "/dashboard/deputados/ajustes",
+        headers=headers,
+        json={
+            "deputado": ajuste_deputado,
+            "total_ajustado": 77,
+            "motivo": "smoke ajuste global de deputado",
+        },
+    )
+    ajuste_put.raise_for_status()
+    ajuste_json = ajuste_put.json()
+    if not bool(ajuste_json.get("deputado")):
+        raise AssertionError("dashboard/deputados/ajustes nao retornou deputado")
+
+    ajustes_list = client.get("/dashboard/deputados/ajustes", headers=headers)
+    ajustes_list.raise_for_status()
+    ajustes_rows = ajustes_list.json()
+    if not any(str(row.get("deputado") or "").strip().upper() == ajuste_deputado for row in ajustes_rows):
+        raise AssertionError("ajuste de deputado nao apareceu na listagem")
+
+    dashboard_after_adjust = client.get("/dashboard/resumo", headers=headers)
+    dashboard_after_adjust.raise_for_status()
+    dashboard_after_adjust_json = dashboard_after_adjust.json()
+    top_rows = dashboard_after_adjust_json.get("top_deputados") or []
+    matching_adjusted = None
+    for row in top_rows:
+        if str(row.get("deputado") or "").strip().upper() == ajuste_deputado:
+            matching_adjusted = row
+            break
+    if matching_adjusted and not bool(matching_adjusted.get("ajuste_manual")):
+        raise AssertionError("dashboard/resumo deveria sinalizar ajuste_manual quando houver override")
+
+    ajuste_delete = client.delete(
+        "/dashboard/deputados/ajustes",
+        headers=headers,
+        params={"deputado": ajuste_deputado},
+    )
+    ajuste_delete.raise_for_status()
+
+    objetivo_marker = f"OBJ-EPI-SMOKE-{stamp}"
+    emenda_objetivo_resp = client.post(
+        "/emendas",
+        headers=headers,
+        json={
+            "id_interno": f"SMOKE-OBJ-{stamp}",
+            "ano": 2026,
+            "identificacao": "Smoke Objetivo EPI",
+            "objetivo_epi": objetivo_marker,
+            "status_oficial": "Recebido",
+        },
+    )
+    emenda_objetivo_resp.raise_for_status()
+    emenda_objetivo_id = emenda_objetivo_resp.json()["id"]
+
+    evento_objetivo_resp = client.post(
+        f"/emendas/{emenda_objetivo_id}/eventos",
+        headers=headers,
+        json={
+            "tipo_evento": "NOTE",
+            "motivo": "smoke filtro objetivo epi",
+        },
+    )
+    evento_objetivo_resp.raise_for_status()
+
+    audit_objetivo = client.get(
+        "/audit",
+        headers=headers,
+        params={"limit": 120, "objetivo_epi": objetivo_marker},
+    )
+    audit_objetivo.raise_for_status()
+    audit_objetivo_rows = audit_objetivo.json()
+    if not audit_objetivo_rows:
+        raise AssertionError("filtro objetivo_epi do audit nao retornou evento esperado")
+    if not any(objetivo_marker in str(row.get("emenda_objetivo_epi") or "") for row in audit_objetivo_rows):
+        raise AssertionError("filtro objetivo_epi do audit nao refletiu emenda_objetivo_epi")
+
+    audit_perfil = client.get(
+        "/audit",
+        headers=headers,
+        params={"limit": 120, "perfil": "PROGRAMADOR"},
+    )
+    audit_perfil.raise_for_status()
+    audit_perfil_rows = audit_perfil.json()
+    if not audit_perfil_rows:
+        raise AssertionError("filtro perfil do audit nao retornou dados")
+    if not all(str(row.get("setor") or "").strip().upper() == "PROGRAMADOR" for row in audit_perfil_rows):
+        raise AssertionError("filtro perfil do audit nao aplicou setor corretamente")
+
     print("[smoke-summary-local] dashboard total_registros:", dashboard_json["total_registros"])
     print("[smoke-summary-local] imports total_lotes:", imports_json["total_lotes"])
     print("[smoke-summary-local] exports total_exports:", exports_json["total_exports"])
     print("[smoke-summary-local] audit total_eventos:", audit_json["total_eventos"])
     print("[smoke-summary-local] support total_threads:", support_json["total_threads"])
+    print("[smoke-summary-local] deputado adjustment:", "OK")
+    print("[smoke-summary-local] audit objetivo_epi filter:", "OK")
+    print("[smoke-summary-local] audit perfil alias filter:", "OK")
     print("[smoke-summary-local] import owner governance:", govern_owner_json["status_governanca"])
     print("[smoke-summary-local] support scope usuario:", support_scope_json["escopo"])
     print("[smoke-summary-local] import logical remove:", removable_govern_json["status_governanca"])
