@@ -789,8 +789,29 @@
     if (!modalEl) return;
     var isVisible = !!visible;
     var active = typeof document !== "undefined" ? document.activeElement : null;
-    if (!isVisible && active && modalEl.contains(active) && typeof active.blur === "function") {
-      active.blur();
+    if (!isVisible && active && modalEl.contains(active)) {
+      if (typeof active.blur === "function") {
+        active.blur();
+      }
+      var stillInside = typeof document !== "undefined" && document.activeElement && modalEl.contains(document.activeElement);
+      if (stillInside) {
+        var fallback = document.body || document.documentElement;
+        if (fallback && typeof fallback.focus === "function") {
+          var hadTabIndex = fallback.hasAttribute("tabindex");
+          var prevTabIndex = fallback.getAttribute("tabindex");
+          if (!hadTabIndex) fallback.setAttribute("tabindex", "-1");
+          try {
+            fallback.focus({ preventScroll: true });
+          } catch (_err) {
+            fallback.focus();
+          }
+          if (!hadTabIndex) {
+            fallback.removeAttribute("tabindex");
+          } else if (prevTabIndex != null) {
+            fallback.setAttribute("tabindex", prevTabIndex);
+          }
+        }
+      }
     }
     if ("inert" in modalEl) {
       modalEl.inert = !isVisible;

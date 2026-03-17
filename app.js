@@ -149,7 +149,7 @@ const DEPUTADO_COUNT_POLICY = Object.freeze({
   origem_oficial: "BASE_ATUAL",
   escopo_ajuste: "GLOBAL",
   perfil_ajuste: "PROGRAMADOR",
-  observacao: "Contagem oficial usa emendas atuais da base consolidada com ajuste manual global auditado."
+  observacao: "Contagem oficial usa emendas atuais da base consolidada; todos os usuarios autenticados podem visualizar e apenas PROGRAMADOR pode ajustar globalmente com auditoria."
 });
 const REALTIME_USER_PANEL_ENABLED = false;
 const LOA_PRE_BETA_LOCKED = String(
@@ -4349,7 +4349,7 @@ function syncBetaSupportPolling() {
   if (moduleFn) {
     return moduleFn({
       shouldRun: function () {
-        return canUseSupportApi() && apiOnline && getActiveBetaWorkspaceTab() === "support";
+        return canUseSupportApi() && isSupportManagerUser() && apiOnline && getActiveBetaWorkspaceTab() === "support";
       },
       getTimer: function () {
         return betaSupportPollTimer;
@@ -4364,7 +4364,7 @@ function syncBetaSupportPolling() {
       intervalMs: BETA_SUPPORT_POLL_MS
     });
   }
-  if (!canUseSupportApi() || !apiOnline || getActiveBetaWorkspaceTab() !== "support") {
+  if (!canUseSupportApi() || !isSupportManagerUser() || !apiOnline || getActiveBetaWorkspaceTab() !== "support") {
     clearBetaSupportPolling();
     return;
   }
@@ -4558,7 +4558,7 @@ function setBetaWorkspaceTab(nextTab) {
   setShellActiveSector(betaWorkspaceTab);
   setShellActiveSection("betaWorkspace");
   syncBetaSupportPolling();
-  if (betaWorkspaceTab === "support" && canUseSupportApi() && apiOnline) {
+  if (betaWorkspaceTab === "support" && canUseSupportApi() && isSupportManagerUser() && apiOnline) {
     refreshBetaSupportFromApi(true).catch(function () { /* no-op */ });
   }
   if (betaWorkspaceTab === "imports" && isApiEnabled() && canImportData()) {
@@ -4703,12 +4703,16 @@ function applyBetaAuditFilters(rows) {
   }
   const source = Array.isArray(rows) ? rows : [];
   return source.filter(function (row) {
+    const usuarioFilter = normalizeLooseText(betaAuditFilters.usuario);
+    const setorFilter = normalizeLooseText(betaAuditFilters.setor);
+    const tipoEventoFilter = normalizeLooseText(betaAuditFilters.tipo_evento);
+    const origemEventoFilter = normalizeLooseText(betaAuditFilters.origem_evento);
     if (betaAuditFilters.ano && getAuditYearValue(row) !== String(betaAuditFilters.ano)) return false;
     if (betaAuditFilters.mes && getAuditMonthValue(row) !== String(betaAuditFilters.mes).padStart(2, "0")) return false;
-    if (betaAuditFilters.usuario && text(row && row.usuario_nome) !== betaAuditFilters.usuario) return false;
-    if (betaAuditFilters.setor && text(row && row.setor) !== betaAuditFilters.setor) return false;
-    if (betaAuditFilters.tipo_evento && text(row && row.tipo_evento) !== betaAuditFilters.tipo_evento) return false;
-    if (betaAuditFilters.origem_evento && text(row && row.origem_evento) !== betaAuditFilters.origem_evento) return false;
+    if (usuarioFilter && normalizeLooseText(text(row && row.usuario_nome)) !== usuarioFilter) return false;
+    if (setorFilter && normalizeLooseText(text(row && row.setor)) !== setorFilter) return false;
+    if (tipoEventoFilter && normalizeLooseText(text(row && row.tipo_evento)) !== tipoEventoFilter) return false;
+    if (origemEventoFilter && normalizeLooseText(text(row && row.origem_evento)) !== origemEventoFilter) return false;
     if (betaAuditFilters.objetivo_epi) {
       const objetivoBlob = normalizeLooseText(text(row && row.emenda_objetivo_epi));
       if (!objetivoBlob.includes(normalizeLooseText(betaAuditFilters.objetivo_epi))) return false;
@@ -5058,7 +5062,7 @@ async function refreshBetaSupportMessagesFromApi(forceRender, threadId) {
     return moduleFn(forceRender, threadId, getBetaSupportSyncContext());
   }
   const id = Number(threadId || betaSupportSelectedThreadId || 0);
-  if (!id || !canUseSupportApi()) {
+  if (!id || !canUseSupportApi() || !isSupportManagerUser()) {
     betaSupportMessages = [];
     betaSupportMessagesError = "";
     betaSupportMessagesLoading = false;
@@ -5090,6 +5094,17 @@ async function refreshBetaSupportFromApi(forceRender) {
     betaSupportError = isApiEnabled() ? "Sessao necessaria para usar suporte." : "Suporte exige API ativa.";
     betaSupportLoading = false;
     if (forceRender) renderBetaWorkspace(getFiltered());
+    return;
+  }
+  if (!isSupportManagerUser()) {
+    betaSupportThreads = [];
+    betaSupportMessages = [];
+    betaSupportError = "";
+    betaSupportMessagesError = "";
+    betaSupportLoading = false;
+    betaSupportLastSyncAt = isoNow();
+    if (forceRender) renderBetaWorkspace(getFiltered());
+    clearBetaSupportPolling();
     return;
   }
   if (betaSupportLoading) return;
@@ -5155,6 +5170,7 @@ function getBetaAuditSyncContext() {
 function getBetaSupportSyncContext() {
   return {
     canUseSupportApi: canUseSupportApi,
+    isSupportManagerUser: isSupportManagerUser,
     isApiEnabled: isApiEnabled,
     isLoading: function () {
       return betaSupportLoading;
@@ -6004,8 +6020,29 @@ function setAuxModalVisibilityWithFallback(modalEl, visible) {
   if (!modalEl) return;
   const isVisible = !!visible;
   const active = typeof document !== "undefined" ? document.activeElement : null;
-  if (!isVisible && active && modalEl.contains(active) && typeof active.blur === "function") {
-    active.blur();
+  if (!isVisible && active && modalEl.contains(active)) {
+    if (typeof active.blur === "function") {
+      active.blur();
+    }
+    const stillInside = typeof document !== "undefined" && document.activeElement && modalEl.contains(document.activeElement);
+    if (stillInside) {
+      const fallback = document.body || document.documentElement;
+      if (fallback && typeof fallback.focus === "function") {
+        const hadTabIndex = fallback.hasAttribute("tabindex");
+        const prevTabIndex = fallback.getAttribute("tabindex");
+        if (!hadTabIndex) fallback.setAttribute("tabindex", "-1");
+        try {
+          fallback.focus({ preventScroll: true });
+        } catch (_err) {
+          fallback.focus();
+        }
+        if (!hadTabIndex) {
+          fallback.removeAttribute("tabindex");
+        } else if (prevTabIndex != null) {
+          fallback.setAttribute("tabindex", prevTabIndex);
+        }
+      }
+    }
   }
   if ("inert" in modalEl) {
     modalEl.inert = !isVisible;
@@ -6414,6 +6451,28 @@ function buildExecutiveUsersAoa(model) {
   return [["Usuario", "Perfil", "Eventos", "Ultima acao", "Tipo ultimo evento"]];
 }
 
+function validateExecutiveWorkbookStructure(workbook) {
+  const requiredSheets = [
+    "Resumo Executivo",
+    "Deputados",
+    "Municipios",
+    "Objetivos EPI",
+    "Usuarios",
+    "Base Filtrada"
+  ];
+  const sheetNames = Array.isArray(workbook && workbook.SheetNames) ? workbook.SheetNames : [];
+  const missingSheets = requiredSheets.filter(function (name) {
+    return sheetNames.indexOf(name) < 0;
+  });
+  if (missingSheets.length) {
+    return {
+      ok: false,
+      message: "Falha ao montar relatorio executivo. Abas ausentes: " + missingSheets.join(", ")
+    };
+  }
+  return { ok: true, message: "" };
+}
+
 async function exportExecutiveDashboardReport(filteredRows) {
   const model = buildPowerBiDashboardData(filteredRows);
   if (!model.isExecutiveRole) {
@@ -6441,6 +6500,11 @@ async function exportExecutiveDashboardReport(filteredRows) {
   xlsxApi.utils.book_append_sheet(wb, xlsxApi.utils.aoa_to_sheet(buildExecutiveObjetivosAoa(model)), "Objetivos EPI");
   xlsxApi.utils.book_append_sheet(wb, xlsxApi.utils.aoa_to_sheet(buildExecutiveUsersAoa(model)), "Usuarios");
   xlsxApi.utils.book_append_sheet(wb, xlsxApi.utils.aoa_to_sheet(baseAoa), "Base Filtrada");
+  const workbookValidation = validateExecutiveWorkbookStructure(wb);
+  if (!workbookValidation.ok) {
+    alert(workbookValidation.message || "Falha ao montar relatorio executivo.");
+    return false;
+  }
   xlsxApi.writeFile(wb, filename);
 
   latestExportReport = {
@@ -8830,10 +8894,10 @@ async function runExportByScope(scope, options) {
     return false;
   }
 
-  const templateReady = !!(lastImportedWorkbookTemplate && lastImportedWorkbookTemplate.buffer);
-  const templateMode = templateReady;
-  const modeOriginal = true;
-  const roundTripCheck = confirm("Executar round-trip check apos exportar? (pode ser mais lento)");
+  const officialLayout = true;
+  const templateMode = false;
+  const modeOriginal = false;
+  const roundTripCheck = false;
   const filename = buildExportFilename(exportScope);
   const filtersSnapshot = buildExportFiltersSnapshot(exportScope, customFilters);
 
@@ -8841,6 +8905,8 @@ async function runExportByScope(scope, options) {
     useOriginalHeaders: modeOriginal,
     roundTripCheck: roundTripCheck,
     templateMode: templateMode,
+    officialLayout: officialLayout,
+    includeAuditLog: false,
     exportScope: exportScope,
     exportFilters: filtersSnapshot
   });
@@ -8859,9 +8925,9 @@ async function runExportByScope(scope, options) {
     formato: "XLSX",
     arquivoNome: filename,
     quantidadeRegistros: selectedRecords.length,
-    quantidadeEventos: countAuditEvents(selectedRecords),
+    quantidadeEventos: officialLayout ? 0 : countAuditEvents(selectedRecords),
     filtros: filtersSnapshot,
-    modoHeaders: templateMode ? "template_original" : (modeOriginal ? "originais" : "normalizados"),
+    modoHeaders: officialLayout ? "layout_oficial" : (templateMode ? "template_original" : (modeOriginal ? "originais" : "normalizados")),
     escopoExportacao: exportScope,
     roundTripOk: exportMeta && exportMeta.roundTrip ? exportMeta.roundTrip.ok : null,
     roundTripIssues: exportMeta && exportMeta.roundTrip ? (exportMeta.roundTrip.issues || []) : []
@@ -9121,27 +9187,64 @@ function exportRecordsToXlsx(records, filename, options) {
   if (opts.templateMode) {
     return exportRecordsToTemplateXlsx(records, filename, opts, xlsxApi);
   }
+  const includeAuditLog = opts.includeAuditLog !== false;
+  const officialLayout = !!opts.officialLayout;
+
+  function tableToAoaFallback(table) {
+    const source = table && typeof table === "object" ? table : {};
+    if (Array.isArray(source.aoa)) {
+      return source.aoa.map(function (row) {
+        return Array.isArray(row) ? row.slice() : [];
+      });
+    }
+    const headers = Array.isArray(source.headers) ? source.headers : [];
+    const rows = Array.isArray(source.rows) ? source.rows : [];
+    return [headers].concat(rows.map(function (rowObj) {
+      return headers.map(function (h) { return rowObj && rowObj[h] != null ? rowObj[h] : ""; });
+    }));
+  }
+
+  function normalizePlanilhaLabel(value) {
+    let out = String(value == null ? "" : value);
+    if (typeof out.normalize === "function") {
+      out = out.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    }
+    return out.toLowerCase().trim().replace(/\s+/g, " ");
+  }
+
+  function toOfficialPlanilha1Aoa(sourceAoa) {
+    const source = Array.isArray(sourceAoa) ? sourceAoa : [];
+    const rows = [];
+    for (let i = 1; i < source.length; i += 1) {
+      const row = Array.isArray(source[i]) ? source[i] : [];
+      if (normalizePlanilhaLabel(row[0]) === "total geral") continue;
+      rows.push([row[0] == null ? "" : row[0], row[1] == null ? "" : row[1]]);
+    }
+    return [[], [], ["Rótulos de Linha", "Contagem de Deputado"]].concat(rows);
+  }
 
   const dataTable = buildExportTableData(records, opts);
-  const dataAoa = [dataTable.headers].concat(dataTable.rows.map(function (rowObj) {
-    return dataTable.headers.map(function (h) { return rowObj[h] == null ? "" : rowObj[h]; });
-  }));
+  const dataAoa = tableToAoaFallback(dataTable);
 
-  const auditTable = buildAuditLogTableData(records);
-  const summaryAoa = buildSummaryAoa(records, auditTable.rows.length, opts.exportScope || EXPORT_SCOPE.ATUAIS, opts.exportFilters || {});
-  const auditAoa = [auditTable.headers].concat(auditTable.rows.map(function (rowObj) {
-    return auditTable.headers.map(function (h) { return rowObj[h] == null ? "" : rowObj[h]; });
-  }));
-  const auditSheetAoa = summaryAoa.concat([[]]).concat(auditAoa);
-  const planilha1Aoa = buildPlanilha1Aoa(records);
-  const modifiedHeaders = collectExportModifiedFieldMap(auditTable.rows);
+  let auditTable = { headers: [], rows: [] };
+  let summaryAoa = [];
+  let auditSheetAoa = [];
+  if (includeAuditLog) {
+    auditTable = buildAuditLogTableData(records);
+    summaryAoa = buildSummaryAoa(records, auditTable.rows.length, opts.exportScope || EXPORT_SCOPE.ATUAIS, opts.exportFilters || {});
+    const auditAoa = tableToAoaFallback(auditTable);
+    auditSheetAoa = summaryAoa.concat([[]]).concat(auditAoa);
+  }
+  const planilha1BaseAoa = buildPlanilha1Aoa(records);
+  const planilha1Aoa = officialLayout ? toOfficialPlanilha1Aoa(planilha1BaseAoa) : planilha1BaseAoa;
+  const modifiedHeaders = includeAuditLog ? collectExportModifiedFieldMap(auditTable.rows) : {};
 
   const wsData = xlsxApi.utils.aoa_to_sheet(dataAoa);
-  const wsAudit = xlsxApi.utils.aoa_to_sheet(auditSheetAoa);
+  const wsAudit = includeAuditLog ? xlsxApi.utils.aoa_to_sheet(auditSheetAoa) : null;
   const wsPlanilha1 = xlsxApi.utils.aoa_to_sheet(planilha1Aoa);
   applyExportWorksheetPresentation(wsPlanilha1, planilha1Aoa, xlsxApi, {
-    headerRowIndex: 0,
-    totalRowIndex: planilha1Aoa.length - 1,
+    headerRowIndex: officialLayout ? 2 : 0,
+    totalRowIndex: officialLayout ? -1 : (planilha1Aoa.length - 1),
     widthHints: {
       rotulos_de_linha: 28,
       contagem_de_deputado: 18
@@ -9162,24 +9265,28 @@ function exportRecordsToXlsx(records, filename, options) {
       processo_sei: 18
     }
   });
-  applyExportWorksheetPresentation(wsAudit, auditSheetAoa, xlsxApi, {
-    headerRowIndex: summaryAoa.length + 1,
-    widthHints: {
-      identificacao: 24,
-      municipio: 20,
-      usuarios_ativos: 28,
-      valor_antigo: 22,
-      valor_novo: 22,
-      motivo: 30
-    }
-  });
+  if (includeAuditLog && wsAudit) {
+    applyExportWorksheetPresentation(wsAudit, auditSheetAoa, xlsxApi, {
+      headerRowIndex: summaryAoa.length + 1,
+      widthHints: {
+        identificacao: 24,
+        municipio: 20,
+        usuarios_ativos: 28,
+        valor_antigo: 22,
+        valor_novo: 22,
+        motivo: 30
+      }
+    });
+  }
   const wb = xlsxApi.utils.book_new();
   xlsxApi.utils.book_append_sheet(wb, wsPlanilha1, "Planilha1");
   xlsxApi.utils.book_append_sheet(wb, wsData, "Controle de EPI");
-  xlsxApi.utils.book_append_sheet(wb, wsAudit, "AuditLog");
+  if (includeAuditLog && wsAudit) {
+    xlsxApi.utils.book_append_sheet(wb, wsAudit, "AuditLog");
+  }
 
   let roundTrip = null;
-  if (opts.roundTripCheck) {
+  if (opts.roundTripCheck && !officialLayout) {
     const check = runRoundTripCheck(wb, dataTable.headers);
     roundTrip = check;
     if (!check.ok) {
@@ -9190,7 +9297,7 @@ function exportRecordsToXlsx(records, filename, options) {
   xlsxApi.writeFile(wb, filename || ("emendas_export_" + dateStamp() + ".xlsx"));
   return {
     totalRegistros: records.length,
-    totalEventos: auditTable.rows.length,
+    totalEventos: includeAuditLog ? auditTable.rows.length : 0,
     roundTrip: roundTrip
   };
 }
@@ -9491,6 +9598,93 @@ function buildExportTableData(records, options) {
     return buildExportTableDataUtil(records, options, ctx);
   }
   const opts = options || {};
+  if (opts.officialLayout) {
+    const officialColumns = [
+      { header: "Emenda", candidates: ["Emenda", "identificacao", "id", "id_interno_sistema"] },
+      { header: "Emenda  apta", candidates: ["Emenda  apta", "Emenda apta", "emenda_apta"] },
+      { header: "Cod Subfonte", candidates: ["Cod Subfonte", "cod_subfonte"] },
+      { header: "Deputado", candidates: ["Deputado", "deputado"] },
+      { header: "Cod. Órgão", candidates: ["Cod. Órgão", "Cod. Orgao", "cod_orgao"] },
+      { header: "Nº Órgão", candidates: ["Nº Órgão", "N° Órgão", "No Orgao", "numero_orgao", "orgao"] },
+      { header: "Sigla do Órgão", candidates: ["Sigla do Órgão", "sigla_uo", "sigla_do_orgao"] },
+      { header: "Cod. UO", candidates: ["Cod. UO", "cod_uo"] },
+      { header: "UO Orcamentária ", candidates: ["UO Orcamentária ", "UO Orcamentaria", "uo_orcamentaria"] },
+      { header: "Nome da UO", candidates: ["Nome da UO", "nome_da_uo"] },
+      { header: "Cod. USP", candidates: ["Cod. USP", "cod_usp"] },
+      { header: "UO  Executora", candidates: ["UO  Executora", "UO Executora", "uo_executora"] },
+      { header: "Cód. da Ação", candidates: ["Cód. da Ação", "Cod. da Acao", "cod_acao"] },
+      { header: "Descritor da Ação", candidates: ["Descritor da Ação", "descricao_acao", "descritor_da_acao"] },
+      { header: "Objeto da EPI", candidates: ["Objeto da EPI", "objetivo_epi"] },
+      { header: "Status", candidates: ["Status", "status_oficial"] },
+      { header: "Função", candidates: ["Função", "funcao"] },
+      { header: "Município / Estado", candidates: ["Município / Estado", "Municipio / Estado", "municipio"] },
+      { header: "TI/Estado", candidates: ["TI/Estado", "ti_estado"] },
+      { header: "Condição da EPI", candidates: ["Condição da EPI", "condicao_da_epi"] },
+      { header: "Valor Inicial EPI", candidates: ["Valor Inicial EPI", "valor_inicial", "valor_inicial_epi"] },
+      { header: "Valor Reforçado", candidates: ["Valor Reforçado", "valor_reforcado"] },
+      { header: "Valor Anulado", candidates: ["Valor Anulado", "valor_anulado"] },
+      { header: "Valor Atual\nEPI", candidates: ["Valor Atual\nEPI", "Valor Atual EPI", "valor_atual", "valor_atual_epi"] },
+      { header: "Data da Solicitação", candidates: ["Data da Solicitação", "data_da_solicitacao"] },
+      { header: "Processo SEI", candidates: ["Processo SEI", "processo_sei"] },
+      { header: "OBSERVAÇÃO", candidates: ["OBSERVAÇÃO", "OBSERVACAO", "observacao"] },
+      { header: "Status", candidates: ["Status_2", "Status", "status_oficial"] }
+    ];
+
+    function normalizeLookupKey(value) {
+      let raw = String(value == null ? "" : value);
+      if (typeof raw.normalize === "function") {
+        raw = raw.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      }
+      return raw.toLowerCase().trim().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
+    }
+
+    function isBlankValue(value) {
+      return value == null || String(value).trim() === "";
+    }
+
+    function resolveColumnValue(record, raw, normalizedRaw, columnDef) {
+      const candidates = Array.isArray(columnDef && columnDef.candidates) ? columnDef.candidates : [];
+      for (let i = 0; i < candidates.length; i += 1) {
+        const candidate = candidates[i];
+        if (Object.prototype.hasOwnProperty.call(raw, candidate) && !isBlankValue(raw[candidate])) {
+          return raw[candidate];
+        }
+      }
+      for (let i = 0; i < candidates.length; i += 1) {
+        const candidate = candidates[i];
+        const normalized = normalizeLookupKey(candidate);
+        if (Object.prototype.hasOwnProperty.call(normalizedRaw, normalized) && !isBlankValue(normalizedRaw[normalized])) {
+          return normalizedRaw[normalized];
+        }
+      }
+      for (let i = 0; i < candidates.length; i += 1) {
+        const candidate = candidates[i];
+        if (record && Object.prototype.hasOwnProperty.call(record, candidate) && !isBlankValue(record[candidate])) {
+          return record[candidate];
+        }
+      }
+      return "";
+    }
+
+    const headers = officialColumns.map(function (column) { return column.header; });
+    const rows = (records || []).map(function (record) {
+      const raw = record && record.all_fields && typeof record.all_fields === "object" ? record.all_fields : {};
+      const normalizedRaw = {};
+      Object.keys(raw).forEach(function (key) {
+        normalizedRaw[normalizeLookupKey(key)] = raw[key];
+      });
+      return officialColumns.map(function (columnDef) {
+        return resolveColumnValue(record, raw, normalizedRaw, columnDef);
+      });
+    });
+
+    return {
+      headers: headers,
+      rows: rows,
+      aoa: [headers].concat(rows),
+      officialLayout: true
+    };
+  }
   const useOriginal = !!opts.useOriginalHeaders;
 
   const extraHeaders = [];

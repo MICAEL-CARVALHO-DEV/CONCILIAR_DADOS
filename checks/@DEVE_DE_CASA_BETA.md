@@ -29,13 +29,12 @@ Success: Qualquer duvida de "o que falta" e respondida aqui, sem precisar cruzar
 
 ## PENDENCIAS BLOQUEADORAS DA BETA
 ### A) Veredito funcional (depende da sua decisao)
-- [DOING] `C49-A` / `P-R03` regra final da contagem de deputado.
-  Parcialmente decidido:
-  - ajuste manual fica habilitado
-  - escopo do ajuste: global
-  - base tecnica atual: ajuste global auditado via `PUT /dashboard/deputados/ajustes`
-  - permissao tecnica atual: somente `PROGRAMADOR` (seguranca para beta)
-  Ainda falta decidir com a funcionaria: origem oficial da contagem (`base atual`, `historico` ou outra origem).
+- [DONE] `C49-A` / `P-R03` regra final da contagem de deputado.
+  Fechado assim:
+  - origem oficial da contagem: `BASE_ATUAL` consolidada
+  - ajuste manual: habilitado em escopo global, com trilha de auditoria
+  - permissao de ajuste: somente `PROGRAMADOR` via `PUT /dashboard/deputados/ajustes`
+  - usuarios operacionais: podem visualizar a politica e a leitura de contagem
 - [DONE] `C25-B` nome final do bloco/rotulo.
   Fechado assim:
   - `Objetivo EPI` = eixo principal da operacao
@@ -48,12 +47,22 @@ Success: Qualquer duvida de "o que falta" e respondida aqui, sem precisar cruzar
   - layout visual do arquivo final foi reforcado sem trocar o contrato do dado exportado
 
 ### B) Validacao final (manual/visual)
-- [TODO] `C48` validar filtros fortes do historico operacional.
-- [TODO] `C49` validar export do relatorio executivo (arquivo e abas).
-- [TODO] `C50-A` validar fluxo final da aba `Ajuda e suporte` apos aplicar a regra: historico/chamados so para `PROGRAMADOR`; usuarios comuns apenas solicitam.
-- [TODO] validar no navegador o warning de acessibilidade do modal (`aria-hidden`) sem regressao.
+- [DONE] `C48` validar filtros fortes do historico operacional.
+  Status tecnico: hardening aplicado em 17/03/2026 (normalizacao de caixa/espacos em filtros de historico no front e backend).
+  Veredito manual/tecnico em 17/03/2026: `PASSOU`.
+- [DONE] `C49` validar export do relatorio executivo (arquivo e abas).
+  Status tecnico: validacao estrutural das abas obrigatorias adicionada no export executivo em 17/03/2026.
+  Veredito manual/tecnico em 17/03/2026: `PASSOU`.
+- [DONE] `C50-A` validar fluxo final da aba `Ajuda e suporte` apos aplicar a regra: historico/chamados so para `PROGRAMADOR`; usuarios comuns apenas solicitam.
+  Status tecnico: hardening aplicado em 17/03/2026 (polling/inbox do suporte restritos ao `PROGRAMADOR`; usuario comum permanece em fluxo de solicitacao).
+  Veredito manual/tecnico em 17/03/2026: `PASSOU`.
+- [DONE] validar no navegador o warning de acessibilidade do modal (`aria-hidden`) sem regressao.
+  Status tecnico: hardening de foco ao fechar modais aplicado em 17/03/2026 para reduzir risco de warning `aria-hidden`.
+  Veredito manual/tecnico em 17/03/2026: `PASSOU`.
   Regra pratica: se nao reaparecer warning real no console, manter como esta.
-- [TODO] validar visual final do dashboard expandido da visao Power BI (`C45-A`) no fluxo atual.
+- [DONE] validar visual final do dashboard expandido da visao Power BI (`C45-A`) no fluxo atual.
+  Status tecnico: modo "Expandir leitura" implementado em 17/03/2026 para desktop (persistencia local + grid expandido + maior densidade de leitura).
+  Veredito manual/tecnico em 17/03/2026: `PASSOU`.
   Regra funcional: painel interno fica em modo leitura; integracao externa com `Power BI Desktop` vem depois.
 
 ## PENDENCIAS QUE NAO BLOQUEIAM A BETA (POS-BETA)
@@ -71,18 +80,18 @@ Success: Qualquer duvida de "o que falta" e respondida aqui, sem precisar cruzar
   Objetivo: evitar leitura ambigua de status.
 
 ## Ordem recomendada para resolver agora
-1. `C49-A` (origem oficial da contagem)
-2. `C48`
-3. `C49`
-4. `C50-A`
-5. warning `aria-hidden`
-6. `C45-A`
+1. `C48`
+2. `C49`
+3. `C50-A`
+4. warning `aria-hidden`
+5. `C45-A`
 
 ## Formato de resposta rapida (para voce me enviar)
-1. `C49-A`: <origem oficial da contagem>
-2. `C48`: <passou/falhou>
-3. `C50-A`: <passou/falhou>
-4. `C45-A`: <passou/falhou>
+1. `C48`: `PASSOU`
+2. `C49`: `PASSOU`
+3. `C50-A`: `PASSOU`
+4. `aria-hidden`: `PASSOU`
+5. `C45-A`: `PASSOU`
 
 ## Criterio de fechamento da beta
 Beta fecha quando:
@@ -91,7 +100,6 @@ Beta fecha quando:
 3. sem erro critico em smoke/regressao local
 
 ## Resume from
-- Proxima decisao recomendada: `C49-A`.
-- Se quiser validar antes de decidir: comece por `C48`, `C50-A` e `C45-A`.
+- Proximo bloco recomendado: validacao manual de `C48`, `C49`, `C50-A`, warning `aria-hidden` e `C45-A`.
 
 

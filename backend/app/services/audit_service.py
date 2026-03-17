@@ -36,13 +36,13 @@ def _apply_audit_filters(
     if objetivo_epi:
         query = query.filter(Emenda.objetivo_epi.ilike(f"%{objetivo_epi.strip()}%"))
     if usuario:
-        query = query.filter(func.lower(Historico.usuario_nome) == _normalize_loose_text(usuario))
+        query = query.filter(func.lower(func.trim(Historico.usuario_nome)) == _normalize_loose_text(usuario))
     if setor:
-        query = query.filter(func.upper(Historico.setor) == str(setor).strip().upper())
+        query = query.filter(func.upper(func.trim(Historico.setor)) == str(setor).strip().upper())
     if tipo_evento:
-        query = query.filter(func.upper(Historico.tipo_evento) == str(tipo_evento).strip().upper())
+        query = query.filter(func.upper(func.trim(Historico.tipo_evento)) == str(tipo_evento).strip().upper())
     if origem_evento:
-        query = query.filter(func.upper(Historico.origem_evento) == str(origem_evento).strip().upper())
+        query = query.filter(func.upper(func.trim(Historico.origem_evento)) == str(origem_evento).strip().upper())
     if q:
         pattern = f"%{q.strip()}%"
         query = query.filter(

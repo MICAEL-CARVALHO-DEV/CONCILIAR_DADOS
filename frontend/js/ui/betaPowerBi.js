@@ -1,5 +1,6 @@
 (function (global) {
   var root = global.SECFrontend = global.SECFrontend || {};
+  var POWERBI_EXPANDED_STORAGE_KEY = "SEC_POWERBI_EXPANDED";
 
   function noop() {}
 
@@ -42,6 +43,24 @@
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   }
 
+  function readPowerBiExpandedMode() {
+    try {
+      if (!global || !global.localStorage) return false;
+      return global.localStorage.getItem(POWERBI_EXPANDED_STORAGE_KEY) === "1";
+    } catch (_err) {
+      return false;
+    }
+  }
+
+  function savePowerBiExpandedMode(nextValue) {
+    try {
+      if (!global || !global.localStorage) return;
+      global.localStorage.setItem(POWERBI_EXPANDED_STORAGE_KEY, nextValue ? "1" : "0");
+    } catch (_err) {
+      // no-op
+    }
+  }
+
   function renderBetaPowerBiPanel(target, filteredRows, options) {
     var opts = options || {};
     var clearNodeChildren = typeof opts.clearNodeChildren === "function" ? opts.clearNodeChildren : clearNode;
@@ -56,6 +75,12 @@
     var setPowerBiFilters = typeof opts.setPowerBiFilters === "function" ? opts.setPowerBiFilters : noop;
     var filters = opts.filters && typeof opts.filters === "object" ? opts.filters : {};
     var filterDefaults = opts.filterDefaults && typeof opts.filterDefaults === "object" ? opts.filterDefaults : {};
+    var isExpandedMode = readPowerBiExpandedMode();
+
+    if (target && target.classList) {
+      target.classList.add("beta-powerbi-panel");
+      target.classList.toggle("beta-powerbi-panel-expanded", isExpandedMode);
+    }
 
     clearNodeChildren(target);
 
@@ -77,7 +102,7 @@
           origem_oficial: "BASE_ATUAL",
           escopo_ajuste: "GLOBAL",
           perfil_ajuste: "PROGRAMADOR",
-          observacao: "Contagem oficial usa emendas atuais da base consolidada com ajuste manual global auditado."
+          observacao: "Contagem oficial usa emendas atuais da base consolidada; todos os usuarios autenticados podem visualizar e apenas PROGRAMADOR pode ajustar globalmente com auditoria."
         };
 
     var intro = document.createElement("div");
@@ -104,11 +129,26 @@
       badge.textContent = labelText;
       introBadges.appendChild(badge);
     });
+    if (isExpandedMode) {
+      var expandedBadge = document.createElement("span");
+      expandedBadge.className = "beta-source-badge";
+      expandedBadge.textContent = "Layout expandido (desktop)";
+      introBadges.appendChild(expandedBadge);
+    }
     intro.appendChild(introBadges);
+    var executiveActions = document.createElement("div");
+    executiveActions.className = "beta-history-filter-actions beta-powerbi-layout-actions";
+    executiveActions.style.marginTop = "10px";
+    var layoutBtn = document.createElement("button");
+    layoutBtn.className = "btn";
+    layoutBtn.type = "button";
+    layoutBtn.textContent = isExpandedMode ? "Modo compacto" : "Expandir leitura";
+    layoutBtn.addEventListener("click", function () {
+      savePowerBiExpandedMode(!isExpandedMode);
+      rerender();
+    });
+    executiveActions.appendChild(layoutBtn);
     if (isExecutiveRole) {
-      var executiveActions = document.createElement("div");
-      executiveActions.className = "beta-history-filter-actions";
-      executiveActions.style.marginTop = "10px";
       var exportBtn = document.createElement("button");
       exportBtn.className = "btn primary";
       exportBtn.type = "button";
@@ -119,8 +159,8 @@
         });
       });
       executiveActions.appendChild(exportBtn);
-      intro.appendChild(executiveActions);
     }
+    intro.appendChild(executiveActions);
     target.appendChild(intro);
 
     var filterWrap = document.createElement("div");
@@ -231,7 +271,7 @@
     }
 
     var kpiGrid = document.createElement("div");
-    kpiGrid.className = "beta-kpi-grid";
+    kpiGrid.className = "beta-kpi-grid beta-powerbi-kpi-grid" + (isExpandedMode ? " is-expanded" : "");
 
     function addKpi(label, value) {
       var card = document.createElement("div");
@@ -257,7 +297,7 @@
     target.appendChild(kpiGrid);
 
     var controlGrid = document.createElement("div");
-    controlGrid.className = "beta-split-grid";
+    controlGrid.className = "beta-split-grid beta-powerbi-control-grid" + (isExpandedMode ? " is-expanded" : "");
 
     function appendSummaryTable(titleText, headers, items, renderRow) {
       var card = document.createElement("div");
@@ -307,17 +347,17 @@
     var municipios = Object.keys(byMunicipio).map(function (key) { return byMunicipio[key]; }).sort(function (a, b) {
       if (b.total !== a.total) return b.total - a.total;
       return b.valor - a.valor;
-    }).slice(0, 10);
+    }).slice(0, isExpandedMode ? 14 : 10);
 
     var objetivos = Object.keys(byObjetivo).map(function (key) { return byObjetivo[key]; }).sort(function (a, b) {
       if (b.total !== a.total) return b.total - a.total;
       return b.valor - a.valor;
-    }).slice(0, 10);
+    }).slice(0, isExpandedMode ? 14 : 10);
 
     var users = Object.keys(byUser).map(function (key) { return byUser[key]; }).sort(function (a, b) {
       if (b.total !== a.total) return b.total - a.total;
       return String(b.lastAt || "").localeCompare(String(a.lastAt || ""));
-    }).slice(0, 8);
+    }).slice(0, isExpandedMode ? 12 : 8);
 
     appendSummaryTable("Controle por status", ["Status", "Total"], statusRows, function (tr, item) {
       [item.label, String(item.total)].forEach(function (value) {
@@ -386,11 +426,11 @@
     target.appendChild(deputyTitle);
 
     var deputyGrid = document.createElement("div");
-    deputyGrid.className = "beta-deputy-grid";
+    deputyGrid.className = "beta-deputy-grid beta-powerbi-deputy-grid" + (isExpandedMode ? " is-expanded" : "");
     var deputados = Object.keys(byDeputado).map(function (key) { return byDeputado[key]; }).sort(function (a, b) {
       if (b.total !== a.total) return b.total - a.total;
       return b.valor - a.valor;
-    }).slice(0, filters.deputado ? 12 : 8);
+    }).slice(0, filters.deputado ? (isExpandedMode ? 18 : 12) : (isExpandedMode ? 14 : 8));
 
     if (!deputados.length) {
       var empty = document.createElement("p");

@@ -43,9 +43,106 @@
     return events;
   }
 
+  var OFFICIAL_CONTROLE_COLUMNS = [
+    { header: "Emenda", candidates: ["Emenda", "identificacao", "id", "id_interno_sistema"] },
+    { header: "Emenda  apta", candidates: ["Emenda  apta", "Emenda apta", "emenda_apta"] },
+    { header: "Cod Subfonte", candidates: ["Cod Subfonte", "cod_subfonte"] },
+    { header: "Deputado", candidates: ["Deputado", "deputado"] },
+    { header: "Cod. Órgão", candidates: ["Cod. Órgão", "Cod. Orgao", "cod_orgao"] },
+    { header: "Nº Órgão", candidates: ["Nº Órgão", "N° Órgão", "No Orgao", "numero_orgao", "orgao"] },
+    { header: "Sigla do Órgão", candidates: ["Sigla do Órgão", "sigla_uo", "sigla_do_orgao"] },
+    { header: "Cod. UO", candidates: ["Cod. UO", "cod_uo"] },
+    { header: "UO Orcamentária ", candidates: ["UO Orcamentária ", "UO Orcamentaria", "uo_orcamentaria"] },
+    { header: "Nome da UO", candidates: ["Nome da UO", "nome_da_uo"] },
+    { header: "Cod. USP", candidates: ["Cod. USP", "cod_usp"] },
+    { header: "UO  Executora", candidates: ["UO  Executora", "UO Executora", "uo_executora"] },
+    { header: "Cód. da Ação", candidates: ["Cód. da Ação", "Cod. da Acao", "cod_acao"] },
+    { header: "Descritor da Ação", candidates: ["Descritor da Ação", "descricao_acao", "descritor_da_acao"] },
+    { header: "Objeto da EPI", candidates: ["Objeto da EPI", "objetivo_epi"] },
+    { header: "Status", candidates: ["Status", "status_oficial"] },
+    { header: "Função", candidates: ["Função", "funcao"] },
+    { header: "Município / Estado", candidates: ["Município / Estado", "Municipio / Estado", "municipio"] },
+    { header: "TI/Estado", candidates: ["TI/Estado", "ti_estado"] },
+    { header: "Condição da EPI", candidates: ["Condição da EPI", "condicao_da_epi"] },
+    { header: "Valor Inicial EPI", candidates: ["Valor Inicial EPI", "valor_inicial", "valor_inicial_epi"] },
+    { header: "Valor Reforçado", candidates: ["Valor Reforçado", "valor_reforcado"] },
+    { header: "Valor Anulado", candidates: ["Valor Anulado", "valor_anulado"] },
+    { header: "Valor Atual\nEPI", candidates: ["Valor Atual\nEPI", "Valor Atual EPI", "valor_atual", "valor_atual_epi"] },
+    { header: "Data da Solicitação", candidates: ["Data da Solicitação", "data_da_solicitacao"] },
+    { header: "Processo SEI", candidates: ["Processo SEI", "processo_sei"] },
+    { header: "OBSERVAÇÃO", candidates: ["OBSERVAÇÃO", "OBSERVACAO", "observacao"] },
+    { header: "Status", candidates: ["Status_2", "Status", "status_oficial"] }
+  ];
+
+  function normalizeLookupKey(value) {
+    var raw = String(value == null ? "" : value);
+    if (typeof raw.normalize === "function") {
+      raw = raw.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    }
+    return raw
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "");
+  }
+
+  function isBlankValue(value) {
+    return value == null || String(value).trim() === "";
+  }
+
+  function resolveOfficialColumnValue(record, raw, normalizedRaw, columnDef) {
+    var candidates = columnDef && Array.isArray(columnDef.candidates) ? columnDef.candidates : [];
+    var i;
+    for (i = 0; i < candidates.length; i += 1) {
+      var candidate = candidates[i];
+      if (Object.prototype.hasOwnProperty.call(raw, candidate) && !isBlankValue(raw[candidate])) {
+        return raw[candidate];
+      }
+    }
+    for (i = 0; i < candidates.length; i += 1) {
+      candidate = candidates[i];
+      var normalized = normalizeLookupKey(candidate);
+      if (Object.prototype.hasOwnProperty.call(normalizedRaw, normalized) && !isBlankValue(normalizedRaw[normalized])) {
+        return normalizedRaw[normalized];
+      }
+    }
+    for (i = 0; i < candidates.length; i += 1) {
+      candidate = candidates[i];
+      if (Object.prototype.hasOwnProperty.call(record || {}, candidate) && !isBlankValue(record[candidate])) {
+        return record[candidate];
+      }
+    }
+    return "";
+  }
+
+  function buildOfficialControleData(records) {
+    var headers = OFFICIAL_CONTROLE_COLUMNS.map(function (column) { return column.header; });
+    var rows = (records || []).map(function (record) {
+      var raw = readRawFields(record);
+      var normalizedRaw = {};
+      Object.keys(raw).forEach(function (key) {
+        normalizedRaw[normalizeLookupKey(key)] = raw[key];
+      });
+      return OFFICIAL_CONTROLE_COLUMNS.map(function (columnDef) {
+        return resolveOfficialColumnValue(record, raw, normalizedRaw, columnDef);
+      });
+    });
+
+    return {
+      headers: headers,
+      rows: rows,
+      aoa: [headers].concat(rows),
+      officialLayout: true
+    };
+  }
+
   function buildExportTableData(records, options, dependencies) {
     var opts = options || {};
     var dep = dependencies || {};
+    if (opts.officialLayout) {
+      return buildOfficialControleData(records);
+    }
+
     var useOriginal = !!opts.useOriginalHeaders;
 
     var extraHeaders = [];

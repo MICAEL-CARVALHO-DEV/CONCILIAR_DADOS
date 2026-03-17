@@ -58,10 +58,10 @@
       return false;
     }
 
-    var templateReady = !!dep.templateReady;
-    var templateMode = templateReady;
-    var modeOriginal = true;
-    var roundTripCheck = confirmFn("Executar round-trip check apos exportar? (pode ser mais lento)");
+    var officialLayout = true;
+    var templateMode = false;
+    var modeOriginal = false;
+    var roundTripCheck = false;
     var filename = typeof dep.buildExportFilename === "function" ? dep.buildExportFilename(exportScope) : "";
     var filtersSnapshot = typeof dep.buildExportFiltersSnapshot === "function"
       ? dep.buildExportFiltersSnapshot(exportScope, customFilters)
@@ -72,6 +72,8 @@
           useOriginalHeaders: modeOriginal,
           roundTripCheck: roundTripCheck,
           templateMode: templateMode,
+          officialLayout: officialLayout,
+          includeAuditLog: false,
           exportScope: exportScope,
           exportFilters: filtersSnapshot
         })
@@ -97,9 +99,9 @@
         formato: "XLSX",
         arquivoNome: filename,
         quantidadeRegistros: selectedRecords.length,
-        quantidadeEventos: typeof dep.countAuditEvents === "function" ? dep.countAuditEvents(selectedRecords) : 0,
+        quantidadeEventos: officialLayout ? 0 : (typeof dep.countAuditEvents === "function" ? dep.countAuditEvents(selectedRecords) : 0),
         filtros: filtersSnapshot,
-        modoHeaders: templateMode ? "template_original" : (modeOriginal ? "originais" : "normalizados"),
+        modoHeaders: officialLayout ? "layout_oficial" : (templateMode ? "template_original" : (modeOriginal ? "originais" : "normalizados")),
         escopoExportacao: exportScope,
         roundTripOk: exportMeta && exportMeta.roundTrip ? exportMeta.roundTrip.ok : null,
         roundTripIssues: exportMeta && exportMeta.roundTrip ? (exportMeta.roundTrip.issues || []) : []

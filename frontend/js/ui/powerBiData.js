@@ -204,7 +204,7 @@
         origem_oficial: "BASE_ATUAL",
         escopo_ajuste: "GLOBAL",
         perfil_ajuste: "PROGRAMADOR",
-        observacao: "Contagem oficial usa emendas atuais da base consolidada com ajuste manual global auditado."
+        observacao: "Contagem oficial usa emendas atuais da base consolidada; todos os usuarios autenticados podem visualizar e apenas PROGRAMADOR pode ajustar globalmente com auditoria."
       },
       summary: summary,
       byDeputado: byDeputado,

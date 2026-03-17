@@ -107,12 +107,16 @@
   function applyBetaAuditFilters(rows, ctx) {
     var source = Array.isArray(rows) ? rows : [];
     return source.filter(function (row) {
+      var usuarioFilter = ctx.normalizeLooseText(ctx.filters.usuario);
+      var setorFilter = ctx.normalizeLooseText(ctx.filters.setor);
+      var tipoEventoFilter = ctx.normalizeLooseText(ctx.filters.tipo_evento);
+      var origemEventoFilter = ctx.normalizeLooseText(ctx.filters.origem_evento);
       if (ctx.filters.ano && getAuditYearValue(row, ctx) !== String(ctx.filters.ano)) return false;
       if (ctx.filters.mes && getAuditMonthValue(row, ctx) !== String(ctx.filters.mes).padStart(2, "0")) return false;
-      if (ctx.filters.usuario && ctx.text(row && row.usuario_nome) !== ctx.filters.usuario) return false;
-      if (ctx.filters.setor && ctx.text(row && row.setor) !== ctx.filters.setor) return false;
-      if (ctx.filters.tipo_evento && ctx.text(row && row.tipo_evento) !== ctx.filters.tipo_evento) return false;
-      if (ctx.filters.origem_evento && ctx.text(row && row.origem_evento) !== ctx.filters.origem_evento) return false;
+      if (usuarioFilter && ctx.normalizeLooseText(ctx.text(row && row.usuario_nome)) !== usuarioFilter) return false;
+      if (setorFilter && ctx.normalizeLooseText(ctx.text(row && row.setor)) !== setorFilter) return false;
+      if (tipoEventoFilter && ctx.normalizeLooseText(ctx.text(row && row.tipo_evento)) !== tipoEventoFilter) return false;
+      if (origemEventoFilter && ctx.normalizeLooseText(ctx.text(row && row.origem_evento)) !== origemEventoFilter) return false;
       if (ctx.filters.objetivo_epi) {
         var objetivoBlob = ctx.normalizeLooseText(ctx.text(row && row.emenda_objetivo_epi));
         if (!objetivoBlob.includes(ctx.normalizeLooseText(ctx.filters.objetivo_epi))) return false;

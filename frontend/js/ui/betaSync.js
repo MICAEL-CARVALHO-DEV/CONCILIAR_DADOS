@@ -100,6 +100,7 @@
   async function refreshBetaSupportMessagesFromApi(forceRender, threadId, options) {
     var opts = options || {};
     var canUseSupportApi = typeof opts.canUseSupportApi === "function" ? opts.canUseSupportApi : function () { return false; };
+    var isSupportManagerUser = typeof opts.isSupportManagerUser === "function" ? opts.isSupportManagerUser : function () { return false; };
     var getSelectedThreadId = typeof opts.getSelectedThreadId === "function" ? opts.getSelectedThreadId : function () { return 0; };
     var setMessages = typeof opts.setMessages === "function" ? opts.setMessages : noop;
     var setMessagesError = typeof opts.setMessagesError === "function" ? opts.setMessagesError : noop;
@@ -110,7 +111,7 @@
     var extractApiError = typeof opts.extractApiError === "function" ? opts.extractApiError : function (_err, fallback) { return String(fallback || "Falha ao carregar mensagens do suporte."); };
 
     var id = Number(threadId || getSelectedThreadId() || 0);
-    if (!id || !canUseSupportApi()) {
+    if (!id || !canUseSupportApi() || !isSupportManagerUser()) {
       setMessages([]);
       setMessagesError("");
       setMessagesLoading(false);
@@ -136,6 +137,7 @@
   async function refreshBetaSupportFromApi(forceRender, options) {
     var opts = options || {};
     var canUseSupportApi = typeof opts.canUseSupportApi === "function" ? opts.canUseSupportApi : function () { return false; };
+    var isSupportManagerUser = typeof opts.isSupportManagerUser === "function" ? opts.isSupportManagerUser : function () { return false; };
     var isApiEnabled = typeof opts.isApiEnabled === "function" ? opts.isApiEnabled : function () { return false; };
     var isLoading = typeof opts.isLoading === "function" ? opts.isLoading : function () { return false; };
     var setLoading = typeof opts.setLoading === "function" ? opts.setLoading : noop;
@@ -158,8 +160,20 @@
       setThreads([]);
       setMessages([]);
       setError(isApiEnabled() ? "Sessao necessaria para usar suporte." : "Suporte exige API ativa.");
+      setMessagesError("");
       setLoading(false);
       if (forceRender) renderWorkspace();
+      return;
+    }
+    if (!isSupportManagerUser()) {
+      setThreads([]);
+      setMessages([]);
+      setError("");
+      setMessagesError("");
+      setLastSyncAt(isoNow());
+      setLoading(false);
+      if (forceRender) renderWorkspace();
+      syncPollingFn();
       return;
     }
     if (isLoading()) return;

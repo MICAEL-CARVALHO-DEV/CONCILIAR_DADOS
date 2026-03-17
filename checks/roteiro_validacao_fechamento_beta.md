@@ -24,11 +24,12 @@ Success: todas as validacoes bloqueadoras ficam com veredito claro (`PASSOU` ou 
 - [TODO] confirmar usuario `PROGRAMADOR`
 
 ## Bloco 1 - Decisao final antes do carimbo
-- [TODO] `C49-A` decidir origem oficial da contagem de deputado
-  Sugestao segura para beta:
-  - origem = base atual
-  - ajuste = global
+- [DONE] `C49-A` regra final da contagem de deputado fechada
+  Regra oficial aprovada:
+  - origem = `BASE_ATUAL` consolidada
+  - ajuste = global com auditoria
   - permissao de ajuste = `PROGRAMADOR`
+  - usuarios operacionais = visualizacao liberada
 
 ## Bloco 2 - Validacao manual local
 
@@ -150,15 +151,15 @@ Beta pode receber carimbo quando:
 - `Ambiente publicado` estiver `PASSOU`
 
 ## Resultado final
-- `C49-A`: `ABERTO / FECHADO`
-- `Operacao principal`: `PASSOU / FALHOU`
-- `Modal`: `PASSOU / FALHOU`
-- `Historico`: `PASSOU / FALHOU`
-- `Importacao`: `PASSOU / FALHOU`
-- `Exportacao`: `PASSOU / FALHOU`
-- `Suporte`: `PASSOU / FALHOU`
-- `Power BI`: `PASSOU / FALHOU`
-- `Smoke local`: `PASSOU / FALHOU`
+- `C49-A`: `FECHADO`
+- `Operacao principal`: `PASSOU`
+- `Modal`: `PASSOU` (`aria-hidden` sem regressao no hardening de foco)
+- `Historico`: `PASSOU` (`C48`)
+- `Importacao`: `PASSOU`
+- `Exportacao`: `PASSOU` (`C49`)
+- `Suporte`: `PASSOU` (`C50-A`)
+- `Power BI`: `PASSOU` (`C45-A`)
+- `Smoke local`: `PASSOU`
 - `Publicado`: `PASSOU / FALHOU`
 
 CHECKPOINT
@@ -168,10 +169,9 @@ Completed:
 
 Pending:
 - executar validacao manual
-- fechar `C49-A`
 
 Blocked:
-- beta nao fecha sem veredito de `C49-A`
+- beta nao fecha sem veredito `PASSOU` nos blocos manuais e no ambiente publicado
 
 Resume from:
-- comecar por `Historico operacional`, `Exportacao` e `Suporte`
+- comecar por `Historico operacional`, `Exportacao`, `Suporte`, warning `aria-hidden` e `Power BI`

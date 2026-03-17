@@ -1,5 +1,6 @@
 (function (global) {
   var root = global.SECFrontend = global.SECFrontend || {};
+  var COST_MONITOR_STORAGE_KEY = "SEC_BETA_COST_MONITOR";
 
   function noop() {}
 
@@ -18,6 +19,314 @@
       return;
     }
     while (node.firstChild) node.removeChild(node.firstChild);
+  }
+
+  function toNumber(value, fallback) {
+    var n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+  }
+
+  function clampToRange(value, minValue, maxValue) {
+    var n = toNumber(value, minValue);
+    if (n < minValue) n = minValue;
+    if (n > maxValue) n = maxValue;
+    return n;
+  }
+
+  function buildCostMonitorDefaults() {
+    return {
+      users: 3,
+      cloudflareBuildsUsed: 0,
+      cloudflareBuildsLimit: 500,
+      cloudflareFilesUsed: 0,
+      cloudflareFilesLimit: 20000,
+      renderHoursUsed: 0,
+      renderHoursLimit: 750,
+      supabaseUsagePercent: 12,
+      useRenderStarter: false,
+      useSupabasePro: false
+    };
+  }
+
+  function sanitizeCostMonitorState(value) {
+    var defaults = buildCostMonitorDefaults();
+    var src = value && typeof value === "object" ? value : {};
+    return {
+      users: clampToRange(src.users, 1, 500),
+      cloudflareBuildsUsed: clampToRange(src.cloudflareBuildsUsed, 0, 1000000),
+      cloudflareBuildsLimit: clampToRange(src.cloudflareBuildsLimit, 1, 1000000),
+      cloudflareFilesUsed: clampToRange(src.cloudflareFilesUsed, 0, 10000000),
+      cloudflareFilesLimit: clampToRange(src.cloudflareFilesLimit, 1, 10000000),
+      renderHoursUsed: clampToRange(src.renderHoursUsed, 0, 100000),
+      renderHoursLimit: clampToRange(src.renderHoursLimit, 1, 100000),
+      supabaseUsagePercent: clampToRange(src.supabaseUsagePercent, 0, 100),
+      useRenderStarter: src.useRenderStarter === true ? true : defaults.useRenderStarter,
+      useSupabasePro: src.useSupabasePro === true ? true : defaults.useSupabasePro
+    };
+  }
+
+  function readCostMonitorState() {
+    try {
+      var raw = global.localStorage ? global.localStorage.getItem(COST_MONITOR_STORAGE_KEY) : "";
+      if (!raw) return buildCostMonitorDefaults();
+      return sanitizeCostMonitorState(JSON.parse(raw));
+    } catch (_err) {
+      return buildCostMonitorDefaults();
+    }
+  }
+
+  function saveCostMonitorState(state) {
+    try {
+      if (!global.localStorage) return;
+      global.localStorage.setItem(COST_MONITOR_STORAGE_KEY, JSON.stringify(sanitizeCostMonitorState(state)));
+    } catch (_err) {
+      // no-op
+    }
+  }
+
+  function usagePercent(used, limit) {
+    if (!limit) return 0;
+    var pct = (toNumber(used, 0) / toNumber(limit, 1)) * 100;
+    return clampToRange(pct, 0, 9999);
+  }
+
+  function classifyUsage(percent) {
+    var pct = toNumber(percent, 0);
+    if (pct >= 90) return { level: "critical", label: "Critico" };
+    if (pct >= 75) return { level: "attention", label: "Atencao" };
+    return { level: "ok", label: "Estavel" };
+  }
+
+  function badgeClassByLevel(level) {
+    if (level === "critical") return "is-critical";
+    if (level === "attention") return "is-attention";
+    return "is-ok";
+  }
+
+  function buildMonthlyCostEstimate(state) {
+    var renderCost = state.useRenderStarter ? 7 : 0;
+    var supabaseCost = state.useSupabasePro ? 25 : 0;
+    return {
+      render: renderCost,
+      supabase: supabaseCost,
+      total: renderCost + supabaseCost
+    };
+  }
+
+  function renderCostMonitorCard(target) {
+    var state = readCostMonitorState();
+    var card = document.createElement("div");
+    card.className = "beta-panel-card beta-cost-monitor-card";
+
+    var title = document.createElement("h4");
+    title.textContent = "Monitor de limites (beta)";
+    card.appendChild(title);
+
+    var note = document.createElement("p");
+    note.className = "muted small";
+    note.textContent = "Painel rapido para evitar surpresa de custo. Ajuste os valores conforme seu plano atual.";
+    card.appendChild(note);
+
+    var costLine = document.createElement("div");
+    costLine.className = "beta-cost-estimate";
+    var costValue = document.createElement("strong");
+    var costSplit = document.createElement("span");
+    costSplit.className = "muted small";
+    costLine.appendChild(costValue);
+    costLine.appendChild(costSplit);
+    card.appendChild(costLine);
+
+    var metricGrid = document.createElement("div");
+    metricGrid.className = "beta-cost-metric-grid";
+    card.appendChild(metricGrid);
+
+    var metricCloudflare = document.createElement("div");
+    metricCloudflare.className = "beta-cost-metric";
+    var metricRender = document.createElement("div");
+    metricRender.className = "beta-cost-metric";
+    var metricSupabase = document.createElement("div");
+    metricSupabase.className = "beta-cost-metric";
+    metricGrid.appendChild(metricCloudflare);
+    metricGrid.appendChild(metricRender);
+    metricGrid.appendChild(metricSupabase);
+
+    var formGrid = document.createElement("div");
+    formGrid.className = "beta-cost-form-grid";
+    card.appendChild(formGrid);
+
+    function addNumberField(labelText, minValue) {
+      var field = document.createElement("div");
+      field.className = "field";
+      var label = document.createElement("label");
+      label.textContent = labelText;
+      var input = document.createElement("input");
+      input.type = "number";
+      input.min = String(minValue || 0);
+      input.step = "1";
+      field.appendChild(label);
+      field.appendChild(input);
+      formGrid.appendChild(field);
+      return input;
+    }
+
+    function addToggleField(labelText) {
+      var field = document.createElement("div");
+      field.className = "field beta-cost-toggle-field";
+      var label = document.createElement("label");
+      label.textContent = labelText;
+      var wrap = document.createElement("label");
+      wrap.className = "beta-cost-toggle";
+      var input = document.createElement("input");
+      input.type = "checkbox";
+      var textNode = document.createElement("span");
+      textNode.textContent = "Ativar plano pago";
+      wrap.appendChild(input);
+      wrap.appendChild(textNode);
+      field.appendChild(label);
+      field.appendChild(wrap);
+      formGrid.appendChild(field);
+      return input;
+    }
+
+    var inputUsers = addNumberField("Usuarios ativos no fluxo", 1);
+    var inputBuildsUsed = addNumberField("Cloudflare builds usados", 0);
+    var inputBuildsLimit = addNumberField("Cloudflare limite builds", 1);
+    var inputFilesUsed = addNumberField("Cloudflare arquivos do projeto", 0);
+    var inputFilesLimit = addNumberField("Cloudflare limite arquivos", 1);
+    var inputRenderHoursUsed = addNumberField("Render horas usadas", 0);
+    var inputRenderHoursLimit = addNumberField("Render limite horas", 1);
+    var inputSupabaseUsagePercent = addNumberField("Supabase uso da cota gratis (%)", 0);
+    var toggleRenderStarter = addToggleField("Render Starter (~US$7/mes)");
+    var toggleSupabasePro = addToggleField("Supabase Pro (~US$25/mes)");
+
+    var actions = document.createElement("div");
+    actions.className = "beta-history-filter-actions";
+    var resetBtn = document.createElement("button");
+    resetBtn.className = "btn";
+    resetBtn.type = "button";
+    resetBtn.textContent = "Resetar monitor";
+    actions.appendChild(resetBtn);
+    card.appendChild(actions);
+
+    function readFormState() {
+      return sanitizeCostMonitorState({
+        users: inputUsers.value,
+        cloudflareBuildsUsed: inputBuildsUsed.value,
+        cloudflareBuildsLimit: inputBuildsLimit.value,
+        cloudflareFilesUsed: inputFilesUsed.value,
+        cloudflareFilesLimit: inputFilesLimit.value,
+        renderHoursUsed: inputRenderHoursUsed.value,
+        renderHoursLimit: inputRenderHoursLimit.value,
+        supabaseUsagePercent: inputSupabaseUsagePercent.value,
+        useRenderStarter: !!toggleRenderStarter.checked,
+        useSupabasePro: !!toggleSupabasePro.checked
+      });
+    }
+
+    function applyStateToForm(nextState) {
+      inputUsers.value = String(nextState.users);
+      inputBuildsUsed.value = String(nextState.cloudflareBuildsUsed);
+      inputBuildsLimit.value = String(nextState.cloudflareBuildsLimit);
+      inputFilesUsed.value = String(nextState.cloudflareFilesUsed);
+      inputFilesLimit.value = String(nextState.cloudflareFilesLimit);
+      inputRenderHoursUsed.value = String(nextState.renderHoursUsed);
+      inputRenderHoursLimit.value = String(nextState.renderHoursLimit);
+      inputSupabaseUsagePercent.value = String(nextState.supabaseUsagePercent);
+      toggleRenderStarter.checked = !!nextState.useRenderStarter;
+      toggleSupabasePro.checked = !!nextState.useSupabasePro;
+    }
+
+    function metricLine(container, titleText, detailText, usageText, usageLevel) {
+      clearNode(container);
+      var head = document.createElement("div");
+      head.className = "beta-cost-metric-head";
+      var titleEl = document.createElement("strong");
+      titleEl.textContent = titleText;
+      var badge = document.createElement("span");
+      badge.className = "beta-cost-badge " + badgeClassByLevel(usageLevel);
+      badge.textContent = classifyUsage(parseFloat(usageText) || 0).label;
+      head.appendChild(titleEl);
+      head.appendChild(badge);
+      container.appendChild(head);
+
+      var detail = document.createElement("p");
+      detail.className = "muted small";
+      detail.textContent = detailText;
+      container.appendChild(detail);
+
+      var usage = document.createElement("p");
+      usage.className = "beta-cost-usage";
+      usage.textContent = "Uso: " + usageText + "%";
+      container.appendChild(usage);
+    }
+
+    function refreshMonitorUi(nextState) {
+      var monthly = buildMonthlyCostEstimate(nextState);
+      costValue.textContent = "Estimativa mensal: US$ " + String(monthly.total.toFixed(2));
+      costSplit.textContent = "Render: US$ " + String(monthly.render.toFixed(2)) + " | Supabase: US$ " + String(monthly.supabase.toFixed(2));
+
+      var cfBuildsPct = usagePercent(nextState.cloudflareBuildsUsed, nextState.cloudflareBuildsLimit);
+      var cfFilesPct = usagePercent(nextState.cloudflareFilesUsed, nextState.cloudflareFilesLimit);
+      var cfPct = Math.max(cfBuildsPct, cfFilesPct);
+      var renderPct = usagePercent(nextState.renderHoursUsed, nextState.renderHoursLimit);
+      var supabasePct = clampToRange(nextState.supabaseUsagePercent, 0, 100);
+
+      metricLine(
+        metricCloudflare,
+        "Cloudflare (Free)",
+        "Builds " + String(nextState.cloudflareBuildsUsed) + "/" + String(nextState.cloudflareBuildsLimit) + " | Arquivos " + String(nextState.cloudflareFilesUsed) + "/" + String(nextState.cloudflareFilesLimit),
+        cfPct.toFixed(1),
+        classifyUsage(cfPct).level
+      );
+      metricLine(
+        metricRender,
+        nextState.useRenderStarter ? "Render (Starter)" : "Render (Free)",
+        "Horas " + String(nextState.renderHoursUsed) + "/" + String(nextState.renderHoursLimit),
+        renderPct.toFixed(1),
+        classifyUsage(renderPct).level
+      );
+      metricLine(
+        metricSupabase,
+        nextState.useSupabasePro ? "Supabase (Pro)" : "Supabase (Free)",
+        "Leitura rapida para fluxo com " + String(nextState.users) + " usuario(s) ativo(s).",
+        supabasePct.toFixed(1),
+        classifyUsage(supabasePct).level
+      );
+    }
+
+    function persistAndRefresh() {
+      var nextState = readFormState();
+      saveCostMonitorState(nextState);
+      refreshMonitorUi(nextState);
+    }
+
+    applyStateToForm(state);
+    refreshMonitorUi(state);
+
+    [
+      inputUsers,
+      inputBuildsUsed,
+      inputBuildsLimit,
+      inputFilesUsed,
+      inputFilesLimit,
+      inputRenderHoursUsed,
+      inputRenderHoursLimit,
+      inputSupabaseUsagePercent,
+      toggleRenderStarter,
+      toggleSupabasePro
+    ].forEach(function (el) {
+      el.addEventListener("input", persistAndRefresh);
+      el.addEventListener("change", persistAndRefresh);
+    });
+
+    resetBtn.addEventListener("click", function () {
+      var defaults = buildCostMonitorDefaults();
+      saveCostMonitorState(defaults);
+      applyStateToForm(defaults);
+      refreshMonitorUi(defaults);
+    });
+
+    target.appendChild(card);
   }
 
   function fallbackSetSelectOptions(select, options, preferredValue) {
@@ -121,6 +430,7 @@
     intro.appendChild(title);
     intro.appendChild(note);
     target.appendChild(intro);
+    renderCostMonitorCard(target);
 
     if (!canUseSupportApi()) {
       var empty = document.createElement("p");

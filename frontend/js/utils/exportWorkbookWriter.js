@@ -3,6 +3,11 @@
 
   function tableToAoa(table) {
     var source = table && typeof table === "object" ? table : {};
+    if (Array.isArray(source.aoa)) {
+      return source.aoa.map(function (row) {
+        return Array.isArray(row) ? row.slice() : [];
+      });
+    }
     var headers = Array.isArray(source.headers) ? source.headers : [];
     var rows = Array.isArray(source.rows) ? source.rows : [];
     return [headers].concat(rows.map(function (rowObj) {
@@ -82,6 +87,31 @@
 
   function clamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
+  }
+
+  function normalizeText(value) {
+    var out = String(value == null ? "" : value);
+    if (typeof out.normalize === "function") {
+      out = out.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    }
+    return out
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, " ");
+  }
+
+  function buildOfficialPlanilha1Aoa(planilha1Aoa) {
+    var source = Array.isArray(planilha1Aoa) ? planilha1Aoa : [];
+    var rows = [];
+
+    for (var i = 1; i < source.length; i += 1) {
+      var row = Array.isArray(source[i]) ? source[i] : [];
+      var label = normalizeText(row[0]);
+      if (label === "total geral") continue;
+      rows.push([row[0] == null ? "" : row[0], row[1] == null ? "" : row[1]]);
+    }
+
+    return [[], [], ["Rótulos de Linha", "Contagem de Deputado"]].concat(rows);
   }
 
   function buildCellStyle(options) {
@@ -228,6 +258,8 @@
     if (opts.templateMode && typeof dep.exportRecordsToTemplateXlsx === "function") {
       return dep.exportRecordsToTemplateXlsx(records, filename, opts, xlsxApi);
     }
+    var includeAuditLog = opts.includeAuditLog !== false;
+    var officialLayout = !!opts.officialLayout;
 
     var buildExportTableData = typeof dep.buildExportTableData === "function" ? dep.buildExportTableData : function () {
       return { headers: [], rows: [] };
@@ -244,21 +276,27 @@
     var dataTable = buildExportTableData(records, opts);
     var dataAoa = tableToAoa(dataTable);
 
-    var auditTable = buildAuditLogTableData(records);
-    var exportScope = dep.exportScopeAtuais || "ATUAIS";
-    var summaryAoa = buildSummaryAoa(records, auditTable.rows.length, opts.exportScope || exportScope, opts.exportFilters || {});
-    var auditAoa = tableToAoa(auditTable);
-    var auditSheetAoa = summaryAoa.concat([[]]).concat(auditAoa);
-    var planilha1Aoa = buildPlanilha1Aoa(records);
-    var modifiedHeaders = collectModifiedFieldMap(auditTable.rows);
+    var auditTable = { headers: [], rows: [] };
+    var summaryAoa = [];
+    var auditSheetAoa = [];
+    if (includeAuditLog) {
+      auditTable = buildAuditLogTableData(records);
+      var exportScope = dep.exportScopeAtuais || "ATUAIS";
+      summaryAoa = buildSummaryAoa(records, auditTable.rows.length, opts.exportScope || exportScope, opts.exportFilters || {});
+      var auditAoa = tableToAoa(auditTable);
+      auditSheetAoa = summaryAoa.concat([[]]).concat(auditAoa);
+    }
+    var planilha1BaseAoa = buildPlanilha1Aoa(records);
+    var planilha1Aoa = officialLayout ? buildOfficialPlanilha1Aoa(planilha1BaseAoa) : planilha1BaseAoa;
+    var modifiedHeaders = includeAuditLog ? collectModifiedFieldMap(auditTable.rows) : {};
 
     var wsData = xlsxApi.utils.aoa_to_sheet(dataAoa);
-    var wsAudit = xlsxApi.utils.aoa_to_sheet(auditSheetAoa);
     var wsPlanilha1 = xlsxApi.utils.aoa_to_sheet(planilha1Aoa);
+    var wsAudit = includeAuditLog ? xlsxApi.utils.aoa_to_sheet(auditSheetAoa) : null;
 
     applyWorksheetPresentation(wsPlanilha1, planilha1Aoa, xlsxApi, {
-      headerRowIndex: 0,
-      totalRowIndex: planilha1Aoa.length - 1,
+      headerRowIndex: officialLayout ? 2 : 0,
+      totalRowIndex: officialLayout ? -1 : (planilha1Aoa.length - 1),
       widthHints: {
         rotulos_de_linha: 28,
         contagem_de_deputado: 18
@@ -280,25 +318,29 @@
         processo_sei: 18
       }
     });
-    applyWorksheetPresentation(wsAudit, auditSheetAoa, xlsxApi, {
-      headerRowIndex: summaryAoa.length + 1,
-      widthHints: {
-        identificacao: 24,
-        municipio: 20,
-        usuarios_ativos: 28,
-        valor_antigo: 22,
-        valor_novo: 22,
-        motivo: 30
-      }
-    });
+    if (includeAuditLog) {
+      applyWorksheetPresentation(wsAudit, auditSheetAoa, xlsxApi, {
+        headerRowIndex: summaryAoa.length + 1,
+        widthHints: {
+          identificacao: 24,
+          municipio: 20,
+          usuarios_ativos: 28,
+          valor_antigo: 22,
+          valor_novo: 22,
+          motivo: 30
+        }
+      });
+    }
 
     var workbook = xlsxApi.utils.book_new();
     xlsxApi.utils.book_append_sheet(workbook, wsPlanilha1, "Planilha1");
     xlsxApi.utils.book_append_sheet(workbook, wsData, "Controle de EPI");
-    xlsxApi.utils.book_append_sheet(workbook, wsAudit, "AuditLog");
+    if (includeAuditLog && wsAudit) {
+      xlsxApi.utils.book_append_sheet(workbook, wsAudit, "AuditLog");
+    }
 
     var roundTrip = null;
-    if (opts.roundTripCheck) {
+    if (opts.roundTripCheck && !officialLayout) {
       var check = runRoundTripCheck(workbook, dataTable.headers);
       roundTrip = check;
       if (!check.ok && typeof dep.notify === "function") {
@@ -311,7 +353,7 @@
 
     return {
       totalRegistros: Array.isArray(records) ? records.length : 0,
-      totalEventos: Array.isArray(auditTable.rows) ? auditTable.rows.length : 0,
+      totalEventos: includeAuditLog && Array.isArray(auditTable.rows) ? auditTable.rows.length : 0,
       roundTrip: roundTrip
     };
   }

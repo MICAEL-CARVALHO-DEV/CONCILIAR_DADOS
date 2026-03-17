@@ -1364,6 +1364,29 @@ h1, h2, h3, h4, p {
   background: linear-gradient(180deg, #ffffff 0%, #f7fafc 100%);
 }
 
+.beta-powerbi-layout-actions {
+  margin-top: 10px;
+}
+
+.beta-powerbi-panel-expanded .beta-powerbi-kpi-grid.is-expanded {
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.beta-powerbi-panel-expanded .beta-powerbi-control-grid.is-expanded {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.beta-powerbi-panel-expanded .beta-powerbi-deputy-grid.is-expanded {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.beta-powerbi-panel-expanded .beta-panel-card.table-wrap .table th,
+.beta-powerbi-panel-expanded .beta-panel-card.table-wrap .table td {
+  font-size: 0.84rem;
+  padding-top: 10px;
+  padding-bottom: 10px;
+}
+
 .beta-metric-stack {
   display: flex;
   flex-direction: column;
@@ -1443,6 +1466,104 @@ h1, h2, h3, h4, p {
 .beta-history-note {
   margin-top: 6px;
   font-size: 0.84rem;
+}
+
+.beta-cost-monitor-card {
+  margin-top: 12px;
+  border-color: #c6d8ea;
+  background: linear-gradient(180deg, #f8fbff 0%, #eef5ff 100%);
+}
+
+.beta-cost-estimate {
+  margin-top: 10px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.beta-cost-estimate strong {
+  font-size: 1.02rem;
+}
+
+.beta-cost-metric-grid {
+  margin-top: 10px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.beta-cost-metric {
+  border: 1px solid #d5e1ec;
+  border-radius: 14px;
+  padding: 10px;
+  background: #ffffff;
+}
+
+.beta-cost-metric-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.beta-cost-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.beta-cost-badge.is-ok {
+  background: #e9f8ef;
+  border: 1px solid #b9e4cb;
+  color: #117042;
+}
+
+.beta-cost-badge.is-attention {
+  background: #fff6e8;
+  border: 1px solid #ffd9a7;
+  color: #9a5200;
+}
+
+.beta-cost-badge.is-critical {
+  background: #ffecef;
+  border: 1px solid #f7b8c3;
+  color: #b4233d;
+}
+
+.beta-cost-usage {
+  margin-top: 6px;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.beta-cost-form-grid {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.beta-cost-toggle-field {
+  display: grid;
+  gap: 8px;
+}
+
+.beta-cost-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+  padding: 8px 10px;
+  border: 1px solid #dbe3ec;
+  border-radius: 12px;
+  background: #ffffff;
+  font-size: 0.82rem;
 }
 
 .beta-support-compose-grid,
@@ -2567,6 +2688,12 @@ body.sidebar-focus-strong #pendingUsersModal.show .modal-card {
   .beta-import-layout {
     grid-template-columns: 1fr 1fr;
   }
+
+  .beta-powerbi-panel-expanded .beta-powerbi-kpi-grid.is-expanded,
+  .beta-powerbi-panel-expanded .beta-powerbi-control-grid.is-expanded,
+  .beta-powerbi-panel-expanded .beta-powerbi-deputy-grid.is-expanded {
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 @media (max-width: 640px) {
@@ -2914,6 +3041,9 @@ body.sidebar-focus-strong #pendingUsersModal.show .modal-card {
 :root[data-theme="dark"] .beta-tab-panel,
 :root[data-theme="dark"] .beta-kpi-card,
 :root[data-theme="dark"] .beta-panel-card,
+:root[data-theme="dark"] .beta-cost-monitor-card,
+:root[data-theme="dark"] .beta-cost-metric,
+:root[data-theme="dark"] .beta-cost-toggle,
 :root[data-theme="dark"] .beta-dashboard-filters,
 :root[data-theme="dark"] .beta-deputy-card,
 :root[data-theme="dark"] .beta-deputy-metric,
@@ -2993,11 +3123,34 @@ body.sidebar-focus-strong #pendingUsersModal.show .modal-card {
   color: #d8f4e5;
 }
 
+:root[data-theme="dark"] .beta-cost-badge.is-ok {
+  background: rgba(29, 187, 118, 0.18);
+  border-color: rgba(29, 187, 118, 0.32);
+  color: #d8f4e5;
+}
+
+:root[data-theme="dark"] .beta-cost-badge.is-attention {
+  background: rgba(250, 191, 97, 0.16);
+  border-color: rgba(250, 191, 97, 0.36);
+  color: #ffd9a0;
+}
+
+:root[data-theme="dark"] .beta-cost-badge.is-critical {
+  background: rgba(246, 102, 127, 0.16);
+  border-color: rgba(246, 102, 127, 0.36);
+  color: #ffccd6;
+}
+
 :root[data-theme="dark"] .beta-support-thread-item.active,
 :root[data-theme="dark"] .beta-import-item.active,
 :root[data-theme="dark"] .beta-support-message.support {
   background: linear-gradient(135deg, rgba(29, 187, 118, 0.16) 0%, #172431 72%);
   border-color: rgba(29, 187, 118, 0.35);
+}
+
+:root[data-theme="dark"] .beta-powerbi-panel-expanded .beta-panel-card.table-wrap .table th,
+:root[data-theme="dark"] .beta-powerbi-panel-expanded .beta-panel-card.table-wrap .table td {
+  border-color: rgba(79, 102, 124, 0.62);
 }
 
 :root[data-theme="dark"] .beta-support-message,

@@ -13,8 +13,9 @@ DASHBOARD_ADJUSTMENT_SCOPE = "GLOBAL"
 DASHBOARD_ADJUSTMENT_MANAGER_ROLES = {"PROGRAMADOR"}
 DASHBOARD_DEPUTADO_COUNT_SOURCE = "BASE_ATUAL"
 DASHBOARD_DEPUTADO_COUNT_NOTE = (
-    "Contagem oficial considera emendas atuais da base consolidada "
-    "e permite ajuste manual global auditado por PROGRAMADOR."
+    "Contagem oficial considera emendas atuais da base consolidada; "
+    "todos os usuarios autenticados podem visualizar e apenas PROGRAMADOR "
+    "pode ajustar em escopo global com auditoria."
 )
 
 
