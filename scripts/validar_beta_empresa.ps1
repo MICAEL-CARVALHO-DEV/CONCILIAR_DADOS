@@ -1,7 +1,8 @@
 param(
   [int]$ApiPort = 8000,
   [int]$FrontPort = 5511,
-  [switch]$RequireAuthSmoke
+  [switch]$RequireAuthSmoke,
+  [switch]$NoAutoStartFront
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,6 +15,8 @@ $smokeEndpoints = Join-Path $PSScriptRoot "smoke_summary_endpoints.ps1"
 
 $failed = $false
 $results = New-Object System.Collections.ArrayList
+$autoStartedFrontProcess = $null
+$frontUrl = "http://127.0.0.1:$FrontPort/index.html"
 
 function Add-Result([string]$step, [string]$status, [string]$detail) {
   $null = $results.Add([pscustomobject]@{
@@ -33,10 +36,49 @@ function Run-Step([string]$step, [scriptblock]$action) {
   }
 }
 
+function Test-FrontOnline([string]$url) {
+  try {
+    $res = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 3
+    $status = [int]$res.StatusCode
+    return ($status -ge 200 -and $status -lt 400)
+  } catch {
+    return $false
+  }
+}
+
+function Ensure-FrontOnline() {
+  if (Test-FrontOnline $frontUrl) { return }
+  if ($NoAutoStartFront) {
+    throw "Front offline em $frontUrl. Inicie o front antes de validar."
+  }
+
+  Write-Host "[validacao] front offline; iniciando servidor local temporario na porta $FrontPort..." -ForegroundColor Yellow
+  $script:autoStartedFrontProcess = Start-Process -FilePath "py" -ArgumentList @("-3", "-m", "http.server", "$FrontPort", "--bind", "127.0.0.1") -WorkingDirectory $root -PassThru -WindowStyle Hidden
+
+  $attempts = 20
+  for ($i = 0; $i -lt $attempts; $i++) {
+    Start-Sleep -Milliseconds 350
+    if (Test-FrontOnline $frontUrl) { return }
+  }
+
+  throw "Nao foi possivel subir o front temporario em $frontUrl."
+}
+
+function Cleanup-AutoStartedFront() {
+  if (-not $script:autoStartedFrontProcess) { return }
+  try {
+    if (-not $script:autoStartedFrontProcess.HasExited) {
+      Stop-Process -Id $script:autoStartedFrontProcess.Id -Force -ErrorAction SilentlyContinue
+    }
+  } catch {
+    # no-op
+  }
+}
+
 Write-Host ""
 Write-Host "=== BETA EMPRESA - VALIDACAO ===" -ForegroundColor Cyan
 Write-Host "Projeto: $root" -ForegroundColor DarkCyan
-Write-Host "Front alvo: http://127.0.0.1:$FrontPort/index.html" -ForegroundColor Green
+Write-Host "Front alvo: $frontUrl" -ForegroundColor Green
 Write-Host "API alvo:   http://127.0.0.1:$ApiPort/health" -ForegroundColor Green
 Write-Host ""
 
@@ -60,7 +102,8 @@ Run-Step "Compilacao Python (backend)" {
 
 Run-Step "Front online + IDs criticos" {
   if (-not (Test-Path $indexHtml)) { throw "Arquivo nao encontrado: $indexHtml" }
-  $res = Invoke-WebRequest -Uri "http://127.0.0.1:$FrontPort/index.html" -UseBasicParsing -TimeoutSec 8
+  Ensure-FrontOnline
+  $res = Invoke-WebRequest -Uri $frontUrl -UseBasicParsing -TimeoutSec 8
   if ([int]$res.StatusCode -lt 200 -or [int]$res.StatusCode -ge 400) {
     throw "Front sem resposta valida. Status: $($res.StatusCode)"
   }
@@ -119,12 +162,13 @@ Write-Host "Resumo da validacao beta:" -ForegroundColor Cyan
 $results | Format-Table -AutoSize
 
 if ($failed) {
+  Cleanup-AutoStartedFront
   Write-Host ""
   Write-Host "BETA AINDA NAO PRONTA: existe(m) falha(s) bloqueadora(s)." -ForegroundColor Red
   exit 1
 }
 
+Cleanup-AutoStartedFront
 Write-Host ""
 Write-Host "BETA PRONTA PARA HOMOLOGACAO: validacao automatica passou." -ForegroundColor Green
 exit 0
-
