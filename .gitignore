@@ -69,6 +69,7 @@ oauth-client*.json
 *.tmp
 *.temp
 *.bundle
+.cf-pages-dist/
 
 # Design scratch / backup assets
 assets/ChatGPT Image *.png

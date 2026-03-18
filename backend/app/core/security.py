@@ -191,9 +191,9 @@ def _build_unique_public_username(db: Session, preferred: str) -> str:
 
 def _verify_google_identity_token(id_token: str) -> dict:
     raw_token = (id_token or "").strip()
-    client_id = (settings.GOOGLE_CLIENT_ID or "").strip()
+    client_ids = settings.google_client_ids_list
 
-    if not client_id:
+    if not client_ids:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="login com google indisponivel",
@@ -217,7 +217,7 @@ def _verify_google_identity_token(id_token: str) -> dict:
 
     aud = str(payload.get("aud") or "").strip()
     azp = str(payload.get("azp") or "").strip()
-    if aud != client_id and azp != client_id:
+    if aud not in client_ids and azp not in client_ids:
         raise HTTPException(status_code=401, detail="token google com audience invalida")
 
     issuer = str(payload.get("iss") or "").strip()

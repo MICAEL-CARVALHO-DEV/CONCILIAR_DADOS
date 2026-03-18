@@ -535,6 +535,7 @@ const shellBetaTabNavButtons = Array.prototype.slice.call(document.querySelector
 const btnSidebarToggle = document.getElementById("btnSidebarToggle");
 const btnThemeToggle = document.getElementById("btnThemeToggle");
 const btnProfile = document.getElementById("btnProfile");
+const btnChangePassword = document.getElementById("btnChangePassword");
 const btnPendingApprovals = document.getElementById("btnPendingApprovals");
 const btnCreateProfile = document.getElementById("btnCreateProfile");
 const btnLogout = document.getElementById("btnLogout");
@@ -558,6 +559,14 @@ const profileName = document.getElementById("profileName");
 const profileRole = document.getElementById("profileRole");
 const profileMode = document.getElementById("profileMode");
 const profileApi = document.getElementById("profileApi");
+const changePasswordModal = document.getElementById("changePasswordModal");
+const btnChangePasswordClose = document.getElementById("btnChangePasswordClose");
+const btnChangePasswordCloseX = document.getElementById("btnChangePasswordCloseX");
+const btnChangePasswordSubmit = document.getElementById("btnChangePasswordSubmit");
+const changePasswordCurrent = document.getElementById("changePasswordCurrent");
+const changePasswordNew = document.getElementById("changePasswordNew");
+const changePasswordConfirm = document.getElementById("changePasswordConfirm");
+const changePasswordMessage = document.getElementById("changePasswordMessage");
 const pendingUsersModal = document.getElementById("pendingUsersModal");
 const btnPendingUsersClose = document.getElementById("btnPendingUsersClose");
 const btnPendingUsersCloseX = document.getElementById("btnPendingUsersCloseX");
@@ -1216,6 +1225,8 @@ function getUiShellBindingsContext() {
     sidebarUserMenuActions: sidebarUserMenuActions,
     btnProfile: btnProfile,
     openProfileModal: openProfileModal,
+    btnChangePassword: btnChangePassword,
+    openChangePasswordModal: openChangePasswordModal,
     btnLogout: btnLogout,
     logoutCurrentUser: logoutCurrentUser,
     redirectToAuth: redirectToAuth,
@@ -1271,6 +1282,12 @@ function getUiShellBindingsContext() {
     btnProfileCloseX: btnProfileCloseX,
     closeProfileModal: closeProfileModal,
     profileModal: profileModal,
+    btnChangePasswordClose: btnChangePasswordClose,
+    btnChangePasswordCloseX: btnChangePasswordCloseX,
+    closeChangePasswordModal: closeChangePasswordModal,
+    changePasswordModal: changePasswordModal,
+    btnChangePasswordSubmit: btnChangePasswordSubmit,
+    submitChangePassword: submitChangePassword,
     btnPendingApprovals: btnPendingApprovals,
     openPendingUsersModal: openPendingUsersModal,
     btnPendingUsersClose: btnPendingUsersClose,
@@ -6110,6 +6127,7 @@ function getAccessProfileContext() {
     btnReset: btnReset,
     btnDemo4Users: btnDemo4Users,
     btnProfile: btnProfile,
+    btnChangePassword: btnChangePassword,
     btnLogout: btnLogout,
     getStorageMode: getStorageMode,
     isWorkspaceOperational: isOperationalWorkspace,
@@ -6821,6 +6839,7 @@ function applyAccessProfile() {
   if (btnReset) btnReset.style.display = isOwner && canUseDemoTools ? "inline-block" : "none";
   if (btnDemo4Users) btnDemo4Users.style.display = isOwner && canUseDemoTools ? "inline-block" : "none";
   if (btnProfile) btnProfile.style.display = "flex";
+  if (btnChangePassword) btnChangePassword.style.display = "flex";
   if (btnLogout) btnLogout.style.display = "flex";
   if (isWorkspaceOperational) {
     renderRoleNotice();
@@ -6868,6 +6887,102 @@ function closeProfileModal() {
   }
   if (!profileModal) return;
   setAuxModalVisibility(profileModal, false);
+}
+
+function setChangePasswordFeedback(msg, isError) {
+  if (!changePasswordMessage) return;
+  changePasswordMessage.textContent = String(msg || "");
+  changePasswordMessage.style.color = isError ? "#b4233d" : "";
+}
+
+function setChangePasswordBusy(isBusy) {
+  const busy = !!isBusy;
+  if (changePasswordCurrent) changePasswordCurrent.disabled = busy;
+  if (changePasswordNew) changePasswordNew.disabled = busy;
+  if (changePasswordConfirm) changePasswordConfirm.disabled = busy;
+  if (btnChangePasswordSubmit) {
+    btnChangePasswordSubmit.disabled = busy;
+    btnChangePasswordSubmit.textContent = busy ? "Salvando..." : "Salvar nova senha";
+  }
+}
+
+function clearChangePasswordForm() {
+  if (changePasswordCurrent) changePasswordCurrent.value = "";
+  if (changePasswordNew) changePasswordNew.value = "";
+  if (changePasswordConfirm) changePasswordConfirm.value = "";
+  setChangePasswordBusy(false);
+}
+
+function openChangePasswordModal() {
+  if (!changePasswordModal) return;
+  clearChangePasswordForm();
+  setChangePasswordFeedback("", false);
+  setAuxModalVisibility(changePasswordModal, true);
+  if (changePasswordCurrent) {
+    try {
+      changePasswordCurrent.focus({ preventScroll: true });
+    } catch (_err) {
+      changePasswordCurrent.focus();
+    }
+  }
+}
+
+function closeChangePasswordModal() {
+  if (!changePasswordModal) return;
+  setAuxModalVisibility(changePasswordModal, false);
+  clearChangePasswordForm();
+  setChangePasswordFeedback("", false);
+}
+
+async function submitChangePassword() {
+  const currentValue = String(changePasswordCurrent && changePasswordCurrent.value || "").trim();
+  const nextValue = String(changePasswordNew && changePasswordNew.value || "").trim();
+  const confirmValue = String(changePasswordConfirm && changePasswordConfirm.value || "").trim();
+
+  if (!currentValue || !nextValue || !confirmValue) {
+    setChangePasswordFeedback("Preencha senha atual, nova senha e confirmacao.", true);
+    return false;
+  }
+  if (nextValue.length < 4) {
+    setChangePasswordFeedback("A nova senha precisa ter ao menos 4 caracteres.", true);
+    return false;
+  }
+  if (nextValue !== confirmValue) {
+    setChangePasswordFeedback("A confirmacao nao confere com a nova senha.", true);
+    return false;
+  }
+  if (currentValue === nextValue) {
+    setChangePasswordFeedback("A nova senha deve ser diferente da senha atual.", true);
+    return false;
+  }
+
+  setChangePasswordBusy(true);
+  setChangePasswordFeedback("Atualizando senha...", false);
+  try {
+    const resp = await apiRequest(
+      "POST",
+      "/auth/change-password",
+      { senha_atual: currentValue, nova_senha: nextValue },
+      "UI",
+      { handleAuthFailure: true }
+    );
+    const detail = String(resp && resp.detail || "Senha atualizada com sucesso.");
+    setChangePasswordFeedback(detail, false);
+    if (changePasswordCurrent) changePasswordCurrent.value = "";
+    if (changePasswordNew) changePasswordNew.value = "";
+    if (changePasswordConfirm) changePasswordConfirm.value = "";
+    if (typeof window !== "undefined" && typeof window.setTimeout === "function") {
+      window.setTimeout(function () {
+        closeChangePasswordModal();
+      }, 850);
+    }
+    return true;
+  } catch (err) {
+    setChangePasswordFeedback(extractApiError(err, "Falha ao trocar senha."), true);
+    return false;
+  } finally {
+    setChangePasswordBusy(false);
+  }
 }
 
 function isOwnerUser() {

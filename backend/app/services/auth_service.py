@@ -408,6 +408,69 @@ def auth_login_service(*, payload, request: Request, db: Session) -> dict:
     }
 
 
+def auth_change_password_service(*, payload, actor: dict, request: Request, db: Session) -> dict:
+    actor_id = actor.get("id")
+    if actor_id is None:
+        raise HTTPException(status_code=401, detail="sessao invalida")
+
+    user = db.get(Usuario, int(actor_id))
+    if not user:
+        raise HTTPException(status_code=404, detail="usuario nao encontrado")
+
+    if not user.ativo:
+        detail = _inactive_account_detail(user)
+        _add_auth_audit(
+            db,
+            request=request,
+            event_type="CHANGE_PASSWORD",
+            login_identificador=user.nome,
+            detail=detail,
+            success=False,
+            provider="LOCAL",
+            user=user,
+        )
+        db.commit()
+        raise HTTPException(status_code=403, detail=detail)
+
+    senha_atual = (payload.senha_atual or "").strip()
+    nova_senha = (payload.nova_senha or "").strip()
+    if not senha_atual or not nova_senha:
+        raise HTTPException(status_code=400, detail="informe senha atual e nova senha")
+    if senha_atual == nova_senha:
+        raise HTTPException(status_code=400, detail="a nova senha deve ser diferente da atual")
+
+    valid, _used_legacy = _verify_user_password(user, senha_atual)
+    if not valid:
+        _add_auth_audit(
+            db,
+            request=request,
+            event_type="CHANGE_PASSWORD",
+            login_identificador=user.nome,
+            detail="senha atual invalida",
+            success=False,
+            provider="LOCAL",
+            user=user,
+        )
+        db.commit()
+        raise HTTPException(status_code=401, detail="Senha atual invalida.")
+
+    user.senha_hash = _hash_password(nova_senha)
+    user.senha_salt = ""
+    _add_auth_audit(
+        db,
+        request=request,
+        event_type="CHANGE_PASSWORD",
+        login_identificador=user.nome,
+        detail="senha alterada com sucesso",
+        success=True,
+        provider="LOCAL",
+        user=user,
+    )
+    db.commit()
+
+    return {"ok": True, "detail": "Senha atualizada com sucesso."}
+
+
 def auth_recovery_request_service(*, payload, request: Request, db: Session) -> dict:
     identificador = payload.identificador.strip()
     user = _find_user_by_login(db, identificador)

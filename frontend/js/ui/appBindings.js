@@ -8,6 +8,7 @@
     var render = typeof opts.render === "function" ? opts.render : noop;
     var debounce = typeof opts.debounce === "function" ? opts.debounce : function (fn) { return fn; };
     var openProfileModal = typeof opts.openProfileModal === "function" ? opts.openProfileModal : noop;
+    var openChangePasswordModal = typeof opts.openChangePasswordModal === "function" ? opts.openChangePasswordModal : noop;
     var logoutCurrentUser = typeof opts.logoutCurrentUser === "function" ? opts.logoutCurrentUser : function () { return Promise.resolve(); };
     var redirectToAuth = typeof opts.redirectToAuth === "function" ? opts.redirectToAuth : noop;
     var generateRandomMultiUserDemo = typeof opts.generateRandomMultiUserDemo === "function" ? opts.generateRandomMultiUserDemo : noop;
@@ -55,6 +56,12 @@
     var btnProfileCloseX = opts.btnProfileCloseX || null;
     var closeProfileModal = typeof opts.closeProfileModal === "function" ? opts.closeProfileModal : noop;
     var profileModal = opts.profileModal || null;
+    var btnChangePasswordClose = opts.btnChangePasswordClose || null;
+    var btnChangePasswordCloseX = opts.btnChangePasswordCloseX || null;
+    var closeChangePasswordModal = typeof opts.closeChangePasswordModal === "function" ? opts.closeChangePasswordModal : noop;
+    var changePasswordModal = opts.changePasswordModal || null;
+    var btnChangePasswordSubmit = opts.btnChangePasswordSubmit || null;
+    var submitChangePassword = typeof opts.submitChangePassword === "function" ? opts.submitChangePassword : function () { return Promise.resolve(); };
     var btnPendingApprovals = opts.btnPendingApprovals || null;
     var openPendingUsersModal = typeof opts.openPendingUsersModal === "function" ? opts.openPendingUsersModal : noop;
     var btnPendingUsersClose = opts.btnPendingUsersClose || null;
@@ -82,6 +89,7 @@
     var sidebarUserMenuContainer = opts.sidebarUserMenuContainer || null;
     var sidebarUserMenuActions = opts.sidebarUserMenuActions || null;
     var btnProfile = opts.btnProfile || null;
+    var btnChangePassword = opts.btnChangePassword || null;
     var btnLogout = opts.btnLogout || null;
     var btnDemo4Users = opts.btnDemo4Users || null;
     var modalClose = opts.modalClose || null;
@@ -181,6 +189,12 @@
         openProfileModal();
       });
     }
+    if (btnChangePassword) {
+      btnChangePassword.addEventListener("click", function () {
+        closeSidebarUserMenu();
+        openChangePasswordModal();
+      });
+    }
     if (btnLogout) {
       btnLogout.addEventListener("click", async function () {
         closeSidebarUserMenu();
@@ -254,6 +268,10 @@
       }
       if (profileModal && profileModal.classList.contains("show")) {
         closeProfileModal();
+        return;
+      }
+      if (changePasswordModal && changePasswordModal.classList.contains("show")) {
+        closeChangePasswordModal();
         return;
       }
       if (pendingUsersModal && pendingUsersModal.classList.contains("show")) {
@@ -380,6 +398,18 @@
     if (profileModal) {
       profileModal.addEventListener("click", function (e) {
         if (e.target === profileModal) closeProfileModal();
+      });
+    }
+    if (btnChangePasswordClose) btnChangePasswordClose.addEventListener("click", closeChangePasswordModal);
+    if (btnChangePasswordCloseX) btnChangePasswordCloseX.addEventListener("click", closeChangePasswordModal);
+    if (btnChangePasswordSubmit) {
+      btnChangePasswordSubmit.addEventListener("click", async function () {
+        await submitChangePassword();
+      });
+    }
+    if (changePasswordModal) {
+      changePasswordModal.addEventListener("click", function (e) {
+        if (e.target === changePasswordModal) closeChangePasswordModal();
       });
     }
 

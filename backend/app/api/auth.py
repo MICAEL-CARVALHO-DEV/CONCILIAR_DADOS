@@ -6,6 +6,7 @@ from ..core.dependencies import _actor_from_headers, _actor_optional_from_header
 from ..db import get_db
 from ..schemas import (
     AuthAuditLogOut,
+    AuthChangePasswordIn,
     AuthGoogleIn,
     AuthLoginIn,
     AuthOut,
@@ -46,6 +47,10 @@ def create_auth_router(broadcast_update) -> APIRouter:
     @router.post("/auth/recovery-request")
     def auth_recovery_request(payload: AuthRecoveryRequestIn, request: Request, db=Depends(get_db)):
         return auth_service.auth_recovery_request_service(payload=payload, request=request, db=db)
+
+    @router.post("/auth/change-password")
+    def auth_change_password(payload: AuthChangePasswordIn, request: Request, actor: dict = Depends(_actor_from_headers), db=Depends(get_db)):
+        return auth_service.auth_change_password_service(payload=payload, actor=actor, request=request, db=db)
 
     @router.get("/auth/me", response_model=UserOut)
     def auth_me(actor: dict = Depends(_actor_from_headers)):
