@@ -26,7 +26,30 @@ $allowedRootFiles = @(
   "style.css"
 )
 
-$rootFiles = @(Get-ChildItem -Path . -File -Force | Select-Object -ExpandProperty Name)
+$rootFiles = @()
+$gitCmd = Get-Command git -ErrorAction SilentlyContinue
+if ($null -ne $gitCmd) {
+  try {
+    # Usa a visao do Git (tracked + untracked nao ignorados) para nao acusar
+    # arquivo temporario/ignorado como falha de higiene.
+    $gitRootFiles = @(
+      & git ls-files --cached --others --exclude-standard 2>$null |
+        Where-Object { $_ -and ($_ -notmatch "[/\\]") } |
+        ForEach-Object { $_.Trim() } |
+        Sort-Object -Unique
+    )
+    if ($LASTEXITCODE -eq 0) {
+      $rootFiles = $gitRootFiles
+    }
+  } catch {
+    # Fallback local sem git.
+  }
+}
+
+if ($rootFiles.Count -eq 0) {
+  $rootFiles = @(Get-ChildItem -Path . -File -Force | Select-Object -ExpandProperty Name)
+}
+
 $unexpectedRootFiles = @($rootFiles | Where-Object { $allowedRootFiles -notcontains $_ } | Sort-Object)
 $missingRootFiles = @($allowedRootFiles | Where-Object { $rootFiles -notcontains $_ } | Sort-Object)
 
