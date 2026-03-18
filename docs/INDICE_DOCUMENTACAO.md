@@ -15,6 +15,7 @@ Success: Qualquer pessoa encontra rapidamente o documento certo sem depender de 
 - `../anotacoes/documentacao_raiz/check62.md`
 - `../anotacoes/documentacao_raiz/checkuser.md`
 - `../checks/check_pendencias_beta_sec.md`
+- `cloudflare_homologacao_sem_terminal.md`
 - `../anotacoes/documentacao_raiz/checklist_deploy_final_operacao.md`
 - `../anotacoes/documentacao_raiz/deploy.md`
 - `../anotacoes/documentacao_raiz/deploy_gratis_render_supabase.md`
