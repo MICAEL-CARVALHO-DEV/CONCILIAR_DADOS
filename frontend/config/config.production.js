@@ -23,6 +23,22 @@
         "127.0.0.1": "http://127.0.0.1:8000"
       }
     ),
+    API_BASE_URL_BY_HOST_SUFFIX: Object.assign(
+      {},
+      (window.SEC_APP_CONFIG && window.SEC_APP_CONFIG.API_BASE_URL_BY_HOST_SUFFIX) || {},
+      (window.SEC_APP_CONFIG && window.SEC_APP_CONFIG.API_BASE_URL_BY_HOST_SUFFIX_MAP) || {},
+      {
+        ".pages.dev": "https://sec-emendas-api.onrender.com"
+      }
+    ),
+    API_BASE_URL_BY_HOST_SUFFIX_MAP: Object.assign(
+      {},
+      (window.SEC_APP_CONFIG && window.SEC_APP_CONFIG.API_BASE_URL_BY_HOST_SUFFIX_MAP) || {},
+      (window.SEC_APP_CONFIG && window.SEC_APP_CONFIG.API_BASE_URL_BY_HOST_SUFFIX) || {},
+      {
+        ".pages.dev": "https://sec-emendas-api.onrender.com"
+      }
+    ),
     GOOGLE_CLIENT_ID_BY_HOST: Object.assign(
       {},
       (window.SEC_APP_CONFIG && window.SEC_APP_CONFIG.GOOGLE_CLIENT_ID_BY_HOST) || {},
@@ -30,6 +46,22 @@
         "micael-carvalho-dev.github.io": GOOGLE_CLIENT_ID_PROD,
         "localhost": GOOGLE_CLIENT_ID_LOCAL,
         "127.0.0.1": GOOGLE_CLIENT_ID_LOCAL
+      }
+    ),
+    GOOGLE_CLIENT_ID_BY_HOST_SUFFIX: Object.assign(
+      {},
+      (window.SEC_APP_CONFIG && window.SEC_APP_CONFIG.GOOGLE_CLIENT_ID_BY_HOST_SUFFIX) || {},
+      (window.SEC_APP_CONFIG && window.SEC_APP_CONFIG.GOOGLE_CLIENT_ID_BY_HOST_SUFFIX_MAP) || {},
+      {
+        ".pages.dev": GOOGLE_CLIENT_ID_PROD
+      }
+    ),
+    GOOGLE_CLIENT_ID_BY_HOST_SUFFIX_MAP: Object.assign(
+      {},
+      (window.SEC_APP_CONFIG && window.SEC_APP_CONFIG.GOOGLE_CLIENT_ID_BY_HOST_SUFFIX_MAP) || {},
+      (window.SEC_APP_CONFIG && window.SEC_APP_CONFIG.GOOGLE_CLIENT_ID_BY_HOST_SUFFIX) || {},
+      {
+        ".pages.dev": GOOGLE_CLIENT_ID_PROD
       }
     )
   });

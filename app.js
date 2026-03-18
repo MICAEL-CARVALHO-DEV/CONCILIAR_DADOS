@@ -7421,6 +7421,31 @@ function isImportPreviewApiEnabled() {
 }
 
 // Resolve URL base da API (compatibilidade local, quando o cliente modular não estiver disponível).
+function resolveRuntimeHostMappedValue(host, byHostMap, byHostSuffixMap) {
+  const normalizedHost = String(host || "").trim().toLowerCase();
+  if (!normalizedHost) return "";
+  const exactMap = (byHostMap && typeof byHostMap === "object") ? byHostMap : {};
+  const suffixMap = (byHostSuffixMap && typeof byHostSuffixMap === "object") ? byHostSuffixMap : {};
+
+  const exactValue = text(exactMap[normalizedHost]);
+  if (exactValue) return exactValue;
+
+  const suffixes = Object.keys(suffixMap).sort(function (a, b) {
+    return String(b || "").length - String(a || "").length;
+  });
+  for (let i = 0; i < suffixes.length; i += 1) {
+    const rawSuffix = String(suffixes[i] || "").trim().toLowerCase();
+    if (!rawSuffix) continue;
+    const matches = rawSuffix.startsWith(".")
+      ? normalizedHost.endsWith(rawSuffix)
+      : (normalizedHost === rawSuffix || normalizedHost.endsWith("." + rawSuffix));
+    if (!matches) continue;
+    const mapped = text(suffixMap[suffixes[i]]);
+    if (mapped) return mapped;
+  }
+  return "";
+}
+
 function getApiBaseUrl() {
   const getApiBaseUrlUtil = getApiClientUtil("getApiBaseUrl");
   if (getApiBaseUrlUtil) {
@@ -7432,7 +7457,12 @@ function getApiBaseUrl() {
   const byHostMap = (RUNTIME_CONFIG && RUNTIME_CONFIG.API_BASE_URL_BY_HOST && typeof RUNTIME_CONFIG.API_BASE_URL_BY_HOST === "object")
     ? RUNTIME_CONFIG.API_BASE_URL_BY_HOST
     : {};
-  const hostBase = text(byHostMap[host]);
+  const byHostSuffixMap = (RUNTIME_CONFIG && RUNTIME_CONFIG.API_BASE_URL_BY_HOST_SUFFIX_MAP && typeof RUNTIME_CONFIG.API_BASE_URL_BY_HOST_SUFFIX_MAP === "object")
+    ? RUNTIME_CONFIG.API_BASE_URL_BY_HOST_SUFFIX_MAP
+    : ((RUNTIME_CONFIG && RUNTIME_CONFIG.API_BASE_URL_BY_HOST_SUFFIX && typeof RUNTIME_CONFIG.API_BASE_URL_BY_HOST_SUFFIX === "object")
+      ? RUNTIME_CONFIG.API_BASE_URL_BY_HOST_SUFFIX
+      : {});
+  const hostBase = resolveRuntimeHostMappedValue(host, byHostMap, byHostSuffixMap);
   if (!isHostedUi) {
     return (text(local || DEFAULT_API_BASE_URL) || "http://127.0.0.1:8000").replace(/\/+$/, "");
   }

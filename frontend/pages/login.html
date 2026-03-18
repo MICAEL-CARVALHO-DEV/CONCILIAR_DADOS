@@ -80,15 +80,50 @@
       const API_BASE_URL_KEY = "SEC_API_BASE_URL";
       const CFG = (window.SEC_APP_CONFIG && typeof window.SEC_APP_CONFIG === "object") ? window.SEC_APP_CONFIG : {};
       const CFG_HOST_MAP = (CFG.API_BASE_URL_BY_HOST && typeof CFG.API_BASE_URL_BY_HOST === "object") ? CFG.API_BASE_URL_BY_HOST : {};
+      const CFG_HOST_SUFFIX_MAP = (CFG.API_BASE_URL_BY_HOST_SUFFIX_MAP && typeof CFG.API_BASE_URL_BY_HOST_SUFFIX_MAP === "object")
+        ? CFG.API_BASE_URL_BY_HOST_SUFFIX_MAP
+        : ((CFG.API_BASE_URL_BY_HOST_SUFFIX && typeof CFG.API_BASE_URL_BY_HOST_SUFFIX === "object") ? CFG.API_BASE_URL_BY_HOST_SUFFIX : {});
       const CFG_HOST = (window.location && window.location.hostname) ? String(window.location.hostname) : "";
       const IS_LOCAL_FRONTEND = !CFG_HOST || CFG_HOST === "localhost" || CFG_HOST === "127.0.0.1";
-      const DEFAULT_API_BASE_URL = (CFG_HOST_MAP[CFG_HOST] ? String(CFG_HOST_MAP[CFG_HOST]) : "") || (CFG.API_BASE_URL ? String(CFG.API_BASE_URL) : "") || "http://localhost:8000";
       const CFG_GOOGLE_HOST_MAP = (CFG.GOOGLE_CLIENT_ID_BY_HOST && typeof CFG.GOOGLE_CLIENT_ID_BY_HOST === "object") ? CFG.GOOGLE_CLIENT_ID_BY_HOST : {};
-      const hasGoogleClientForHost = Object.prototype.hasOwnProperty.call(CFG_GOOGLE_HOST_MAP, CFG_HOST);
+      const CFG_GOOGLE_HOST_SUFFIX_MAP = (CFG.GOOGLE_CLIENT_ID_BY_HOST_SUFFIX_MAP && typeof CFG.GOOGLE_CLIENT_ID_BY_HOST_SUFFIX_MAP === "object")
+        ? CFG.GOOGLE_CLIENT_ID_BY_HOST_SUFFIX_MAP
+        : ((CFG.GOOGLE_CLIENT_ID_BY_HOST_SUFFIX && typeof CFG.GOOGLE_CLIENT_ID_BY_HOST_SUFFIX === "object") ? CFG.GOOGLE_CLIENT_ID_BY_HOST_SUFFIX : {});
+
+      function resolveHostMappedValue(host, exactMap, suffixMap) {
+        const normalizedHost = String(host || "").trim().toLowerCase();
+        if (!normalizedHost) return "";
+        const mapExact = (exactMap && typeof exactMap === "object") ? exactMap : {};
+        const mapSuffix = (suffixMap && typeof suffixMap === "object") ? suffixMap : {};
+
+        if (Object.prototype.hasOwnProperty.call(mapExact, normalizedHost)) {
+          return String(mapExact[normalizedHost] || "");
+        }
+
+        const suffixes = Object.keys(mapSuffix).sort(function (a, b) {
+          return String(b || "").length - String(a || "").length;
+        });
+        for (let i = 0; i < suffixes.length; i += 1) {
+          const suffix = String(suffixes[i] || "").trim().toLowerCase();
+          if (!suffix) continue;
+          const matches = suffix.startsWith(".")
+            ? normalizedHost.endsWith(suffix)
+            : (normalizedHost === suffix || normalizedHost.endsWith("." + suffix));
+          if (!matches) continue;
+          return String(mapSuffix[suffixes[i]] || "");
+        }
+
+        return "";
+      }
+
+      const DEFAULT_API_BASE_URL = resolveHostMappedValue(CFG_HOST, CFG_HOST_MAP, CFG_HOST_SUFFIX_MAP)
+        || (CFG.API_BASE_URL ? String(CFG.API_BASE_URL) : "")
+        || "http://localhost:8000";
+      const GOOGLE_CLIENT_ID_FROM_HOST = resolveHostMappedValue(CFG_HOST, CFG_GOOGLE_HOST_MAP, CFG_GOOGLE_HOST_SUFFIX_MAP);
       const GOOGLE_CLIENT_ID = IS_LOCAL_FRONTEND
         ? ""
-        : (hasGoogleClientForHost
-          ? String(CFG_GOOGLE_HOST_MAP[CFG_HOST] || "")
+        : (GOOGLE_CLIENT_ID_FROM_HOST
+          ? String(GOOGLE_CLIENT_ID_FROM_HOST || "")
           : (CFG.GOOGLE_CLIENT_ID ? String(CFG.GOOGLE_CLIENT_ID) : ""));
       const SESSION_TOKEN_KEY = "SEC_SESSION_TOKEN";
       const SESSION_TOKEN_BACKUP_KEY = "SEC_SESSION_TOKEN_BKP";
