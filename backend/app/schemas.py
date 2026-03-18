@@ -123,6 +123,11 @@ class AuthRecoveryRequestIn(BaseModel):
     identificador: str = Field(min_length=2, max_length=255)
 
 
+class AuthChangePasswordIn(BaseModel):
+    senha_atual: str = Field(min_length=4, max_length=120)
+    nova_senha: str = Field(min_length=4, max_length=120)
+
+
 class AuthOut(BaseModel):
     token: str | None = None
     token_type: str = "bearer"

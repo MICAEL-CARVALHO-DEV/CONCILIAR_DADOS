@@ -52,6 +52,7 @@
     if (ctx.btnReset) ctx.btnReset.style.display = isOwner && canUseDemoTools ? "inline-block" : "none";
     if (ctx.btnDemo4Users) ctx.btnDemo4Users.style.display = isOwner && canUseDemoTools ? "inline-block" : "none";
     if (ctx.btnProfile) ctx.btnProfile.style.display = "flex";
+    if (ctx.btnChangePassword) ctx.btnChangePassword.style.display = "flex";
     if (ctx.btnLogout) ctx.btnLogout.style.display = "flex";
 
     if (isWorkspaceOperational) {

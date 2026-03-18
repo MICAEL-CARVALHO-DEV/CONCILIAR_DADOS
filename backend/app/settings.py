@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_HOURS: int = 12
     GOOGLE_CLIENT_ID: str = ""
+    # Lista opcional de audiencias Google aceitas (csv), para transicao entre client IDs.
+    # Ex.: GOOGLE_CLIENT_IDS=id-1.apps.googleusercontent.com,id-2.apps.googleusercontent.com
+    GOOGLE_CLIENT_IDS: str = (
+        "1090925215709-mgd525lfy9ams75ncam89jo304dcdq7n.apps.googleusercontent.com,"
+        "905274978136-21du34pfsmtec45313ob5kh4tuukap8h.apps.googleusercontent.com"
+    )
     GOOGLE_TOKENINFO_URL: str = "https://oauth2.googleapis.com/tokeninfo"
     AI_ORCHESTRATOR_ENABLED: bool = True
     AI_ORCHESTRATOR_TIMEOUT_SECONDS: int = 45
@@ -85,6 +91,23 @@ class Settings(BaseSettings):
     @property
     def is_dev_environment(self) -> bool:
         return self.app_env_normalized in {"dev", "development", "local", "test", "testing"}
+
+    @property
+    def google_client_ids_list(self) -> list[str]:
+        raw_items = [self.GOOGLE_CLIENT_ID, self.GOOGLE_CLIENT_IDS]
+        joined = ",".join([str(item or "") for item in raw_items])
+        parts = re.split(r"[,\r\n\t; ]+", joined)
+        client_ids: list[str] = []
+        seen: set[str] = set()
+        for item in parts:
+            candidate = (item or "").strip().strip("'\"")
+            if not candidate:
+                continue
+            if candidate in seen:
+                continue
+            seen.add(candidate)
+            client_ids.append(candidate)
+        return client_ids
 
     @property
     def shared_key_auth_enabled(self) -> bool:
