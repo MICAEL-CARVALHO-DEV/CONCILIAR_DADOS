@@ -9,10 +9,17 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite+pysqlite:///./test.db"
     CORS_ORIGINS: str = (
         "https://micael-carvalho-dev.github.io,"
+        "https://conciliar-dados.pages.dev,"
+        "https://homolog-cloudflare.conciliar-dados.pages.dev,"
         "http://127.0.0.1:5500,http://localhost:5500,"
         "http://127.0.0.1:5501,http://localhost:5501"
     )
-    CORS_ALLOW_ORIGIN_REGEX: str = r"^http://(localhost|127\.0\.0\.1)(:\d+)?$"
+    # Permite Cloudflare Pages do projeto (prod + previews), GitHub Pages e localhost.
+    CORS_ALLOW_ORIGIN_REGEX: str = (
+        r"^https://([a-z0-9-]+\.)?conciliar-dados\.pages\.dev$|"
+        r"^https://micael-carvalho-dev\.github\.io$|"
+        r"^http://(localhost|127\.0\.0\.1)(:\d+)?$"
+    )
     API_AUTH_ENABLED: bool = True
     ALLOW_SHARED_KEY_AUTH: bool = False
     API_SHARED_KEY: str = ""

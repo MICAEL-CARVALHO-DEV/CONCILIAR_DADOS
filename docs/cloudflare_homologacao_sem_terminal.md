@@ -43,6 +43,34 @@ Motivo: esse build publica apenas o pacote estatico do front (evita expor backen
    - exportacoes
    - visao Power BI (incluindo export enxuto e mapa)
 
+## Troubleshooting rapido (Cloudflare + Render + Google)
+### 1) Login local retorna "Failed to fetch" (CORS)
+Sintoma no console:
+- `blocked by CORS policy`
+- `No 'Access-Control-Allow-Origin' header`
+
+Acao:
+1. No Render (API), ajustar variaveis:
+   - `CORS_ORIGINS=https://micael-carvalho-dev.github.io,https://conciliar-dados.pages.dev,https://homolog-cloudflare.conciliar-dados.pages.dev`
+   - `CORS_ALLOW_ORIGIN_REGEX=^https://([a-z0-9-]+\.)?conciliar-dados\.pages\.dev$|^https://micael-carvalho-dev\.github\.io$|^http://(localhost|127\.0\.0\.1)(:\d+)?$`
+2. Redeploy da API.
+
+### 2) Google Sign-In "origin not allowed for the given client ID"
+Acao:
+1. Google Cloud Console -> Credentials -> OAuth Client.
+2. Em `Authorized JavaScript origins`, incluir:
+   - `https://conciliar-dados.pages.dev`
+   - `https://homolog-cloudflare.conciliar-dados.pages.dev`
+   - `https://micael-carvalho-dev.github.io`
+3. Salvar e aguardar propagacao (alguns minutos).
+
+### 3) URL da homolog mostra "Ainda nao ha nada aqui"
+Acao:
+1. Cloudflare Pages -> Deployments -> confirmar deploy da branch `homolog-cloudflare`.
+2. Se nao houver deploy da branch, fazer:
+   - `Create deployment` com `homolog-cloudflare`, ou
+   - novo push na branch `homolog-cloudflare`.
+
 ## Passo 5 - Operar em paralelo sem risco
 - GitHub Pages continua como URL oficial.
 - Cloudflare Pages fica como homologacao.
