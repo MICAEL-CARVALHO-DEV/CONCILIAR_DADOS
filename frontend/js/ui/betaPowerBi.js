@@ -43,6 +43,222 @@
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   }
 
+  function toFiniteNumber(value, fallbackValue) {
+    var fallback = Number.isFinite(fallbackValue) ? fallbackValue : 0;
+    if (typeof value === "number") return Number.isFinite(value) ? value : fallback;
+    var n = Number(value);
+    return Number.isFinite(n) ? n : fallback;
+  }
+
+  function clamp(value, min, max) {
+    return Math.max(min, Math.min(max, value));
+  }
+
+  function createSvgNode(tagName) {
+    return document.createElementNS("http://www.w3.org/2000/svg", tagName);
+  }
+
+  function renderMunicipioMapCard(target, mapModel, options) {
+    var opts = options || {};
+    var setPowerBiFilters = typeof opts.setPowerBiFilters === "function" ? opts.setPowerBiFilters : noop;
+    var rerender = typeof opts.rerender === "function" ? opts.rerender : noop;
+    var fmtMoney = typeof opts.fmtMoney === "function" ? opts.fmtMoney : safeText;
+    var filters = opts.filters && typeof opts.filters === "object" ? opts.filters : {};
+
+    var model = mapModel && typeof mapModel === "object" ? mapModel : {};
+    var points = safeArray(model.points);
+    if (!points.length) {
+      var emptyCard = document.createElement("section");
+      emptyCard.className = "beta-panel-card beta-map-card";
+      var emptyTitle = document.createElement("h4");
+      emptyTitle.textContent = "Mapa interativo de emendas";
+      var emptyText = document.createElement("p");
+      emptyText.className = "beta-empty";
+      emptyText.textContent = "Sem municipios suficientes no filtro atual para montar o mapa.";
+      emptyCard.appendChild(emptyTitle);
+      emptyCard.appendChild(emptyText);
+      target.appendChild(emptyCard);
+      return;
+    }
+
+    var bounds = model.bounds && typeof model.bounds === "object" ? model.bounds : {};
+    var lonMin = toFiniteNumber(bounds.lonMin, -46);
+    var lonMax = toFiniteNumber(bounds.lonMax, -36);
+    var latMin = toFiniteNumber(bounds.latMin, -19);
+    var latMax = toFiniteNumber(bounds.latMax, -7);
+    if (lonMax <= lonMin) lonMax = lonMin + 1;
+    if (latMax <= latMin) latMax = latMin + 1;
+
+    var mapCard = document.createElement("section");
+    mapCard.className = "beta-panel-card beta-map-card";
+    var mapTitle = document.createElement("h4");
+    mapTitle.textContent = "Mapa interativo de emendas";
+    mapCard.appendChild(mapTitle);
+
+    var mapHint = document.createElement("p");
+    mapHint.className = "muted small";
+    mapHint.textContent = model.usingRealCoordinates
+      ? "Distribuicao territorial por municipio (coordenadas geograficas detectadas na base)."
+      : "Distribuicao operacional por municipio (posicoes aproximadas por falta de coordenadas explicitas).";
+    mapCard.appendChild(mapHint);
+
+    var mapLayout = document.createElement("div");
+    mapLayout.className = "beta-map-layout";
+
+    var stage = document.createElement("div");
+    stage.className = "beta-map-stage";
+    var svg = createSvgNode("svg");
+    svg.setAttribute("class", "beta-map-svg");
+    svg.setAttribute("viewBox", "0 0 100 100");
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", "Mapa interativo com distribuicao de emendas por municipio");
+
+    var defs = createSvgNode("defs");
+    var gridPattern = createSvgNode("pattern");
+    gridPattern.setAttribute("id", "betaMapGrid");
+    gridPattern.setAttribute("width", "10");
+    gridPattern.setAttribute("height", "10");
+    gridPattern.setAttribute("patternUnits", "userSpaceOnUse");
+    var gridLineH = createSvgNode("path");
+    gridLineH.setAttribute("d", "M 10 0 L 0 0 0 10");
+    gridLineH.setAttribute("fill", "none");
+    gridLineH.setAttribute("stroke", "rgba(23,64,139,0.16)");
+    gridLineH.setAttribute("stroke-width", "0.4");
+    gridPattern.appendChild(gridLineH);
+    defs.appendChild(gridPattern);
+    svg.appendChild(defs);
+
+    var baseRect = createSvgNode("rect");
+    baseRect.setAttribute("x", "0");
+    baseRect.setAttribute("y", "0");
+    baseRect.setAttribute("width", "100");
+    baseRect.setAttribute("height", "100");
+    baseRect.setAttribute("fill", "url(#betaMapGrid)");
+    svg.appendChild(baseRect);
+
+    var tooltip = document.createElement("div");
+    tooltip.className = "beta-map-tooltip hidden";
+    stage.appendChild(svg);
+    stage.appendChild(tooltip);
+
+    var maxTotal = points.reduce(function (acc, item) {
+      return Math.max(acc, toFiniteNumber(item.total, 0));
+    }, 1);
+
+    function setTooltip(point, px, py) {
+      tooltip.innerHTML = ""
+        + "<strong>" + safeText(point.label) + "</strong>"
+        + "<span>Emendas: " + String(point.total || 0) + "</span>"
+        + "<span>Valor: R$ " + fmtMoney(point.valor || 0) + "</span>"
+        + "<span>Atencao: " + String(point.attention || 0) + "</span>";
+      tooltip.style.left = clamp(px + 14, 12, stage.clientWidth - 250) + "px";
+      tooltip.style.top = clamp(py - 16, 8, stage.clientHeight - 110) + "px";
+      tooltip.classList.remove("hidden");
+    }
+
+    function hideTooltip() {
+      tooltip.classList.add("hidden");
+    }
+
+    points.forEach(function (point) {
+      var normalizedX = (toFiniteNumber(point.lon, lonMin) - lonMin) / (lonMax - lonMin);
+      var normalizedY = (latMax - toFiniteNumber(point.lat, latMin)) / (latMax - latMin);
+      var x = clamp((normalizedX * 88) + 6, 4, 96);
+      var y = clamp((normalizedY * 84) + 8, 4, 96);
+      var radius = clamp(2.8 + ((toFiniteNumber(point.total, 0) / maxTotal) * 5.8), 2.8, 8.8);
+      var isActive = safeText(filters.municipio) && safeText(filters.municipio) === safeText(point.label);
+
+      var marker = createSvgNode("circle");
+      marker.setAttribute("cx", String(x));
+      marker.setAttribute("cy", String(y));
+      marker.setAttribute("r", String(radius));
+      marker.setAttribute("class", "beta-map-point" + (isActive ? " is-active" : ""));
+      marker.setAttribute("tabindex", "0");
+      marker.setAttribute("role", "button");
+      marker.setAttribute("aria-label", "Filtrar municipio " + safeText(point.label));
+
+      marker.addEventListener("mouseenter", function (event) {
+        setTooltip(point, event.offsetX || (x * stage.clientWidth / 100), event.offsetY || (y * stage.clientHeight / 100));
+      });
+      marker.addEventListener("mousemove", function (event) {
+        setTooltip(point, event.offsetX || (x * stage.clientWidth / 100), event.offsetY || (y * stage.clientHeight / 100));
+      });
+      marker.addEventListener("mouseleave", hideTooltip);
+      marker.addEventListener("blur", hideTooltip);
+      marker.addEventListener("click", function () {
+        setPowerBiFilters({
+          deputado: safeText(filters.deputado || ""),
+          municipio: safeText(point.label),
+          status: safeText(filters.status || ""),
+          objetivo_epi: safeText(filters.objetivo_epi || ""),
+          q: safeText(filters.q || "")
+        });
+        rerender();
+      });
+      marker.addEventListener("keydown", function (event) {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        marker.click();
+      });
+
+      svg.appendChild(marker);
+    });
+
+    var side = document.createElement("aside");
+    side.className = "beta-map-side";
+    var sideTitle = document.createElement("strong");
+    sideTitle.className = "beta-map-side-title";
+    sideTitle.textContent = "Top municipios";
+    side.appendChild(sideTitle);
+
+    var sideList = document.createElement("div");
+    sideList.className = "beta-map-list";
+    points.slice().sort(function (a, b) {
+      if (toFiniteNumber(b.total, 0) !== toFiniteNumber(a.total, 0)) return toFiniteNumber(b.total, 0) - toFiniteNumber(a.total, 0);
+      return toFiniteNumber(b.valor, 0) - toFiniteNumber(a.valor, 0);
+    }).slice(0, 10).forEach(function (point) {
+      var rowBtn = document.createElement("button");
+      rowBtn.type = "button";
+      rowBtn.className = "beta-map-list-item" + (safeText(filters.municipio) === safeText(point.label) ? " is-active" : "");
+      rowBtn.innerHTML = ""
+        + "<span>" + safeText(point.label) + "</span>"
+        + "<small>" + String(point.total || 0) + " emendas</small>";
+      rowBtn.addEventListener("click", function () {
+        setPowerBiFilters({
+          deputado: safeText(filters.deputado || ""),
+          municipio: safeText(point.label),
+          status: safeText(filters.status || ""),
+          objetivo_epi: safeText(filters.objetivo_epi || ""),
+          q: safeText(filters.q || "")
+        });
+        rerender();
+      });
+      sideList.appendChild(rowBtn);
+    });
+    side.appendChild(sideList);
+
+    var clearMunicipioBtn = document.createElement("button");
+    clearMunicipioBtn.type = "button";
+    clearMunicipioBtn.className = "btn";
+    clearMunicipioBtn.textContent = "Limpar municipio";
+    clearMunicipioBtn.addEventListener("click", function () {
+      setPowerBiFilters({
+        deputado: safeText(filters.deputado || ""),
+        municipio: "",
+        status: safeText(filters.status || ""),
+        objetivo_epi: safeText(filters.objetivo_epi || ""),
+        q: safeText(filters.q || "")
+      });
+      rerender();
+    });
+    side.appendChild(clearMunicipioBtn);
+
+    mapLayout.appendChild(stage);
+    mapLayout.appendChild(side);
+    mapCard.appendChild(mapLayout);
+    target.appendChild(mapCard);
+  }
+
   function readPowerBiExpandedMode() {
     try {
       if (!global || !global.localStorage) return false;
@@ -66,6 +282,7 @@
     var clearNodeChildren = typeof opts.clearNodeChildren === "function" ? opts.clearNodeChildren : clearNode;
     var buildPowerBiDashboardData = typeof opts.buildPowerBiDashboardData === "function" ? opts.buildPowerBiDashboardData : function () { return {}; };
     var exportExecutiveDashboardReport = typeof opts.exportExecutiveDashboardReport === "function" ? opts.exportExecutiveDashboardReport : function () { return Promise.resolve(false); };
+    var exportPowerBiLeanReport = typeof opts.exportPowerBiLeanReport === "function" ? opts.exportPowerBiLeanReport : function () { return Promise.resolve(false); };
     var extractApiError = typeof opts.extractApiError === "function" ? opts.extractApiError : function (_err, fallback) { return String(fallback || "Falha ao exportar relatorio executivo."); };
     var setSelectOptions = typeof opts.setSelectOptions === "function" ? opts.setSelectOptions : fallbackSetSelectOptions;
     var fmtMoney = typeof opts.fmtMoney === "function" ? opts.fmtMoney : safeText;
@@ -96,6 +313,7 @@
     var byStatus = model.byStatus && typeof model.byStatus === "object" ? model.byStatus : {};
     var byUser = model.byUser && typeof model.byUser === "object" ? model.byUser : {};
     var byObjetivo = model.byObjetivo && typeof model.byObjetivo === "object" ? model.byObjetivo : {};
+    var mapModel = model.mapModel && typeof model.mapModel === "object" ? model.mapModel : { points: [] };
     var deputadoCountPolicy = model.deputadoCountPolicy && typeof model.deputadoCountPolicy === "object"
       ? model.deputadoCountPolicy
       : {
@@ -149,6 +367,17 @@
     });
     executiveActions.appendChild(layoutBtn);
     if (isExecutiveRole) {
+      var exportLeanBtn = document.createElement("button");
+      exportLeanBtn.className = "btn primary";
+      exportLeanBtn.type = "button";
+      exportLeanBtn.textContent = "Exportar Power BI (enxuto)";
+      exportLeanBtn.addEventListener("click", function () {
+        exportPowerBiLeanReport(filteredRows).catch(function (err) {
+          alert(extractApiError(err, "Falha ao exportar base enxuta do Power BI."));
+        });
+      });
+      executiveActions.appendChild(exportLeanBtn);
+
       var exportBtn = document.createElement("button");
       exportBtn.className = "btn primary";
       exportBtn.type = "button";
@@ -419,6 +648,13 @@
     controlCard.appendChild(controlList);
     controlGrid.appendChild(controlCard);
     target.appendChild(controlGrid);
+
+    renderMunicipioMapCard(target, mapModel, {
+      setPowerBiFilters: setPowerBiFilters,
+      rerender: rerender,
+      fmtMoney: fmtMoney,
+      filters: filters
+    });
 
     var deputyTitle = document.createElement("h4");
     deputyTitle.style.marginTop = "14px";

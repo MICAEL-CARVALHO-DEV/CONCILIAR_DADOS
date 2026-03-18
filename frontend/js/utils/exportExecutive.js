@@ -5,6 +5,86 @@
     return value == null ? "" : String(value).trim();
   }
 
+  function safeNumber(value) {
+    if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+    var normalized = String(value == null ? "" : value)
+      .replace(/\s/g, "")
+      .replace(/\.(?=\d{3}(\D|$))/g, "")
+      .replace(/,/g, ".")
+      .replace(/[^\d.-]/g, "");
+    var parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+
+  function buildPowerBiLeanBaseAoa(model, options) {
+    var opts = options || {};
+    var rows = model && Array.isArray(model.rows) ? model.rows : [];
+    var text = typeof opts.text === "function" ? opts.text : safeText;
+    var toNumber = typeof opts.toNumber === "function" ? opts.toNumber : safeNumber;
+    var getRecordCurrentStatus = typeof opts.getRecordCurrentStatus === "function"
+      ? opts.getRecordCurrentStatus
+      : function (record) { return safeText(record && record.status_oficial) || "-"; };
+    var getActiveUsersWithLastMark = typeof opts.getActiveUsersWithLastMark === "function"
+      ? opts.getActiveUsersWithLastMark
+      : function () { return []; };
+    var calcProgress = typeof opts.calcProgress === "function"
+      ? opts.calcProgress
+      : function () { return { concl: 0, total: 0, percent: 0 }; };
+    var getGlobalProgressState = typeof opts.getGlobalProgressState === "function"
+      ? opts.getGlobalProgressState
+      : function () { return { label: "-" }; };
+
+    var headers = [
+      "backend_id",
+      "id_interno_sistema",
+      "ano",
+      "identificacao",
+      "municipio",
+      "deputado",
+      "objetivo_epi",
+      "status_atual",
+      "global_state",
+      "progresso_percentual",
+      "valor_atual",
+      "usuarios_ativos",
+      "updated_at",
+      "processo_sei",
+      "cod_acao",
+      "cod_subfonte"
+    ];
+
+    var out = [headers];
+    rows.forEach(function (record) {
+      var users = getActiveUsersWithLastMark(record);
+      var progress = calcProgress(users);
+      var globalState = getGlobalProgressState(users);
+      var usersLabel = (Array.isArray(users) ? users : []).map(function (user) {
+        return text(user && user.name);
+      }).filter(Boolean).join(" | ");
+
+      out.push([
+        record && record.backend_id != null ? Number(record.backend_id) : "",
+        record && record.id != null ? Number(record.id) : "",
+        text(record && record.ano),
+        text(record && record.identificacao),
+        text(record && record.municipio) || "-",
+        text(record && record.deputado) || "-",
+        text(record && record.objetivo_epi) || "-",
+        text(getRecordCurrentStatus(record)) || "-",
+        text(globalState && globalState.label) || "-",
+        Number(progress && progress.percent != null ? progress.percent : 0),
+        Number(toNumber(record && record.valor_atual)),
+        usersLabel || "-",
+        text(record && record.updated_at),
+        text(record && record.processo_sei),
+        text(record && record.cod_acao),
+        text(record && record.cod_subfonte)
+      ]);
+    });
+
+    return out;
+  }
+
   function buildExecutiveSummaryAoa(model, options) {
     var opts = options || {};
     var summary = model && model.summary ? model.summary : {};
@@ -120,6 +200,7 @@
     buildExecutiveDeputadosAoa: buildExecutiveDeputadosAoa,
     buildExecutiveMunicipiosAoa: buildExecutiveMunicipiosAoa,
     buildExecutiveObjetivosAoa: buildExecutiveObjetivosAoa,
-    buildExecutiveUsersAoa: buildExecutiveUsersAoa
+    buildExecutiveUsersAoa: buildExecutiveUsersAoa,
+    buildPowerBiLeanBaseAoa: buildPowerBiLeanBaseAoa
   };
 })(window);

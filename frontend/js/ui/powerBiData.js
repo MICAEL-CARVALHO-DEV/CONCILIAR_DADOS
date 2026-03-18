@@ -86,6 +86,135 @@
     });
   }
 
+  function normalizeMunicipioKey(value, ctx) {
+    var raw = ctx.text(value || "");
+    if (!raw) return "";
+    if (typeof ctx.normalizeLooseText === "function") return ctx.normalizeLooseText(raw);
+    return String(raw).toLowerCase().trim();
+  }
+
+  function parseCoordinateNumber(value) {
+    if (value == null) return null;
+    if (typeof value === "number") return Number.isFinite(value) ? value : null;
+    var normalized = String(value)
+      .trim()
+      .replace(/\s/g, "")
+      .replace(/\.(?=\d{3}(\D|$))/g, "")
+      .replace(/,/g, ".")
+      .replace(/[^\d.-]/g, "");
+    if (!normalized) return null;
+    var parsed = Number(normalized);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  function parseLatitude(value) {
+    var latitude = parseCoordinateNumber(value);
+    if (!Number.isFinite(latitude)) return null;
+    if (latitude < -35 || latitude > 8) return null;
+    return latitude;
+  }
+
+  function parseLongitude(value) {
+    var longitude = parseCoordinateNumber(value);
+    if (!Number.isFinite(longitude)) return null;
+    if (longitude < -75 || longitude > -25) return null;
+    return longitude;
+  }
+
+  function readMunicipioGeo(record) {
+    if (!record || typeof record !== "object") return null;
+    var allFields = record.all_fields && typeof record.all_fields === "object" ? record.all_fields : {};
+
+    var latCandidates = [
+      record.latitude,
+      record.lat,
+      record.coord_lat,
+      allFields.latitude,
+      allFields.lat,
+      allFields.coord_lat,
+      allFields.coordenada_lat,
+      allFields.y
+    ];
+    var lonCandidates = [
+      record.longitude,
+      record.lng,
+      record.lon,
+      record.coord_lon,
+      allFields.longitude,
+      allFields.lng,
+      allFields.lon,
+      allFields.coord_lon,
+      allFields.coordenada_lon,
+      allFields.x
+    ];
+
+    var latitude = null;
+    var longitude = null;
+    var i;
+    for (i = 0; i < latCandidates.length; i += 1) {
+      latitude = parseLatitude(latCandidates[i]);
+      if (latitude != null) break;
+    }
+    for (i = 0; i < lonCandidates.length; i += 1) {
+      longitude = parseLongitude(lonCandidates[i]);
+      if (longitude != null) break;
+    }
+
+    if (latitude == null || longitude == null) return null;
+    return { lat: latitude, lon: longitude };
+  }
+
+  function buildPseudoGeoFromKey(key) {
+    var source = String(key || "sec-map");
+    var hashA = 7;
+    var hashB = 13;
+    for (var i = 0; i < source.length; i += 1) {
+      var code = source.charCodeAt(i);
+      hashA = (hashA * 31 + code) % 100003;
+      hashB = (hashB * 37 + code) % 100019;
+    }
+    var lat = -18.2 + ((hashA % 10000) / 10000) * 10.2;
+    var lon = -46.2 + ((hashB % 10000) / 10000) * 9.8;
+    return { lat: lat, lon: lon };
+  }
+
+  function buildMunicipioMapModel(mapBuckets) {
+    var points = Object.keys(mapBuckets || {}).map(function (key) {
+      return mapBuckets[key];
+    }).filter(Boolean);
+
+    var realGeoCount = points.reduce(function (acc, point) {
+      return acc + (point.hasRealGeo ? 1 : 0);
+    }, 0);
+
+    points.forEach(function (point) {
+      if (point.hasRealGeo && Number.isFinite(point.lat) && Number.isFinite(point.lon)) return;
+      var pseudo = buildPseudoGeoFromKey(point.key || point.label);
+      point.lat = pseudo.lat;
+      point.lon = pseudo.lon;
+    });
+
+    var latValues = points.map(function (point) { return point.lat; }).filter(Number.isFinite);
+    var lonValues = points.map(function (point) { return point.lon; }).filter(Number.isFinite);
+    var latMin = latValues.length ? Math.min.apply(null, latValues) : -19;
+    var latMax = latValues.length ? Math.max.apply(null, latValues) : -7;
+    var lonMin = lonValues.length ? Math.min.apply(null, lonValues) : -47;
+    var lonMax = lonValues.length ? Math.max.apply(null, lonValues) : -36;
+    if (latMax <= latMin) latMax = latMin + 1;
+    if (lonMax <= lonMin) lonMax = lonMin + 1;
+
+    return {
+      usingRealCoordinates: realGeoCount >= 3,
+      points: points,
+      bounds: {
+        latMin: latMin - 0.4,
+        latMax: latMax + 0.4,
+        lonMin: lonMin - 0.4,
+        lonMax: lonMax + 0.4
+      }
+    };
+  }
+
   function buildPowerBiDashboardData(filteredRows, ctx) {
     var sourceRows = Array.isArray(filteredRows) ? filteredRows : [];
     var filterOptions = buildPowerBiFilterOptions(sourceRows, ctx);
@@ -108,6 +237,7 @@
     var byObjetivo = {};
     var byStatus = {};
     var byUser = {};
+    var mapByMunicipio = {};
     var recordDeputadoMap = {};
 
     rows.forEach(function (rec) {
@@ -115,6 +245,7 @@
       var global = ctx.getGlobalProgressState(users);
       var deputado = ctx.text(rec && rec.deputado) || "-";
       var municipio = ctx.text(rec && rec.municipio) || "-";
+      var municipioKey = normalizeMunicipioKey(municipio, ctx) || ("municipio-" + String(Object.keys(mapByMunicipio).length));
       var objetivoEpi = ctx.text(rec && rec.objetivo_epi) || "-";
       var valor = ctx.toNumber(rec && rec.valor_atual);
       var statusAtual = ctx.getRecordCurrentStatus(rec) || "-";
@@ -165,6 +296,28 @@
       byMunicipio[municipio].valor += valor;
       if (global && global.code === "attention") byMunicipio[municipio].attention += 1;
 
+      if (!mapByMunicipio[municipioKey]) {
+        mapByMunicipio[municipioKey] = {
+          key: municipioKey,
+          label: municipio,
+          total: 0,
+          valor: 0,
+          attention: 0,
+          lat: null,
+          lon: null,
+          hasRealGeo: false
+        };
+      }
+      mapByMunicipio[municipioKey].total += 1;
+      mapByMunicipio[municipioKey].valor += valor;
+      if (global && global.code === "attention") mapByMunicipio[municipioKey].attention += 1;
+      var geo = readMunicipioGeo(rec);
+      if (geo && !mapByMunicipio[municipioKey].hasRealGeo) {
+        mapByMunicipio[municipioKey].lat = geo.lat;
+        mapByMunicipio[municipioKey].lon = geo.lon;
+        mapByMunicipio[municipioKey].hasRealGeo = true;
+      }
+
       if (!byObjetivo[objetivoEpi]) byObjetivo[objetivoEpi] = { label: objetivoEpi, total: 0, valor: 0, attention: 0 };
       byObjetivo[objetivoEpi].total += 1;
       byObjetivo[objetivoEpi].valor += valor;
@@ -200,6 +353,7 @@
       rows: rows,
       scopedAuditRows: scopedAuditRows,
       isExecutiveRole: isExecutiveRole,
+      mapModel: buildMunicipioMapModel(mapByMunicipio),
       deputadoCountPolicy: ctx.deputadoCountPolicy || {
         origem_oficial: "BASE_ATUAL",
         escopo_ajuste: "GLOBAL",

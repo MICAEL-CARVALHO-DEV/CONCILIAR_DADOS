@@ -5912,6 +5912,7 @@ function getBetaPowerBiContext() {
     clearNodeChildren: clearNodeChildren,
     buildPowerBiDashboardData: buildPowerBiDashboardData,
     exportExecutiveDashboardReport: exportExecutiveDashboardReport,
+    exportPowerBiLeanReport: exportPowerBiLeanReport,
     extractApiError: extractApiError,
     setSelectOptions: setSelectOptions,
     fmtMoney: fmtMoney,
@@ -5959,7 +5960,13 @@ function getExecutiveExportContext() {
     isoNow: isoNow,
     currentRole: CURRENT_ROLE,
     currentUser: CURRENT_USER,
-    filters: betaPowerBiFilters
+    filters: betaPowerBiFilters,
+    text: text,
+    toNumber: toNumber,
+    getRecordCurrentStatus: getRecordCurrentStatus,
+    getActiveUsersWithLastMark: getActiveUsersWithLastMark,
+    calcProgress: calcProgress,
+    getGlobalProgressState: getGlobalProgressState
   };
 }
 
@@ -6451,6 +6458,29 @@ function buildExecutiveUsersAoa(model) {
   return [["Usuario", "Perfil", "Eventos", "Ultima acao", "Tipo ultimo evento"]];
 }
 
+function buildPowerBiLeanBaseAoa(model) {
+  const moduleFn = getExportExecutiveUtil("buildPowerBiLeanBaseAoa");
+  if (moduleFn) return moduleFn(model, getExecutiveExportContext());
+  return [[
+    "backend_id",
+    "id_interno_sistema",
+    "ano",
+    "identificacao",
+    "municipio",
+    "deputado",
+    "objetivo_epi",
+    "status_atual",
+    "global_state",
+    "progresso_percentual",
+    "valor_atual",
+    "usuarios_ativos",
+    "updated_at",
+    "processo_sei",
+    "cod_acao",
+    "cod_subfonte"
+  ]];
+}
+
 function validateExecutiveWorkbookStructure(workbook) {
   const requiredSheets = [
     "Resumo Executivo",
@@ -6468,6 +6498,21 @@ function validateExecutiveWorkbookStructure(workbook) {
     return {
       ok: false,
       message: "Falha ao montar relatorio executivo. Abas ausentes: " + missingSheets.join(", ")
+    };
+  }
+  return { ok: true, message: "" };
+}
+
+function validateLeanPowerBiWorkbookStructure(workbook) {
+  const requiredSheets = ["PowerBI_Base"];
+  const sheetNames = Array.isArray(workbook && workbook.SheetNames) ? workbook.SheetNames : [];
+  const missingSheets = requiredSheets.filter(function (name) {
+    return sheetNames.indexOf(name) < 0;
+  });
+  if (missingSheets.length) {
+    return {
+      ok: false,
+      message: "Falha ao montar export enxuto do Power BI. Abas ausentes: " + missingSheets.join(", ")
     };
   }
   return { ok: true, message: "" };
@@ -6537,6 +6582,65 @@ async function exportExecutiveDashboardReport(filteredRows) {
       q: betaPowerBiFilters.q || ""
     },
     modoHeaders: "executivo_dashboard",
+    escopoExportacao: EXPORT_SCOPE.PERSONALIZADO,
+    roundTripOk: null,
+    roundTripIssues: []
+  });
+  return true;
+}
+
+async function exportPowerBiLeanReport(filteredRows) {
+  const model = buildPowerBiDashboardData(filteredRows);
+  if (!model.isExecutiveRole) {
+    alert("A exportacao enxuta do Power BI fica liberada para APG, SUPERVISAO, POWERBI e PROGRAMADOR.");
+    return false;
+  }
+  const xlsxApi = getXlsxApi();
+  if (!xlsxApi) {
+    alert("Biblioteca XLSX nao carregada.");
+    return false;
+  }
+
+  const filename = "powerbi_consumo_enxuto_" + dateStamp() + ".xlsx";
+  const wb = xlsxApi.utils.book_new();
+  xlsxApi.utils.book_append_sheet(wb, xlsxApi.utils.aoa_to_sheet(buildPowerBiLeanBaseAoa(model)), "PowerBI_Base");
+  const workbookValidation = validateLeanPowerBiWorkbookStructure(wb);
+  if (!workbookValidation.ok) {
+    alert(workbookValidation.message || "Falha ao montar export enxuto do Power BI.");
+    return false;
+  }
+  xlsxApi.writeFile(wb, filename);
+
+  latestExportReport = {
+    escopo: EXPORT_SCOPE.PERSONALIZADO,
+    arquivoNome: filename,
+    quantidadeRegistros: model.rows.length,
+    filtros: {
+      dashboard: "powerbi_consumo_enxuto",
+      deputado: betaPowerBiFilters.deputado || "",
+      municipio: betaPowerBiFilters.municipio || "",
+      status: betaPowerBiFilters.status || "",
+      objetivo_epi: betaPowerBiFilters.objetivo_epi || "",
+      q: betaPowerBiFilters.q || ""
+    },
+    geradoEm: isoNow()
+  };
+  renderImportDashboard();
+
+  await syncExportLogToApi({
+    formato: "XLSX",
+    arquivoNome: filename,
+    quantidadeRegistros: model.rows.length,
+    quantidadeEventos: model.scopedAuditRows.length,
+    filtros: {
+      dashboard: "powerbi_consumo_enxuto",
+      deputado: betaPowerBiFilters.deputado || "",
+      municipio: betaPowerBiFilters.municipio || "",
+      status: betaPowerBiFilters.status || "",
+      objetivo_epi: betaPowerBiFilters.objetivo_epi || "",
+      q: betaPowerBiFilters.q || ""
+    },
+    modoHeaders: "powerbi_consumo_enxuto",
     escopoExportacao: EXPORT_SCOPE.PERSONALIZADO,
     roundTripOk: null,
     roundTripIssues: []
