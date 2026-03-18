@@ -23,6 +23,37 @@
     return value == null ? "" : String(value).trim();
   }
 
+  function normalizeHostToken(value) {
+    return String(value == null ? "" : value).trim().toLowerCase();
+  }
+
+  function hostMatchesSuffix(host, suffix) {
+    var h = normalizeHostToken(host);
+    var s = normalizeHostToken(suffix);
+    if (!h || !s) return false;
+    if (s.startsWith(".")) return h.endsWith(s);
+    return h === s || h.endsWith("." + s);
+  }
+
+  function resolveHostMappedValue(host, byHost, bySuffix) {
+    var h = normalizeHostToken(host);
+    var exactMap = byHost && typeof byHost === "object" ? byHost : {};
+    var suffixMap = bySuffix && typeof bySuffix === "object" ? bySuffix : {};
+    var exactValue = text(exactMap[h]);
+    if (exactValue) return exactValue;
+
+    var suffixes = Object.keys(suffixMap).sort(function (a, b) {
+      return String(b || "").length - String(a || "").length;
+    });
+    for (var i = 0; i < suffixes.length; i += 1) {
+      var suffix = suffixes[i];
+      if (!hostMatchesSuffix(h, suffix)) continue;
+      var mapped = text(suffixMap[suffix]);
+      if (mapped) return mapped;
+    }
+    return "";
+  }
+
   function configure(nextConfig) {
     if (!nextConfig || typeof nextConfig !== "object") return;
     if (nextConfig.runtimeConfig && typeof nextConfig.runtimeConfig === "object") {
@@ -92,8 +123,13 @@
     var byHostMap = runtimeConfig.API_BASE_URL_BY_HOST && typeof runtimeConfig.API_BASE_URL_BY_HOST === "object"
       ? runtimeConfig.API_BASE_URL_BY_HOST
       : {};
+    var byHostSuffixMap = runtimeConfig.API_BASE_URL_BY_HOST_SUFFIX_MAP && typeof runtimeConfig.API_BASE_URL_BY_HOST_SUFFIX_MAP === "object"
+      ? runtimeConfig.API_BASE_URL_BY_HOST_SUFFIX_MAP
+      : (runtimeConfig.API_BASE_URL_BY_HOST_SUFFIX && typeof runtimeConfig.API_BASE_URL_BY_HOST_SUFFIX === "object"
+        ? runtimeConfig.API_BASE_URL_BY_HOST_SUFFIX
+        : {});
     var host = (global.location && global.location.hostname) ? String(global.location.hostname) : "";
-    var hostBase = text(byHostMap[host]);
+    var hostBase = resolveHostMappedValue(host, byHostMap, byHostSuffixMap);
     var isHostedUi = !!host && host !== "localhost" && host !== "127.0.0.1";
     var storedBase = text(raw);
     var normalizedStoredLoopback = normalizeLoopbackBase(storedBase);
