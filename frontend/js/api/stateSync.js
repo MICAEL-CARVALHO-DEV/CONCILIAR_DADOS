@@ -1,6 +1,9 @@
 (function (global) {
   var root = global.SECFrontend = global.SECFrontend || {};
   var SEMI_AUTO_REFRESH_MIN_MS = 15000;
+  // Chave interna para deferred refresh (update remoto com input focado).
+  var __deferredRefreshTimer = null;
+  var __deferredRefreshBlurHandler = null;
 
   function noop() {}
 
@@ -162,6 +165,37 @@
     setTimer(null);
   }
 
+  // Quando um update remoto chega com input focado, agenda o snapshot
+  // para ser aplicado assim que o usuario sair do campo (blur) ou apos
+  // um fallback de 8 segundos, o que ocorrer primeiro.
+  function scheduleDeferredRemoteRefresh(opts) {
+    if (__deferredRefreshTimer) return; // ja existe um agendamento pendente
+    var render = typeof opts.render === "function" ? opts.render : noop;
+    var refreshOpenModalAfterRemoteSync = typeof opts.refreshOpenModalAfterRemoteSync === "function" ? opts.refreshOpenModalAfterRemoteSync : noop;
+
+    function flushDeferred() {
+      clearTimeout(__deferredRefreshTimer);
+      __deferredRefreshTimer = null;
+      if (__deferredRefreshBlurHandler && global.document) {
+        global.document.removeEventListener("focusout", __deferredRefreshBlurHandler, true);
+        __deferredRefreshBlurHandler = null;
+      }
+      render();
+      refreshOpenModalAfterRemoteSync();
+    }
+
+    // Listener de blur one-shot: dispara quando o usuario sai do campo ativo.
+    __deferredRefreshBlurHandler = function () {
+      if (shouldDeferInteractiveRefresh()) return; // ainda ha campo focado
+      flushDeferred();
+    };
+    if (global.document) {
+      global.document.addEventListener("focusout", __deferredRefreshBlurHandler, true);
+    }
+    // Fallback: aplica apos 8s independentemente do foco.
+    __deferredRefreshTimer = setTimeout(flushDeferred, 8000);
+  }
+
   async function refreshRemoteEmendasFromApi(forceRender, options) {
     var opts = options || {};
     var isApiEnabled = typeof opts.isApiEnabled === "function" ? opts.isApiEnabled : function () { return false; };
@@ -192,6 +226,10 @@
       syncYearFilter();
       if (forceRender !== false && !deferInteractiveRefresh) {
         render();
+      } else if (forceRender !== false && deferInteractiveRefresh) {
+        // Update remoto chegou enquanto usuario estava digitando.
+        // Agenda aplicacao do snapshot para quando o campo perder foco.
+        scheduleDeferredRemoteRefresh({ render: render, refreshOpenModalAfterRemoteSync: refreshOpenModalAfterRemoteSync });
       }
       if (!deferInteractiveRefresh) {
         refreshOpenModalAfterRemoteSync();
@@ -213,6 +251,7 @@
     var isApiEnabled = typeof opts.isApiEnabled === "function" ? opts.isApiEnabled : function () { return false; };
     var isApiOnline = typeof opts.isApiOnline === "function" ? opts.isApiOnline : function () { return false; };
     var isWebSocketEnabled = !!opts.isWebSocketEnabled;
+    var isSocketConnected = typeof opts.isSocketConnected === "function" ? opts.isSocketConnected : function () { return false; };
     var getTimer = typeof opts.getTimer === "function" ? opts.getTimer : function () { return null; };
     var setTimer = typeof opts.setTimer === "function" ? opts.setTimer : noop;
     var clearPolling = typeof opts.clearPolling === "function" ? opts.clearPolling : noop;
@@ -220,7 +259,7 @@
     var intervalMs = Number(opts.intervalMs || 0);
     var effectiveIntervalMs = Math.max(intervalMs, 30000);
 
-    if (!isApiEnabled() || !isApiOnline() || isWebSocketEnabled || !isAutoPollEnabled()) {
+    if (!isApiEnabled() || !isApiOnline() || (isWebSocketEnabled && isSocketConnected()) || !isAutoPollEnabled()) {
       clearPolling();
       return;
     }

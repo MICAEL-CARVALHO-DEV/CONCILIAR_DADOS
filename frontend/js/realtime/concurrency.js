@@ -209,11 +209,15 @@
     const token = cfg.getSessionToken();
     if (!cfg.isApiEnabled() || !token) return;
 
-    const waitMs = Math.max(cfg.wsReconnectBaseMs, Math.min(state.apiSocketBackoffMs, cfg.wsReconnectMaxMs));
+    const baseWait = Math.max(cfg.wsReconnectBaseMs, Math.min(state.apiSocketBackoffMs, cfg.wsReconnectMaxMs));
+    // Jitter aleatorio de ate 600ms evita thundering herd com multiplos usuarios
+    // reconectando simultaneamente apos queda do servidor.
+    const jitter = Math.floor(Math.random() * 600);
+    const waitMs = baseWait + jitter;
     state.apiSocketReconnectTimer = setTimeout(function () {
       connectApiSocket();
     }, waitMs);
-    state.apiSocketBackoffMs = Math.min(cfg.wsReconnectMaxMs, Math.floor(waitMs * 1.8));
+    state.apiSocketBackoffMs = Math.min(cfg.wsReconnectMaxMs, Math.floor(baseWait * 1.8));
   }
 
   function queueApiRefreshFromSocket() {
@@ -223,11 +227,17 @@
       state.apiRefreshTimer = null;
       if (state.apiRefreshRunning) return;
       state.apiRefreshRunning = true;
+      // Safety timeout: se o refresh travar por mais de 30s, libera a flag
+      // para que proximos updates remotos nao fiquem bloqueados.
+      const safetyTimer = setTimeout(function () {
+        state.apiRefreshRunning = false;
+      }, 30000);
       try {
         await cfg.onQueueApiRefresh();
       } catch (_err) {
         // bootstrap ja trata erro internamente
       } finally {
+        clearTimeout(safetyTimer);
         state.apiRefreshRunning = false;
       }
     }, cfg.wsRefreshDebounceMs);
@@ -319,6 +329,7 @@
 
     state.apiSocket.onopen = function () {
       state.apiSocketBackoffMs = cfg.wsReconnectBaseMs;
+      queueApiRefreshFromSocket();
       const rec = cfg.getSelected();
       if (rec) announcePresenceForRecord(rec, "join");
     };
@@ -407,6 +418,9 @@
     announcePresenceForRecord,
     getPresenceUsersForRecord,
     sendSocketJson,
+    isApiSocketConnected: function () {
+      return !!(state.apiSocket && state.apiSocket.readyState === 1);
+    },
     handlePresencePayload,
     getApiWebSocketUrl: getApiWsUrl,
     connectApiSocket,

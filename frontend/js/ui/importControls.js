@@ -185,10 +185,12 @@
             );
           }
 
-          // Backend preview is authoritative for metrics; JS only applies the classified rows to state.
+          // Backend preview continua sendo a fonte autoritativa para metricas;
+          // o JS aplica as rows classificadas para refletir o estado operacional.
           opts.processImportedRows(sourceRows, file.name);
           var importChanged = true;
           var importSkipReason = "";
+
           if (shouldSyncImportToApi) {
             if (typeof opts.syncImportedEmendasToApi === "function") {
               report.centralSync = await opts.syncImportedEmendasToApi(file, report);
@@ -221,16 +223,17 @@
             opts.syncYearFilter();
             opts.render();
           }
+
           opts.showImportReport(report);
 
           var extraDemoInfo = removedDemo > 0 ? (" | Demos removidos: " + String(removedDemo)) : "";
           var syncInfo = " | Importacao isolada neste workspace (sem enviar lote para API oficial).";
           if (shouldSyncImportToApi) {
             syncInfo = importChanged
-              ? " | Sincronizado com API oficial."
+              ? " | Sincronizado com API oficial e lote registrado na governanca."
               : (
                 importSkipReason === "same_hash"
-                  ? " | Planilha oficial sem alteracao: lote/linhas nao reenviados."
+                  ? " | Planilha oficial sem alteracao: lote ja existente."
                   : " | API oficial sem novo lote nesta execucao."
               );
           }

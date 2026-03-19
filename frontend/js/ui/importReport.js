@@ -1,4 +1,4 @@
-﻿(function (global) {
+(function (global) {
   var root = global.SECFrontend = global.SECFrontend || {};
 
   function safeArr(value) {
@@ -141,6 +141,7 @@
     if (latestImportReport && typeof wireImportReportTabsFn === "function") {
       wireImportReportTabsFn(importReportEl, "planilha1");
     }
+
   }
 
   function buildImportSummaryPlaceholderHtml(stateRecords, lastImportedPlanilha1Aoa, escapeHtmlFn, fmtDateTimeFn, buildPlanilha1AoaFn, normalizeLooseTextFn, buildPlanilha1HtmlFn, getRecentChangesForPanelFn) {
@@ -187,7 +188,7 @@
     var planilha1Html = buildPlanilha1HtmlFromUtils(planilha1Aoa, escapeHtml, normalizeLooseTextFn) ||
       (typeof buildPlanilha1HtmlFn === "function" ? buildPlanilha1HtmlFn(planilha1Aoa) : "");
 
-    return "" +
+    var htmlInicio = "" +
       "<h4>Resumo da importacao</h4>" +
       "<p class=\"muted small\">Arquivo: " + escapeHtml(fileName) + " | Abas lidas: " + escapeHtml(sheets) + "</p>" +
       "<div class=\"import-tabs\" role=\"tablist\" aria-label=\"Abas do relatorio de importacao\">" +
@@ -208,8 +209,15 @@
         { label: "Duplicidade por chave ref", value: report.duplicateByRef || 0 },
         { label: "Duplicidade no arquivo", value: report.duplicateInFile || 0 },
         { label: "Conflito ID x chave", value: report.conflictIdVsRef || 0 }
-      ], escapeHtml) +
-      "  </section>" +
+      ], escapeHtml);
+
+    var governanceHtml = "" +
+      "<div class=\"import-governance-block\" style=\"margin-top:16px; padding:12px; background:var(--bg-layer-2); border:1px solid var(--border-color); border-radius:6px;\">" +
+      "  <h4 style=\"margin-bottom:8px;\">Governanca do Lote</h4>" +
+      "  <p class=\"muted small\" style=\"margin-bottom:0;\">A importacao foi sincronizada com a base oficial e registrada na trilha de governanca. Se precisar ajustar ou remover, use o painel principal de governanca de import.</p>" +
+      "</div>";
+
+    var finishResumo = governanceHtml + "  </section>" +
       "  <section class=\"import-tab-panel import-report-right\" data-import-panel=\"planilha1\">" +
       "    <h4 style=\"margin-bottom:8px\">Reflexo operacional em Planilha1</h4>" +
       planilha1Html +
@@ -218,6 +226,8 @@
       buildImportValidationHtml(report.validation, escapeHtmlFn) +
       "  </section>" +
       "</div>";
+
+    return htmlInicio + finishResumo;
   }
 
   function buildImportValidationHtml(validation, escapeHtmlFn) {

@@ -6,9 +6,31 @@
 
   function buildPowerBiFilterOptions(rows, ctx) {
     var source = Array.isArray(rows) ? rows : [];
-    var deputados = Array.from(new Set(source.map(function (rec) { return ctx.text(rec && rec.deputado) || "-"; }).filter(Boolean))).sort();
-    var municipios = Array.from(new Set(source.map(function (rec) { return ctx.text(rec && rec.municipio) || "-"; }).filter(Boolean))).sort();
-    var statuses = Array.from(new Set(source.map(function (rec) { return ctx.getRecordCurrentStatus(rec) || "-"; }).filter(Boolean))).sort();
+    
+    // Calcula opções disponíveis aplicando os filtros atuáis, 
+    // exceto o filtro da própria categoria
+    
+    var filterForDeputados = source.filter(function(rec) {
+        if (ctx.filters.municipio && (ctx.text(rec && rec.municipio) || "-") !== ctx.filters.municipio) return false;
+        if (ctx.filters.status && (ctx.getRecordCurrentStatus(rec) || "-") !== ctx.filters.status) return false;
+        return true;
+    });
+
+    var filterForMunicipios = source.filter(function(rec) {
+        if (ctx.filters.deputado && (ctx.text(rec && rec.deputado) || "-") !== ctx.filters.deputado) return false;
+        if (ctx.filters.status && (ctx.getRecordCurrentStatus(rec) || "-") !== ctx.filters.status) return false;
+        return true;
+    });
+    
+    var filterForStatuses = source.filter(function(rec) {
+        if (ctx.filters.deputado && (ctx.text(rec && rec.deputado) || "-") !== ctx.filters.deputado) return false;
+        if (ctx.filters.municipio && (ctx.text(rec && rec.municipio) || "-") !== ctx.filters.municipio) return false;
+        return true;
+    });
+
+    var deputados = Array.from(new Set(filterForDeputados.map(function (rec) { return ctx.text(rec && rec.deputado) || "-"; }).filter(Boolean))).sort();
+    var municipios = Array.from(new Set(filterForMunicipios.map(function (rec) { return ctx.text(rec && rec.municipio) || "-"; }).filter(Boolean))).sort();
+    var statuses = Array.from(new Set(filterForStatuses.map(function (rec) { return ctx.getRecordCurrentStatus(rec) || "-"; }).filter(Boolean))).sort();
     return {
       deputados: deputados,
       municipios: municipios,
