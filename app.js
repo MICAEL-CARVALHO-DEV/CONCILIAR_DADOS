@@ -565,6 +565,7 @@ const btnChangePasswordClose = document.getElementById("btnChangePasswordClose")
 const btnChangePasswordCloseX = document.getElementById("btnChangePasswordCloseX");
 const btnChangePasswordSubmit = document.getElementById("btnChangePasswordSubmit");
 const changePasswordCurrent = document.getElementById("changePasswordCurrent");
+const changePasswordUsername = document.getElementById("changePasswordUsername");
 const changePasswordNew = document.getElementById("changePasswordNew");
 const changePasswordConfirm = document.getElementById("changePasswordConfirm");
 const changePasswordMessage = document.getElementById("changePasswordMessage");
@@ -6922,6 +6923,7 @@ function setChangePasswordBusy(isBusy) {
 
 function clearChangePasswordForm() {
   if (changePasswordCurrent) changePasswordCurrent.value = "";
+  if (changePasswordUsername) changePasswordUsername.value = String(CURRENT_USER || "").trim();
   if (changePasswordNew) changePasswordNew.value = "";
   if (changePasswordConfirm) changePasswordConfirm.value = "";
   setChangePasswordBusy(false);
