@@ -7,6 +7,8 @@ from ..schemas import (
     DashboardDeputadoCountAdjustmentIn,
     DashboardDeputadoCountAdjustmentOut,
     DashboardDeputadoCountPolicyOut,
+    ImportEmendasApplyOut,
+    ImportEmendasApplyPayload,
     ImportSummaryOut,
     DashboardSummaryOut,
     ExportLogCreate,
@@ -132,6 +134,23 @@ def create_operations_router(resolve_event_origin, utcnow, broadcast_update, mas
     ):
         event_origin = resolve_event_origin("IMPORT", actor, "IMPORT")
         return import_export_service.sync_imported_emendas_service(
+            payload=payload,
+            actor=actor,
+            event_origin=event_origin,
+            db=db,
+            utcnow=utcnow,
+            mask_history_pair=mask_history_pair,
+            broadcast_update=broadcast_update,
+        )
+
+    @router.post("/imports/emendas/apply", response_model=ImportEmendasApplyOut)
+    def aplicar_emendas_importadas(
+        payload: ImportEmendasApplyPayload,
+        actor: dict = Depends(_actor_from_headers),
+        db=Depends(get_db),
+    ):
+        event_origin = resolve_event_origin(payload.origem_evento, actor, "IMPORT")
+        return import_export_service.apply_imported_emendas_service(
             payload=payload,
             actor=actor,
             event_origin=event_origin,

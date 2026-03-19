@@ -161,6 +161,44 @@
     return out;
   }
 
+  function buildImportApplyPayload(file, report, ctx) {
+    var source = report && typeof report === "object" ? report : {};
+    var previewHash = String(source.fileHash || "").trim().toLowerCase();
+    if (!previewHash) {
+      throw new Error("Preview sem fileHash autoritativo.");
+    }
+
+    return {
+      preview_hash: previewHash,
+      arquivo_nome: file && file.name ? file.name : (source.fileName || "importacao.xlsx"),
+      registros: buildImportSyncRecords(source, ctx),
+      linhas_lidas: Number(source.totalRows || 0),
+      linhas_validas: Number(source.consideredRows || 0),
+      linhas_ignoradas: Number(source.skippedRows || 0),
+      registros_criados: Number(source.created || 0),
+      registros_atualizados: Number(source.updated || 0),
+      sem_alteracao: Number(source.unchanged || 0),
+      duplicidade_id: Number(source.duplicateById || 0),
+      duplicidade_ref: Number(source.duplicateByRef || 0),
+      duplicidade_arquivo: Number(source.duplicateInFile || 0),
+      conflito_id_ref: Number(source.conflictIdVsRef || 0),
+      abas_lidas: Array.isArray(source.sheetNames) ? source.sheetNames.slice() : [],
+      observacao: "Aplicacao via governanca web",
+      origem_evento: "IMPORT",
+      linhas: Array.isArray(source.rowDetails) ? source.rowDetails.map(function (ln, idx) {
+        return {
+          ordem: ln && ln.ordem != null ? Number(ln.ordem) : (idx + 1),
+          sheet_name: ln && ln.sheet_name ? String(ln.sheet_name) : "",
+          row_number: ln && ln.row_number != null ? Number(ln.row_number) : 0,
+          status_linha: (ln && ln.status_linha ? String(ln.status_linha) : "UNCHANGED").toUpperCase(),
+          id_interno: ln && ln.id_interno ? String(ln.id_interno) : "",
+          ref_key: ln && ln.ref_key ? String(ln.ref_key) : "",
+          mensagem: ln && ln.mensagem ? String(ln.mensagem) : ""
+        };
+      }) : []
+    };
+  }
+
   async function previewImportXlsx(file, ctx) {
     var canPreview = typeof ctx.isImportPreviewApiEnabled === "function"
       ? !!ctx.isImportPreviewApiEnabled()
@@ -212,6 +250,10 @@
     ctx.setApiLastError("");
     ctx.applyAccessProfile();
     return payload || {};
+  }
+
+  async function previewImportedEmendasToApi(file, ctx) {
+    return previewImportXlsx(file, ctx);
   }
 
   async function rollbackSaveAndReport(err, rec, snapshot, actionName, ctx) {
@@ -298,6 +340,26 @@
     }
   }
 
+  async function applyImportedEmendasToApi(file, report, ctx) {
+    if (!ctx.isApiEnabled()) return null;
+
+    var payload = buildImportApplyPayload(file, report, ctx);
+    if (!Array.isArray(payload.registros) || !payload.registros.length) {
+      return { ok: true, changed: false, reason: "empty_preview", preview_hash: payload.preview_hash };
+    }
+
+    try {
+      var resp = await ctx.apiRequest("POST", "/imports/emendas/apply", payload, "IMPORT");
+      ctx.setApiOnline(true);
+      ctx.setApiLastError("");
+      ctx.applyAccessProfile();
+      return resp;
+    } catch (err) {
+      handleApiSyncError(err, "apply de importacao", ctx);
+      throw err;
+    }
+  }
+
   async function syncImportLinesToApi(loteId, rowDetails, ctx) {
     if (!ctx.isApiEnabled() || !loteId) return;
     var lines = Array.isArray(rowDetails) ? rowDetails : [];
@@ -361,12 +423,14 @@
   root.apiSyncOpsUtils = {
     applySyncResponseToRecord: applySyncResponseToRecord,
     previewImportXlsx: previewImportXlsx,
+    previewImportedEmendasToApi: previewImportedEmendasToApi,
     syncOfficialStatusToApi: syncOfficialStatusToApi,
     syncGenericEventToApi: syncGenericEventToApi,
     ensureBackendEmenda: ensureBackendEmenda,
     rollbackSaveAndReport: rollbackSaveAndReport,
     handleApiSyncError: handleApiSyncError,
     syncImportedEmendasToApi: syncImportedEmendasToApi,
+    applyImportedEmendasToApi: applyImportedEmendasToApi,
     syncImportBatchToApi: syncImportBatchToApi,
     syncImportLinesToApi: syncImportLinesToApi,
     syncExportLogToApi: syncExportLogToApi

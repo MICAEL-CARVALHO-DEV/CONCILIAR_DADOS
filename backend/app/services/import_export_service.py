@@ -798,11 +798,17 @@ def preview_import_xlsx_service(*, file_name: str, file_bytes: bytes, db: Sessio
 
 
 IMPORT_GOVERNANCE_ROLES = {"APG", "SUPERVISAO", "POWERBI", "PROGRAMADOR"}
+IMPORT_APPLY_ROLES = {"SUPERVISAO", "PROGRAMADOR"}
 
 
 def _can_govern_imports(actor: dict | None) -> bool:
     role = str((actor or {}).get("role") or "").strip().upper()
     return role in IMPORT_GOVERNANCE_ROLES
+
+
+def _can_apply_imports(actor: dict | None) -> bool:
+    role = str((actor or {}).get("role") or "").strip().upper()
+    return role in IMPORT_APPLY_ROLES
 
 
 def _actor_matches_lote(lote: ImportLote, actor: dict | None) -> bool:
@@ -874,31 +880,24 @@ def _append_governance_log(
     )
 
 
-def create_import_lot_service(
+def _create_import_lote_record(
     *,
     payload,
     actor: dict,
-    db: Session,
+    arquivo_hash: str,
     resolve_event_origin: Callable[[str | None, dict | None, str], str],
     utcnow: Callable[[], datetime],
-    broadcast_update: Callable[[str, int | None], None],
-) -> dict:
-    incoming_hash = _normalize_import_hash(payload.arquivo_hash)
-    if incoming_hash:
-        latest_active_lote = _get_latest_active_import_lot(db=db)
-        if latest_active_lote and _normalize_import_hash(latest_active_lote.arquivo_hash) == incoming_hash:
-            return {
-                "ok": True,
-                "changed": False,
-                "reason": "same_hash",
-                "id": None,
-                "lote_id_existente": latest_active_lote.id,
-                "arquivo_hash": incoming_hash,
-            }
-
+    db: Session,
+    status_governanca: str = "APLICADO",
+    governanca_motivo: str = "",
+    governance_action: str = "CRIADO",
+    governance_log_motivo: str = "",
+    governance_details: dict | None = None,
+) -> ImportLote:
+    now = utcnow()
     lote = ImportLote(
         arquivo_nome=payload.arquivo_nome,
-        arquivo_hash=incoming_hash,
+        arquivo_hash=arquivo_hash,
         linhas_lidas=max(0, int(payload.linhas_lidas or 0)),
         linhas_validas=max(0, int(payload.linhas_validas or 0)),
         linhas_ignoradas=max(0, int(payload.linhas_ignoradas or 0)),
@@ -915,63 +914,84 @@ def create_import_lot_service(
         usuario_id=actor.get("id"),
         usuario_nome=actor.get("name") or "",
         setor=actor.get("role") or "",
-        status_governanca="APLICADO",
-        governanca_motivo="",
-        governado_por_id=None,
-        governado_por_nome="",
-        governado_por_setor="",
-        governado_em=None,
+        status_governanca=status_governanca,
+        governanca_motivo=governanca_motivo,
+        governado_por_id=actor.get("id") if status_governanca == "APLICADO" else None,
+        governado_por_nome=str(actor.get("name") or "") if status_governanca == "APLICADO" else "",
+        governado_por_setor=str(actor.get("role") or "") if status_governanca == "APLICADO" else "",
+        governado_em=now if status_governanca == "APLICADO" else None,
         registros_removidos=0,
-        created_at=utcnow(),
+        created_at=now,
     )
     db.add(lote)
     db.flush()
     _append_governance_log(
         lote_id=lote.id,
-        acao="CRIADO",
-        motivo="Import aplicado na base.",
+        acao=governance_action,
+        motivo=governance_log_motivo or governance_action,
         actor=actor,
-        detalhes={
-            "arquivo_nome": lote.arquivo_nome,
-            "linhas_lidas": lote.linhas_lidas,
-            "linhas_ignoradas": lote.linhas_ignoradas,
-            "registros_criados": lote.registros_criados,
-            "registros_atualizados": lote.registros_atualizados,
-        },
+        detalhes=governance_details or {},
         db=db,
         utcnow=utcnow,
     )
-    db.commit()
-    db.refresh(lote)
-    broadcast_update("import_lote", lote.id)
-    return {"ok": True, "id": lote.id, "changed": True, "reason": "applied", "arquivo_hash": lote.arquivo_hash}
+    return lote
 
 
-def sync_imported_emendas_service(
+def _insert_import_lines(
     *,
-    payload,
+    lote_id: int,
+    linhas: list,
+    utcnow: Callable[[], datetime],
+    db: Session,
+) -> int:
+    lines = list(linhas or [])
+    if not lines:
+        return 0
+
+    inserted = 0
+    now = utcnow()
+    for ln in lines:
+        db.add(
+            ImportLinha(
+                lote_id=lote_id,
+                ordem=max(0, int(ln.ordem or 0)),
+                sheet_name=(ln.sheet_name or "")[:120],
+                row_number=max(0, int(ln.row_number or 0)),
+                status_linha=(ln.status_linha or "UNCHANGED").upper(),
+                id_interno=(ln.id_interno or "")[:60],
+                ref_key=(ln.ref_key or "")[:255],
+                mensagem=ln.mensagem or "",
+                created_at=now,
+            )
+        )
+        inserted += 1
+    return inserted
+
+
+def _sync_imported_emendas_records(
+    *,
+    arquivo_nome: str,
+    registros: list,
     actor: dict,
     event_origin: str,
     db: Session,
     utcnow: Callable[[], datetime],
     mask_history_pair: Callable[[str | None, str | None, str | None], tuple[str, str]],
-    broadcast_update: Callable[[str, int | None], None],
 ) -> dict:
-    registros = list(payload.registros or [])
     seen_ids: set[str] = set()
     created = 0
     updated = 0
     unchanged = 0
     touched = False
 
-    for item in registros:
+    for item in list(registros or []):
         id_interno = _as_text(item.id_interno)
         if not id_interno or id_interno in seen_ids:
             continue
         seen_ids.add(id_interno)
 
         emenda = db.query(Emenda).filter(Emenda.id_interno == id_interno).first()
-        note = _build_import_sync_note(payload.arquivo_nome, item.source_sheet, item.source_row)
+        note = _build_import_sync_note(arquivo_nome, item.source_sheet, item.source_row)
         now = utcnow()
 
         if emenda is None:
@@ -1024,7 +1044,13 @@ def sync_imported_emendas_service(
             previous_value = getattr(emenda, field_name)
             if _import_sync_values_equal(field_name, previous_value, next_value):
                 continue
-            setattr(emenda, field_name, int(next_value) if field_name == "ano" else (float(next_value or 0) if field_name in {"valor_inicial", "valor_atual"} else (next_value or "")))
+            setattr(
+                emenda,
+                field_name,
+                int(next_value) if field_name == "ano" else (
+                    float(next_value or 0) if field_name in {"valor_inicial", "valor_atual"} else (next_value or "")
+                ),
+            )
             old_masked, new_masked = mask_history_pair(
                 field_name,
                 _import_sync_value_text(field_name, previous_value),
@@ -1073,7 +1099,83 @@ def sync_imported_emendas_service(
         else:
             unchanged += 1
 
-    if touched:
+    return {
+        "processed": len(seen_ids),
+        "created": created,
+        "updated": updated,
+        "unchanged": unchanged,
+        "touched": touched,
+    }
+
+
+def create_import_lot_service(
+    *,
+    payload,
+    actor: dict,
+    db: Session,
+    resolve_event_origin: Callable[[str | None, dict | None, str], str],
+    utcnow: Callable[[], datetime],
+    broadcast_update: Callable[[str, int | None], None],
+) -> dict:
+    incoming_hash = _normalize_import_hash(payload.arquivo_hash)
+    if incoming_hash:
+        latest_active_lote = _get_latest_active_import_lot(db=db)
+        if latest_active_lote and _normalize_import_hash(latest_active_lote.arquivo_hash) == incoming_hash:
+            return {
+                "ok": True,
+                "changed": False,
+                "reason": "same_hash",
+                "id": None,
+                "lote_id_existente": latest_active_lote.id,
+                "arquivo_hash": incoming_hash,
+            }
+
+    lote = _create_import_lote_record(
+        payload=payload,
+        actor=actor,
+        arquivo_hash=incoming_hash,
+        resolve_event_origin=resolve_event_origin,
+        utcnow=utcnow,
+        db=db,
+        status_governanca="APLICADO",
+        governanca_motivo="",
+        governance_action="CRIADO",
+        governance_log_motivo="Import aplicado na base.",
+        governance_details={
+            "arquivo_nome": payload.arquivo_nome,
+            "linhas_lidas": max(0, int(payload.linhas_lidas or 0)),
+            "linhas_ignoradas": max(0, int(payload.linhas_ignoradas or 0)),
+            "registros_criados": max(0, int(payload.registros_criados or 0)),
+            "registros_atualizados": max(0, int(payload.registros_atualizados or 0)),
+        },
+    )
+    db.commit()
+    db.refresh(lote)
+    broadcast_update("import_lote", lote.id)
+    return {"ok": True, "id": lote.id, "changed": True, "reason": "applied", "arquivo_hash": lote.arquivo_hash}
+
+
+def sync_imported_emendas_service(
+    *,
+    payload,
+    actor: dict,
+    event_origin: str,
+    db: Session,
+    utcnow: Callable[[], datetime],
+    mask_history_pair: Callable[[str | None, str | None, str | None], tuple[str, str]],
+    broadcast_update: Callable[[str, int | None], None],
+) -> dict:
+    sync_result = _sync_imported_emendas_records(
+        arquivo_nome=payload.arquivo_nome,
+        registros=payload.registros or [],
+        actor=actor,
+        event_origin=event_origin,
+        db=db,
+        utcnow=utcnow,
+        mask_history_pair=mask_history_pair,
+    )
+
+    if sync_result["touched"]:
         db.commit()
         broadcast_update("emenda", None)
     else:
@@ -1081,10 +1183,104 @@ def sync_imported_emendas_service(
 
     return {
         "ok": True,
-        "processed": len(seen_ids),
-        "created": created,
-        "updated": updated,
-        "unchanged": unchanged,
+        "processed": sync_result["processed"],
+        "created": sync_result["created"],
+        "updated": sync_result["updated"],
+        "unchanged": sync_result["unchanged"],
+    }
+
+
+def apply_imported_emendas_service(
+    *,
+    payload,
+    actor: dict,
+    event_origin: str,
+    db: Session,
+    utcnow: Callable[[], datetime],
+    mask_history_pair: Callable[[str | None, str | None, str | None], tuple[str, str]],
+    broadcast_update: Callable[[str, int | None], None],
+) -> dict:
+    if not _can_apply_imports(actor):
+        raise HTTPException(status_code=403, detail="apenas SUPERVISAO ou PROGRAMADOR pode aplicar importacao")
+
+    preview_hash = _normalize_import_hash(payload.preview_hash)
+    if not preview_hash:
+        raise HTTPException(status_code=400, detail="preview_hash obrigatorio")
+
+    latest_active_lote = _get_latest_active_import_lot(db=db)
+    if latest_active_lote and _normalize_import_hash(latest_active_lote.arquivo_hash) == preview_hash:
+        return {
+            "ok": True,
+            "changed": False,
+            "reason": "same_hash",
+            "preview_hash": preview_hash,
+            "lote_id": latest_active_lote.id,
+            "processed": 0,
+            "created": 0,
+            "updated": 0,
+            "unchanged": 0,
+            "lines_inserted": 0,
+            "status_governanca": latest_active_lote.status_governanca,
+        }
+
+    if not list(payload.registros or []):
+        raise HTTPException(status_code=400, detail="nenhum registro valido para aplicar")
+
+    sync_result = _sync_imported_emendas_records(
+        arquivo_nome=payload.arquivo_nome,
+        registros=payload.registros or [],
+        actor=actor,
+        event_origin=event_origin,
+        db=db,
+        utcnow=utcnow,
+        mask_history_pair=mask_history_pair,
+    )
+
+    lote = _create_import_lote_record(
+        payload=payload,
+        actor=actor,
+        arquivo_hash=preview_hash,
+        resolve_event_origin=lambda origem, current_actor, fallback: event_origin,
+        utcnow=utcnow,
+        db=db,
+        status_governanca="APLICADO",
+        governanca_motivo=str(payload.observacao or "").strip(),
+        governance_action="APLICAR",
+        governance_log_motivo="Import aplicado a partir de preview validado.",
+        governance_details={
+            "preview_hash": preview_hash,
+            "processed": sync_result["processed"],
+            "created": sync_result["created"],
+            "updated": sync_result["updated"],
+            "unchanged": sync_result["unchanged"],
+            "linhas_preview": len(payload.linhas or []),
+        },
+    )
+    inserted_lines = _insert_import_lines(
+        lote_id=lote.id,
+        linhas=payload.linhas or [],
+        utcnow=utcnow,
+        db=db,
+    )
+
+    db.commit()
+    db.refresh(lote)
+    broadcast_update("import_lote", lote.id)
+    if sync_result["touched"]:
+        broadcast_update("emenda", None)
+
+    return {
+        "ok": True,
+        "changed": True,
+        "reason": "applied",
+        "preview_hash": preview_hash,
+        "lote_id": lote.id,
+        "processed": sync_result["processed"],
+        "created": sync_result["created"],
+        "updated": sync_result["updated"],
+        "unchanged": sync_result["unchanged"],
+        "lines_inserted": inserted_lines,
+        "status_governanca": lote.status_governanca,
     }
 
 

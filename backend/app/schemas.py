@@ -362,6 +362,56 @@ class ImportEmendasSyncPayload(BaseModel):
     registros: list[ImportEmendaSyncIn] = Field(default_factory=list)
 
 
+class ImportEmendasApplyPayload(BaseModel):
+    preview_hash: str = Field(min_length=8, max_length=128)
+    arquivo_nome: str = Field(min_length=1, max_length=255)
+    registros: list[ImportEmendaSyncIn] = Field(default_factory=list)
+    linhas_lidas: int = 0
+    linhas_validas: int = 0
+    linhas_ignoradas: int = 0
+    registros_criados: int = 0
+    registros_atualizados: int = 0
+    sem_alteracao: int = 0
+    duplicidade_id: int = 0
+    duplicidade_ref: int = 0
+    duplicidade_arquivo: int = 0
+    conflito_id_ref: int = 0
+    abas_lidas: list[str] = Field(default_factory=list)
+    observacao: str = ""
+    origem_evento: str = "IMPORT"
+    linhas: list["ImportLinhaIn"] = Field(default_factory=list)
+
+    @field_validator("preview_hash")
+    @classmethod
+    def validate_preview_hash(cls, value: str) -> str:
+        v = (value or "").strip().lower()
+        if len(v) < 8:
+            raise ValueError("preview_hash invalido")
+        return v
+
+    @field_validator("origem_evento")
+    @classmethod
+    def validate_apply_origin(cls, value: str) -> str:
+        v = (value or "IMPORT").strip().upper()
+        if v not in EVENT_ORIGINS:
+            raise ValueError("origem_evento invalida")
+        return v
+
+
+class ImportEmendasApplyOut(BaseModel):
+    ok: bool = True
+    changed: bool = True
+    reason: str = "applied"
+    preview_hash: str = ""
+    lote_id: int | None = None
+    processed: int = 0
+    created: int = 0
+    updated: int = 0
+    unchanged: int = 0
+    lines_inserted: int = 0
+    status_governanca: str = "APLICADO"
+
+
 class ExportLogCreate(BaseModel):
     formato: str = Field(min_length=3, max_length=10)
     arquivo_nome: str = Field(min_length=1, max_length=255)
@@ -504,6 +554,9 @@ class ImportLinhaOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+ImportEmendasApplyPayload.model_rebuild()
 
 
 class ImportGovernanceStatusMetricOut(BaseModel):

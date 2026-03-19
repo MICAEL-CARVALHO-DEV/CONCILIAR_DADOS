@@ -1378,7 +1378,9 @@ function getImportControlsContext() {
       return isApiBackedWorkspace() && isApiEnabled();
     },
     previewImportXlsx: previewImportXlsx,
+    previewImportedEmendasToApi: previewImportedEmendasToApi,
     syncImportedEmendasToApi: syncImportedEmendasToApi,
+    applyImportedEmendasToApi: applyImportedEmendasToApi,
     purgeDemoBeforeOfficialImport: purgeDemoBeforeOfficialImport,
     processImportedRows: processImportedRows,
     showImportReport: showImportReport,
@@ -5948,8 +5950,24 @@ async function previewImportXlsx(file) {
   throw new Error("Preview de importacao indisponivel.");
 }
 
+async function previewImportedEmendasToApi(file) {
+  const moduleFn = getApiSyncOpsUtil("previewImportedEmendasToApi");
+  if (moduleFn) {
+    return await moduleFn(file, getApiSyncOpsContext());
+  }
+  return await previewImportXlsx(file);
+}
+
 async function syncImportedEmendasToApi(file, report) {
   const moduleFn = getApiSyncOpsUtil("syncImportedEmendasToApi");
+  if (moduleFn) {
+    return await moduleFn(file, report, getApiSyncOpsContext());
+  }
+  return null;
+}
+
+async function applyImportedEmendasToApi(file, report) {
+  const moduleFn = getApiSyncOpsUtil("applyImportedEmendasToApi");
   if (moduleFn) {
     return await moduleFn(file, report, getApiSyncOpsContext());
   }
