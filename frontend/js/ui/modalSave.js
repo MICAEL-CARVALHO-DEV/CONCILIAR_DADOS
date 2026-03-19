@@ -153,6 +153,13 @@
         showModalSaveFeedback(ctx.getReadOnlyRoleMessage() || "Perfil em leitura: salvamento bloqueado.", true, ctx);
         return false;
       }
+      if (typeof ctx.getCentralSyncBlockReason === "function") {
+        var centralReason = ctx.getCentralSyncBlockReason();
+        if (centralReason) {
+          showModalSaveFeedback(centralReason, true, ctx);
+          return false;
+        }
+      }
       if (ctx.isEmendaLockReadOnly()) {
         showModalSaveFeedback("Edicao bloqueada: emenda em uso por outro usuario.", true, ctx);
         return false;

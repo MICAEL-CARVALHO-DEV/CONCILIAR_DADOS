@@ -178,6 +178,13 @@
             opts.setIdCountersByYear(opts.buildIdCounters((currentState && currentState.records) || []));
           }
 
+          if (shouldSyncImportToApi && typeof opts.canOperateCentralData === "function" && !opts.canOperateCentralData()) {
+            throw new Error(
+              (typeof opts.getCentralSyncBlockReason === "function" && opts.getCentralSyncBlockReason())
+                || "Base oficial indisponivel. Aguarde a reconexao com a API para importar."
+            );
+          }
+
           // Backend preview is authoritative for metrics; JS only applies the classified rows to state.
           opts.processImportedRows(sourceRows, file.name);
           var importChanged = true;
