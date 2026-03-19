@@ -426,29 +426,31 @@
           <h3 id="changePasswordTitle">Trocar senha</h3>
           <p class="muted">Atualize sua senha de acesso local.</p>
         </div>
-        <button id="btnChangePasswordCloseX" class="icon-btn" title="Fechar" aria-label="Fechar modal">x</button>
+        <button id="btnChangePasswordCloseX" class="icon-btn" type="button" title="Fechar" aria-label="Fechar modal">x</button>
       </div>
-      <div class="modal-body">
-        <div class="grid export-custom-grid">
-          <div class="field">
-            <label for="changePasswordCurrent">Senha atual</label>
-            <input id="changePasswordCurrent" type="password" autocomplete="current-password" />
+      <form id="changePasswordForm">
+        <div class="modal-body">
+          <div class="grid export-custom-grid">
+            <div class="field">
+              <label for="changePasswordCurrent">Senha atual</label>
+              <input id="changePasswordCurrent" type="password" autocomplete="current-password" />
+            </div>
+            <div class="field">
+              <label for="changePasswordNew">Nova senha</label>
+              <input id="changePasswordNew" type="password" autocomplete="new-password" />
+            </div>
+            <div class="field">
+              <label for="changePasswordConfirm">Confirmar nova senha</label>
+              <input id="changePasswordConfirm" type="password" autocomplete="new-password" />
+            </div>
           </div>
-          <div class="field">
-            <label for="changePasswordNew">Nova senha</label>
-            <input id="changePasswordNew" type="password" autocomplete="new-password" />
-          </div>
-          <div class="field">
-            <label for="changePasswordConfirm">Confirmar nova senha</label>
-            <input id="changePasswordConfirm" type="password" autocomplete="new-password" />
-          </div>
+          <p id="changePasswordMessage" class="muted small"></p>
         </div>
-        <p id="changePasswordMessage" class="muted small"></p>
-      </div>
-      <div class="modal-foot">
-        <button id="btnChangePasswordSubmit" class="btn primary">Salvar nova senha</button>
-        <button id="btnChangePasswordClose" class="btn">Cancelar</button>
-      </div>
+        <div class="modal-foot">
+          <button id="btnChangePasswordSubmit" class="btn primary" type="submit">Salvar nova senha</button>
+          <button id="btnChangePasswordClose" class="btn" type="button">Cancelar</button>
+        </div>
+      </form>
     </div>
   </div>
 

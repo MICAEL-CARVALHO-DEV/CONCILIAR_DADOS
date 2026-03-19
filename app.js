@@ -560,6 +560,7 @@ const profileRole = document.getElementById("profileRole");
 const profileMode = document.getElementById("profileMode");
 const profileApi = document.getElementById("profileApi");
 const changePasswordModal = document.getElementById("changePasswordModal");
+const changePasswordForm = document.getElementById("changePasswordForm");
 const btnChangePasswordClose = document.getElementById("btnChangePasswordClose");
 const btnChangePasswordCloseX = document.getElementById("btnChangePasswordCloseX");
 const btnChangePasswordSubmit = document.getElementById("btnChangePasswordSubmit");
@@ -1286,6 +1287,7 @@ function getUiShellBindingsContext() {
     btnChangePasswordCloseX: btnChangePasswordCloseX,
     closeChangePasswordModal: closeChangePasswordModal,
     changePasswordModal: changePasswordModal,
+    changePasswordForm: changePasswordForm,
     btnChangePasswordSubmit: btnChangePasswordSubmit,
     submitChangePassword: submitChangePassword,
     btnPendingApprovals: btnPendingApprovals,
