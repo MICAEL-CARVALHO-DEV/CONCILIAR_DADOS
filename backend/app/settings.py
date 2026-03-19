@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     # Lista opcional de audiencias Google aceitas (csv), para transicao entre client IDs.
     # Ex.: GOOGLE_CLIENT_IDS=id-1.apps.googleusercontent.com,id-2.apps.googleusercontent.com
     GOOGLE_CLIENT_IDS: str = (
+        "1090925215709-otj49ouef21e8p0vr0nb97rkjfrt4mjc.apps.googleusercontent.com,"
         "1090925215709-mgd525lfv9ams75ncam89jo304dcdq7n.apps.googleusercontent.com,"
         "905274978136-21du34pfsmtec45313ob5kh4tuukap8h.apps.googleusercontent.com"
     )

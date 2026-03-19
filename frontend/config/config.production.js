@@ -1,7 +1,7 @@
 (() => {
   // OAuth producao/homolog (Cloudflare Pages + GitHub Pages).
   // Mantemos um unico client id para os hosts oficiais do projeto.
-  const GOOGLE_CLIENT_ID_PROD = "1090925215709-mgd525lfv9ams75ncam89jo304dcdq7n.apps.googleusercontent.com";
+  const GOOGLE_CLIENT_ID_PROD = "1090925215709-otj49ouef21e8p0vr0nb97rkjfrt4mjc.apps.googleusercontent.com";
 
   // OAuth local (localhost/127). Mantido vazio para evitar erro de origem
   // nao autorizada durante homologacao local.
