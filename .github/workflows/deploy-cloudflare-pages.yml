@@ -1,14 +1,31 @@
-name: Deploy Front to Cloudflare Pages
+name: Deploy Cloudflare Pages
 
 on:
+  push:
+    branches: ["main"]
+    paths:
+      - ".github/workflows/deploy-cloudflare-pages.yml"
+      - "index.html"
+      - "login.html"
+      - "cadastro.html"
+      - "reset-senha.html"
+      - "style.css"
+      - "app.js"
+      - "config.js"
+      - "config.production.js"
+      - "assets/**"
+      - "vendor/**"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: "cloudflare-pages-deploy"
+  group: "cloudflare-pages-production"
   cancel-in-progress: true
+
+env:
+  CLOUDFLARE_PAGES_PROJECT_NAME: conciliar-dados
 
 jobs:
   deploy:
@@ -18,13 +35,30 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build static bundle
+      - name: Build static site artifact
         run: |
-          node ./scripts/build_cloudflare_dist.mjs
+          set -euxo pipefail
+          rm -rf _site
+          mkdir -p _site
+          cp index.html _site/
+          cp login.html _site/
+          cp cadastro.html _site/
+          if [ -f reset-senha.html ]; then cp reset-senha.html _site/; fi
+          cp style.css _site/
+          cp app.js _site/
+          cp config.js _site/
+          cp config.production.js _site/
+          cp LICENSE _site/
+          if [ -d assets ]; then cp -r assets _site/assets; fi
+          if [ -d vendor ]; then cp -r vendor _site/vendor; fi
 
       - name: Deploy to Cloudflare Pages
+        id: deploy
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy .cf-pages-dist --project-name=${{ secrets.CLOUDFLARE_PAGES_PROJECT }} --branch=${{ github.ref_name }}
+          command: pages deploy _site --project-name=${{ env.CLOUDFLARE_PAGES_PROJECT_NAME }}
+
+      - name: Show deployment URL
+        run: echo "${{ steps.deploy.outputs.deployment-url }}"

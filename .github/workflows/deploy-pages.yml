@@ -1,18 +1,23 @@
-name: Validate Pages Artifact
+name: Deploy GitHub Pages (Manual)
 
 on:
   workflow_dispatch:
 
 permissions:
   contents: read
+  pages: write
+  id-token: write
 
 concurrency:
-  group: "pages-artifact"
+  group: "pages"
   cancel-in-progress: true
 
 jobs:
-  build-artifact:
+  deploy:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - name: Checkout
@@ -20,31 +25,29 @@ jobs:
 
       - name: Build static site artifact
         run: |
+          rm -rf _site
           mkdir -p _site
-          mkdir -p _site/frontend/pages
-          mkdir -p _site/frontend/config
           cp index.html _site/
-          cp frontend/pages/login.html _site/frontend/pages/
-          cp frontend/pages/cadastro.html _site/frontend/pages/
+          cp login.html _site/
+          cp cadastro.html _site/
+          if [ -f reset-senha.html ]; then cp reset-senha.html _site/; fi
           cp style.css _site/
           cp app.js _site/
-          cp frontend/config/config.js _site/frontend/config/
-          cp frontend/config/config.production.js _site/frontend/config/
-          cp anotacoes/legal/license _site/license
-          mkdir -p _site/assets
-          cp assets/sec-logo.png _site/assets/
-          cp assets/login-bg.jpg _site/assets/
-          cp -r vendor _site/vendor
+          cp config.js _site/
+          cp config.production.js _site/
+          cp LICENSE _site/
+          if [ -d assets ]; then cp -r assets _site/assets; fi
+          if [ -d vendor ]; then cp -r vendor _site/vendor; fi
           touch _site/.nojekyll
 
-      - name: Verify artifact files
-        run: |
-          test -f _site/index.html
-          test -f _site/frontend/pages/login.html
-          test -f _site/frontend/pages/cadastro.html
-          test -f _site/style.css
-          test -f _site/app.js
-          test -f _site/frontend/config/config.production.js
-          test -f _site/license
-          test -f _site/assets/sec-logo.png
-          test -f _site/assets/login-bg.jpg
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
