@@ -4312,6 +4312,13 @@ function syncApiStatePolling() {
         return apiOnline;
       },
       isWebSocketEnabled: API_WS_ENABLED,
+      isSocketConnected: function () {
+        const isApiSocketConnectedUtil = getConcurrencyUtil("isApiSocketConnected");
+        if (isApiSocketConnectedUtil) {
+          return !!isApiSocketConnectedUtil();
+        }
+        return !!(apiSocket && apiSocket.readyState === 1);
+      },
       getTimer: function () {
         return apiStatePollTimer;
       },
@@ -7493,6 +7500,7 @@ function connectApiSocket() {
 
   apiSocket.onopen = function () {
     apiSocketBackoffMs = WS_RECONNECT_BASE_MS;
+    queueApiRefreshFromSocket();
     const rec = getSelected();
     if (rec) announcePresenceForRecord(rec, "join");
   };

@@ -649,12 +649,16 @@
     controlGrid.appendChild(controlCard);
     target.appendChild(controlGrid);
 
+    // Mapa geografico temporariamente oculto (Escopo: U07 - BI Avancado)
+    // Sera reativado na proxima iteracao para nao poluir o BI Basico Operacional.
+    /*
     renderMunicipioMapCard(target, mapModel, {
       setPowerBiFilters: setPowerBiFilters,
       rerender: rerender,
       fmtMoney: fmtMoney,
       filters: filters
     });
+    */
 
     var deputyTitle = document.createElement("h4");
     deputyTitle.style.marginTop = "14px";
