@@ -5055,6 +5055,10 @@ async function governImportLotFromApi(loteId, acao, motivo) {
   if (!isApiEnabled() || !canImportData()) {
     throw new Error("Perfil sem permissao para governanca de imports.");
   }
+  const centralReason = getCentralSyncBlockReason();
+  if (centralReason) {
+    throw new Error(centralReason);
+  }
   const selectedId = Number(loteId || 0);
   if (!selectedId) {
     throw new Error("Selecione um lote de importacao.");
@@ -5419,6 +5423,7 @@ function getModalSaveContext() {
     getSelected: getSelected,
     canMutateRecords: canMutateRecords,
     isEmendaLockReadOnly: isEmendaLockReadOnly,
+    getCentralSyncBlockReason: getCentralSyncBlockReason,
     getReadOnlyRoleMessage: getReadOnlyRoleMessage,
     isModalDraftDirty: isModalDraftDirty,
     hasPendingModalAction: hasPendingModalAction,
