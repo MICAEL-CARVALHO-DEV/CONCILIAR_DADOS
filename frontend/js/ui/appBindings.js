@@ -60,6 +60,7 @@
     var btnChangePasswordCloseX = opts.btnChangePasswordCloseX || null;
     var closeChangePasswordModal = typeof opts.closeChangePasswordModal === "function" ? opts.closeChangePasswordModal : noop;
     var changePasswordModal = opts.changePasswordModal || null;
+    var changePasswordForm = opts.changePasswordForm || null;
     var btnChangePasswordSubmit = opts.btnChangePasswordSubmit || null;
     var submitChangePassword = typeof opts.submitChangePassword === "function" ? opts.submitChangePassword : function () { return Promise.resolve(); };
     var btnPendingApprovals = opts.btnPendingApprovals || null;
@@ -402,8 +403,12 @@
     }
     if (btnChangePasswordClose) btnChangePasswordClose.addEventListener("click", closeChangePasswordModal);
     if (btnChangePasswordCloseX) btnChangePasswordCloseX.addEventListener("click", closeChangePasswordModal);
-    if (btnChangePasswordSubmit) {
-      btnChangePasswordSubmit.addEventListener("click", async function () {
+    if (changePasswordForm) {
+      changePasswordForm.addEventListener("submit", async function (e) {
+        if (e) {
+          e.preventDefault();
+          e.stopPropagation();
+        }
         await submitChangePassword();
       });
     }
