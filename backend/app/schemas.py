@@ -279,6 +279,7 @@ class EmendaOut(BaseModel):
     is_current: bool = True
     created_at: datetime
     updated_at: datetime
+    eventos: list[dict] = Field(default_factory=list)
 
     class Config:
         from_attributes = True
@@ -326,6 +327,39 @@ class ImportLoteCreate(BaseModel):
         if v not in EVENT_ORIGINS:
             raise ValueError("origem_evento invalida")
         return v
+
+
+class ImportEmendaSyncIn(BaseModel):
+    id_interno: str = Field(min_length=1, max_length=60)
+    ano: int
+    identificacao: str = Field(min_length=1, max_length=255)
+    cod_subfonte: str = Field(default="", max_length=40)
+    deputado: str = Field(default="", max_length=120)
+    cod_uo: str = Field(default="", max_length=40)
+    sigla_uo: str = Field(default="", max_length=40)
+    cod_orgao: str = Field(default="", max_length=40)
+    cod_acao: str = Field(default="", max_length=40)
+    descricao_acao: str = Field(default="", max_length=4000)
+    municipio: str = Field(default="", max_length=120)
+    valor_inicial: float | None = None
+    valor_atual: float | None = None
+    processo_sei: str = Field(default="", max_length=120)
+    status_oficial: str = "Recebido"
+    source_sheet: str = Field(default="", max_length=120)
+    source_row: int | None = None
+
+    @field_validator("status_oficial")
+    @classmethod
+    def validate_import_status(cls, value: str) -> str:
+        v = (value or "").strip()
+        if v not in STATUS:
+            raise ValueError("status_oficial invalido")
+        return v
+
+
+class ImportEmendasSyncPayload(BaseModel):
+    arquivo_nome: str = Field(min_length=1, max_length=255)
+    registros: list[ImportEmendaSyncIn] = Field(default_factory=list)
 
 
 class ExportLogCreate(BaseModel):
@@ -838,4 +872,3 @@ class SupportSummaryOut(BaseModel):
     status_counts: list[SupportSummaryMetricOut]
     categoria_counts: list[SupportSummaryMetricOut]
     latest_thread: SupportLatestThreadOut | None = None
-

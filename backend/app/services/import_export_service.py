@@ -78,6 +78,22 @@ HEADER_HINTS = {
     "descritor_da_acao",
 }
 ACTIVE_IMPORT_LOT_STATUSES = ("APLICADO", "CORRIGIDO")
+IMPORT_SYNC_FIELD_LABELS = {
+    "ano": "Ano",
+    "identificacao": "Identificacao",
+    "cod_subfonte": "Cod Subfonte",
+    "deputado": "Deputado",
+    "cod_uo": "Cod UO",
+    "sigla_uo": "Sigla UO",
+    "cod_orgao": "Cod Orgao",
+    "cod_acao": "Cod Acao",
+    "descricao_acao": "Descricao Acao",
+    "municipio": "Municipio",
+    "valor_inicial": "Valor Inicial",
+    "valor_atual": "Valor Atual",
+    "processo_sei": "Processo SEI",
+}
+IMPORT_SYNC_NUMERIC_FIELDS = {"ano", "valor_inicial", "valor_atual"}
 
 
 def _as_text(value) -> str:
@@ -169,6 +185,33 @@ def _normalize_status(value) -> str:
         if _normalize_loose_text(status) == cleaned:
             return status
     return "Recebido"
+
+
+def _build_import_sync_note(arquivo_nome: str, source_sheet: str | None, source_row: int | None) -> str:
+    parts = [f"Importacao oficial: {str(arquivo_nome or '').strip() or 'planilha.xlsx'}"]
+    if str(source_sheet or "").strip():
+        parts.append(f"Aba: {str(source_sheet).strip()}")
+    if source_row is not None:
+        parts.append(f"Linha: {int(source_row)}")
+    return " | ".join(parts)
+
+
+def _import_sync_values_equal(field_name: str, previous, next_value) -> bool:
+    if field_name == "ano":
+        return _to_int(previous) == _to_int(next_value)
+    if field_name in {"valor_inicial", "valor_atual"}:
+        return _to_number(previous) == _to_number(next_value)
+    return _normalize_loose_text(previous) == _normalize_loose_text(next_value)
+
+
+def _import_sync_value_text(field_name: str, value) -> str:
+    if field_name in IMPORT_SYNC_NUMERIC_FIELDS:
+        if value is None or _as_text(value) == "":
+            return ""
+        if field_name == "ano":
+            return str(_to_int(value))
+        return str(_to_number(value))
+    return _as_text(value)
 
 
 def _build_headers_from_row(raw_header: list[object]) -> list[str]:
@@ -902,6 +945,147 @@ def create_import_lot_service(
     db.refresh(lote)
     broadcast_update("import_lote", lote.id)
     return {"ok": True, "id": lote.id, "changed": True, "reason": "applied", "arquivo_hash": lote.arquivo_hash}
+
+
+def sync_imported_emendas_service(
+    *,
+    payload,
+    actor: dict,
+    event_origin: str,
+    db: Session,
+    utcnow: Callable[[], datetime],
+    mask_history_pair: Callable[[str | None, str | None, str | None], tuple[str, str]],
+    broadcast_update: Callable[[str, int | None], None],
+) -> dict:
+    registros = list(payload.registros or [])
+    seen_ids: set[str] = set()
+    created = 0
+    updated = 0
+    unchanged = 0
+    touched = False
+
+    for item in registros:
+        id_interno = _as_text(item.id_interno)
+        if not id_interno or id_interno in seen_ids:
+            continue
+        seen_ids.add(id_interno)
+
+        emenda = db.query(Emenda).filter(Emenda.id_interno == id_interno).first()
+        note = _build_import_sync_note(payload.arquivo_nome, item.source_sheet, item.source_row)
+        now = utcnow()
+
+        if emenda is None:
+            emenda = Emenda(
+                id_interno=id_interno,
+                ano=int(item.ano),
+                identificacao=item.identificacao,
+                cod_subfonte=item.cod_subfonte or "",
+                deputado=item.deputado or "",
+                cod_uo=item.cod_uo or "",
+                sigla_uo=item.sigla_uo or "",
+                cod_orgao=item.cod_orgao or "",
+                cod_acao=item.cod_acao or "",
+                descricao_acao=item.descricao_acao or "",
+                objetivo_epi="",
+                plan_a="",
+                plan_b="",
+                municipio=item.municipio or "",
+                valor_inicial=float(item.valor_inicial or 0),
+                valor_atual=float(item.valor_atual if item.valor_atual is not None else (item.valor_inicial or 0)),
+                processo_sei=item.processo_sei or "",
+                status_oficial=item.status_oficial,
+                parent_id=None,
+                version=1,
+                row_version=1,
+                is_current=True,
+                created_at=now,
+                updated_at=now,
+            )
+            db.add(emenda)
+            db.flush()
+            db.add(
+                Historico(
+                    emenda_id=emenda.id,
+                    usuario_id=actor.get("id"),
+                    usuario_nome=actor.get("name") or "",
+                    setor=actor.get("role") or "",
+                    tipo_evento="IMPORT",
+                    origem_evento=event_origin,
+                    motivo=note,
+                )
+            )
+            created += 1
+            touched = True
+            continue
+
+        changed = False
+        for field_name in IMPORT_SYNC_FIELD_LABELS.keys():
+            next_value = getattr(item, field_name)
+            previous_value = getattr(emenda, field_name)
+            if _import_sync_values_equal(field_name, previous_value, next_value):
+                continue
+            setattr(emenda, field_name, int(next_value) if field_name == "ano" else (float(next_value or 0) if field_name in {"valor_inicial", "valor_atual"} else (next_value or "")))
+            old_masked, new_masked = mask_history_pair(
+                field_name,
+                _import_sync_value_text(field_name, previous_value),
+                _import_sync_value_text(field_name, next_value),
+            )
+            db.add(
+                Historico(
+                    emenda_id=emenda.id,
+                    usuario_id=actor.get("id"),
+                    usuario_nome=actor.get("name") or "",
+                    setor=actor.get("role") or "",
+                    tipo_evento="EDIT_FIELD",
+                    origem_evento=event_origin,
+                    campo_alterado=field_name,
+                    valor_antigo=old_masked,
+                    valor_novo=new_masked,
+                    motivo=note,
+                )
+            )
+            changed = True
+
+        if _normalize_status(emenda.status_oficial) != _normalize_status(item.status_oficial):
+            old_masked, new_masked = mask_history_pair("status_oficial", emenda.status_oficial, item.status_oficial)
+            emenda.status_oficial = item.status_oficial
+            db.add(
+                Historico(
+                    emenda_id=emenda.id,
+                    usuario_id=actor.get("id"),
+                    usuario_nome=actor.get("name") or "",
+                    setor=actor.get("role") or "",
+                    tipo_evento="OFFICIAL_STATUS",
+                    origem_evento=event_origin,
+                    campo_alterado="status_oficial",
+                    valor_antigo=old_masked,
+                    valor_novo=new_masked,
+                    motivo=note,
+                )
+            )
+            changed = True
+
+        if changed:
+            emenda.row_version = max(int(emenda.row_version or 1), 1) + 1
+            emenda.updated_at = now
+            updated += 1
+            touched = True
+        else:
+            unchanged += 1
+
+    if touched:
+        db.commit()
+        broadcast_update("emenda", None)
+    else:
+        db.rollback()
+
+    return {
+        "ok": True,
+        "processed": len(seen_ids),
+        "created": created,
+        "updated": updated,
+        "unchanged": unchanged,
+    }
 
 
 def list_import_lots_service(*, limit: int, actor: dict, db: Session) -> list[ImportLote]:

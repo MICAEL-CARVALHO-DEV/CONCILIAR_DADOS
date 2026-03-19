@@ -49,6 +49,7 @@
   function canSaveDraftNow(ctx) {
     if (!ctx.canMutateRecords()) return false;
     if (ctx.isEmendaLockReadOnly()) return false;
+    if (typeof ctx.getCentralSyncBlockReason === "function" && ctx.getCentralSyncBlockReason()) return false;
     if (hasPendingModalAction(ctx)) return true;
     var selectedStatus = ctx.markStatus ? String(ctx.markStatus.value || "").trim() : "";
     var reason = ctx.markReason ? String(ctx.markReason.value || "").trim() : "";
@@ -59,6 +60,10 @@
   }
 
   function getDraftSaveBlockReason(ctx) {
+    if (typeof ctx.getCentralSyncBlockReason === "function") {
+      var centralReason = ctx.getCentralSyncBlockReason();
+      if (centralReason) return centralReason;
+    }
     if (!ctx.canMutateRecords()) {
       return ctx.getReadOnlyRoleMessage() || "Perfil em leitura: sem alteracao de dados.";
     }

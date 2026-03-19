@@ -165,8 +165,10 @@
   async function refreshRemoteEmendasFromApi(forceRender, options) {
     var opts = options || {};
     var isApiEnabled = typeof opts.isApiEnabled === "function" ? opts.isApiEnabled : function () { return false; };
+    var isCentralSyncMode = typeof opts.isCentralSyncMode === "function" ? opts.isCentralSyncMode : function () { return false; };
     var apiRequest = typeof opts.apiRequest === "function" ? opts.apiRequest : function () { return Promise.reject(new Error("apiRequest indisponivel")); };
     var mergeRemoteEmendas = typeof opts.mergeRemoteEmendas === "function" ? opts.mergeRemoteEmendas : noop;
+    var replaceStateWithRemoteEmendas = typeof opts.replaceStateWithRemoteEmendas === "function" ? opts.replaceStateWithRemoteEmendas : null;
     var setApiOnline = typeof opts.setApiOnline === "function" ? opts.setApiOnline : noop;
     var setApiLastError = typeof opts.setApiLastError === "function" ? opts.setApiLastError : noop;
     var saveState = typeof opts.saveState === "function" ? opts.saveState : noop;
@@ -179,7 +181,10 @@
     try {
       var remoteList = await apiRequest("GET", "/emendas", undefined, "API", { handleAuthFailure: false });
       var deferInteractiveRefresh = shouldDeferInteractiveRefresh();
-      mergeRemoteEmendas(Array.isArray(remoteList) ? remoteList : []);
+      var applyRemoteState = isCentralSyncMode() && replaceStateWithRemoteEmendas
+        ? replaceStateWithRemoteEmendas
+        : mergeRemoteEmendas;
+      applyRemoteState(Array.isArray(remoteList) ? remoteList : []);
       setApiOnline(true);
       setApiLastError("");
       markSemiAutoRefreshAt();
@@ -254,9 +259,11 @@
   async function bootstrapApiIntegration(options) {
     var opts = options || {};
     var isApiEnabled = typeof opts.isApiEnabled === "function" ? opts.isApiEnabled : function () { return false; };
+    var isCentralSyncMode = typeof opts.isCentralSyncMode === "function" ? opts.isCentralSyncMode : function () { return false; };
     var resetApiState = typeof opts.resetApiState === "function" ? opts.resetApiState : noop;
     var apiRequest = typeof opts.apiRequest === "function" ? opts.apiRequest : function () { return Promise.reject(new Error("apiRequest indisponivel")); };
     var mergeRemoteEmendas = typeof opts.mergeRemoteEmendas === "function" ? opts.mergeRemoteEmendas : noop;
+    var replaceStateWithRemoteEmendas = typeof opts.replaceStateWithRemoteEmendas === "function" ? opts.replaceStateWithRemoteEmendas : null;
     var setApiOnline = typeof opts.setApiOnline === "function" ? opts.setApiOnline : noop;
     var setApiLastError = typeof opts.setApiLastError === "function" ? opts.setApiLastError : noop;
     var saveState = typeof opts.saveState === "function" ? opts.saveState : noop;
@@ -277,13 +284,19 @@
     try {
       await apiRequest("GET", "/health", undefined, "API");
       var remoteList = await apiRequest("GET", "/emendas", undefined, "API");
-      mergeRemoteEmendas(Array.isArray(remoteList) ? remoteList : []);
+      var applyRemoteState = isCentralSyncMode() && replaceStateWithRemoteEmendas
+        ? replaceStateWithRemoteEmendas
+        : mergeRemoteEmendas;
+      applyRemoteState(Array.isArray(remoteList) ? remoteList : []);
       setApiOnline(true);
       setApiLastError("");
     } catch (err) {
       var apiLastError = err && err.message ? String(err.message) : "falha de conexao";
       resetApiState({ apiOnline: false, apiLastError: apiLastError });
-      logWarning("API indisponivel, mantendo modo local:", apiLastError);
+      logWarning(
+        isCentralSyncMode() ? "API indisponivel, operacao central bloqueada:" : "API indisponivel, mantendo modo local:",
+        apiLastError
+      );
     }
 
     saveState();

@@ -12,6 +12,7 @@ from ..schemas import (
     ExportLogCreate,
     ExportLogOut,
     ExportSummaryOut,
+    ImportEmendasSyncPayload,
     ImportGovernanceActionIn,
     ImportGovernanceLogOut,
     ImportLinhaOut,
@@ -113,13 +114,30 @@ def create_operations_router(resolve_event_origin, utcnow, broadcast_update, mas
         payload: ImportLoteCreate,
         actor: dict = Depends(_actor_from_headers),
         db=Depends(get_db),
-    ):
+        ):
         return import_export_service.create_import_lot_service(
             payload=payload,
             actor=actor,
             db=db,
             resolve_event_origin=resolve_event_origin,
             utcnow=utcnow,
+            broadcast_update=broadcast_update,
+        )
+
+    @router.post("/imports/emendas/sync")
+    def sincronizar_emendas_importadas(
+        payload: ImportEmendasSyncPayload,
+        actor: dict = Depends(_actor_from_headers),
+        db=Depends(get_db),
+    ):
+        event_origin = resolve_event_origin("IMPORT", actor, "IMPORT")
+        return import_export_service.sync_imported_emendas_service(
+            payload=payload,
+            actor=actor,
+            event_origin=event_origin,
+            db=db,
+            utcnow=utcnow,
+            mask_history_pair=mask_history_pair,
             broadcast_update=broadcast_update,
         )
 

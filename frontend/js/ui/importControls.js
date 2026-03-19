@@ -119,10 +119,19 @@
           var shouldSyncImportToApi = typeof opts.shouldSyncImportToApi === "function"
             ? !!opts.shouldSyncImportToApi()
             : false;
+          if (shouldSyncImportToApi && typeof opts.canOperateCentralData === "function" && !opts.canOperateCentralData()) {
+            globalScope.alert(
+              (typeof opts.getCentralSyncBlockReason === "function" && opts.getCentralSyncBlockReason())
+                || "API indisponivel para importar a planilha oficial."
+            );
+            return;
+          }
           var useBackendPreview = canUsePreviewApi && typeof opts.previewImportXlsx === "function";
           var sourceRows = [];
           var authoritativePreview = null;
           var report = null;
+          var previousStateSnapshot = shouldSyncImportToApi ? opts.deepClone(opts.getState()) : null;
+          var previousCountersSnapshot = shouldSyncImportToApi ? opts.deepClone(opts.getIdCountersByYear()) : null;
 
           if (!useBackendPreview) {
             throw new Error("Importacao exige API ativa para preview Python.");
@@ -171,13 +180,12 @@
 
           // Backend preview is authoritative for metrics; JS only applies the classified rows to state.
           opts.processImportedRows(sourceRows, file.name);
-          opts.saveState();
-          opts.syncYearFilter();
-          opts.render();
-          opts.showImportReport(report);
           var importChanged = true;
           var importSkipReason = "";
           if (shouldSyncImportToApi) {
+            if (typeof opts.syncImportedEmendasToApi === "function") {
+              report.centralSync = await opts.syncImportedEmendasToApi(file, report);
+            }
             var loteSyncResult = await opts.syncImportBatchToApi(file, report);
             var loteId = null;
             if (loteSyncResult && typeof loteSyncResult === "object") {
@@ -194,7 +202,19 @@
                 Promise.resolve(opts.refreshImportLots(false)).catch(function () { /* no-op */ });
               }
             }
+            if (typeof opts.refreshRemoteEmendasFromApi === "function") {
+              await opts.refreshRemoteEmendasFromApi(true);
+            } else {
+              opts.saveState();
+              opts.syncYearFilter();
+              opts.render();
+            }
+          } else {
+            opts.saveState();
+            opts.syncYearFilter();
+            opts.render();
           }
+          opts.showImportReport(report);
 
           var extraDemoInfo = removedDemo > 0 ? (" | Demos removidos: " + String(removedDemo)) : "";
           var syncInfo = " | Importacao isolada neste workspace (sem enviar lote para API oficial).";
@@ -210,6 +230,13 @@
           globalScope.alert("Importacao concluida. Criados: " + report.created + " | Atualizados: " + report.updated + " | Sem alteracao: " + report.unchanged + " | Linhas lidas: " + report.totalRows + extraDemoInfo + syncInfo);
         } catch (err) {
           globalScope.console.error(err);
+          if (typeof previousStateSnapshot !== "undefined" && previousStateSnapshot) {
+            opts.setState(opts.deepClone(previousStateSnapshot));
+            opts.setIdCountersByYear(opts.deepClone(previousCountersSnapshot || {}));
+            opts.saveState(true);
+            opts.syncYearFilter();
+            opts.render();
+          }
           var detail = err && err.message ? String(err.message) : "erro desconhecido";
           var hint = detail.includes("Importacao exige API ativa para preview Python")
             ? " Ative a API para usar o preview Python da importacao."

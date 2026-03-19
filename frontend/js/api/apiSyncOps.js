@@ -117,6 +117,50 @@
     safeWarn("Falha ao sincronizar " + actionName + " com API:", msg);
   }
 
+  function buildImportSyncRecords(report, ctx) {
+    var state = typeof ctx.getState === "function" ? ctx.getState() : {};
+    var byId = new Map();
+    (Array.isArray(state && state.records) ? state.records : []).forEach(function (rec) {
+      if (rec && rec.id) byId.set(rec.id, rec);
+    });
+
+    var out = [];
+    var seen = new Set();
+    var lines = Array.isArray(report && report.rowDetails) ? report.rowDetails : [];
+    lines.forEach(function (ln) {
+      var status = String(ln && ln.status_linha ? ln.status_linha : "").trim().toUpperCase();
+      var idInterno = ctx.text(ln && ln.id_interno);
+      if (!idInterno || status === "SKIPPED") return;
+      if (seen.has(idInterno)) return;
+
+      var rec = byId.get(idInterno);
+      if (!rec) return;
+
+      seen.add(idInterno);
+      out.push({
+        id_interno: rec.id,
+        ano: ctx.toInt(rec.ano) || ctx.currentYear(),
+        identificacao: rec.identificacao || "-",
+        cod_subfonte: rec.cod_subfonte || "",
+        deputado: rec.deputado || "",
+        cod_uo: rec.cod_uo || "",
+        sigla_uo: rec.sigla_uo || "",
+        cod_orgao: rec.cod_orgao || "",
+        cod_acao: rec.cod_acao || "",
+        descricao_acao: rec.descricao_acao || "",
+        municipio: rec.municipio || "",
+        valor_inicial: rec.valor_inicial != null ? Number(rec.valor_inicial) : 0,
+        valor_atual: rec.valor_atual != null ? Number(rec.valor_atual) : (rec.valor_inicial != null ? Number(rec.valor_inicial) : 0),
+        processo_sei: rec.processo_sei || "",
+        status_oficial: ctx.deriveStatusForBackend(rec),
+        source_sheet: rec.source_sheet || (ln && ln.sheet_name ? String(ln.sheet_name) : "Controle de EPI"),
+        source_row: rec.source_row != null ? Number(rec.source_row) : (ln && ln.row_number != null ? Number(ln.row_number) : null)
+      });
+    });
+
+    return out;
+  }
+
   async function previewImportXlsx(file, ctx) {
     var canPreview = typeof ctx.isImportPreviewApiEnabled === "function"
       ? !!ctx.isImportPreviewApiEnabled()
@@ -231,6 +275,29 @@
     }
   }
 
+  async function syncImportedEmendasToApi(file, report, ctx) {
+    if (!ctx.isApiEnabled()) return null;
+
+    var registros = buildImportSyncRecords(report, ctx);
+    if (!registros.length) {
+      return { ok: true, processed: 0, created: 0, updated: 0, unchanged: 0 };
+    }
+
+    try {
+      var resp = await ctx.apiRequest("POST", "/imports/emendas/sync", {
+        arquivo_nome: file && file.name ? file.name : (report && report.fileName ? report.fileName : "importacao.xlsx"),
+        registros: registros
+      }, "IMPORT");
+      ctx.setApiOnline(true);
+      ctx.setApiLastError("");
+      ctx.applyAccessProfile();
+      return resp;
+    } catch (err) {
+      handleApiSyncError(err, "dados oficiais da importacao", ctx);
+      throw err;
+    }
+  }
+
   async function syncImportLinesToApi(loteId, rowDetails, ctx) {
     if (!ctx.isApiEnabled() || !loteId) return;
     var lines = Array.isArray(rowDetails) ? rowDetails : [];
@@ -299,6 +366,7 @@
     ensureBackendEmenda: ensureBackendEmenda,
     rollbackSaveAndReport: rollbackSaveAndReport,
     handleApiSyncError: handleApiSyncError,
+    syncImportedEmendasToApi: syncImportedEmendasToApi,
     syncImportBatchToApi: syncImportBatchToApi,
     syncImportLinesToApi: syncImportLinesToApi,
     syncExportLogToApi: syncExportLogToApi

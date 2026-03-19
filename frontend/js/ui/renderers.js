@@ -825,8 +825,16 @@
     var nextState = state && typeof state === "object" ? state : {};
     if (refs.profileName) refs.profileName.value = String(nextState.userName || "-");
     if (refs.profileRole) refs.profileRole.value = String(nextState.userRole || "-");
-    if (refs.profileMode) refs.profileMode.value = nextState.apiEnabled ? "Nuvem/API" : "Local";
-    if (refs.profileApi) refs.profileApi.value = nextState.apiOnline ? "Conectada" : "Indisponivel";
+    if (refs.profileMode) {
+      refs.profileMode.value = nextState.isCentralSyncMode
+        ? "Central/API oficial"
+        : (nextState.apiEnabled ? "Nuvem/API" : "Local");
+    }
+    if (refs.profileApi) {
+      refs.profileApi.value = nextState.apiOnline
+        ? "Conectada"
+        : (nextState.isCentralSyncMode ? "Obrigatoria e indisponivel" : "Indisponivel");
+    }
   }
 
   function setPendingUsersFeedbackState(container, message, isError) {

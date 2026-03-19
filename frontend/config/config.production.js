@@ -11,6 +11,8 @@
   window.SEC_APP_CONFIG = Object.assign({}, window.SEC_APP_CONFIG || {}, {
     // URL publica da API em producao.
     API_BASE_URL: "https://sec-emendas-api.onrender.com",
+    APP_ENV: "production",
+    ENABLE_DEMO_MODE: false,
     // LOA operacional liberada.
     LOA_PRE_BETA_LOCKED: false,
     // Fallback global (usado em hosts sem mapeamento especifico).

@@ -7,6 +7,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     APP_ENV: str = "development"
     DATABASE_URL: str = "sqlite+pysqlite:///./test.db"
+    DB_AUTO_BOOTSTRAP: bool = True
+    ENABLE_DEMO_MODE: bool = True
     CORS_ORIGINS: str = (
         "https://micael-carvalho-dev.github.io,"
         "https://conciliar-dados.pages.dev,"
@@ -92,6 +94,27 @@ class Settings(BaseSettings):
     @property
     def is_dev_environment(self) -> bool:
         return self.app_env_normalized in {"dev", "development", "local", "test", "testing"}
+
+    @property
+    def is_production(self) -> bool:
+        return self.app_env_normalized in {"prod", "production"}
+
+    @property
+    def db_auto_bootstrap_enabled(self) -> bool:
+        return bool(self.DB_AUTO_BOOTSTRAP)
+
+    @property
+    def demo_mode_enabled(self) -> bool:
+        return bool(self.ENABLE_DEMO_MODE)
+
+    @property
+    def database_backend(self) -> str:
+        raw = (self.DATABASE_URL or "").strip().lower()
+        if raw.startswith("postgresql"):
+            return "postgresql"
+        if raw.startswith("sqlite"):
+            return "sqlite"
+        return raw.split(":", 1)[0].split("+", 1)[0] or "unknown"
 
     @property
     def google_client_ids_list(self) -> list[str]:

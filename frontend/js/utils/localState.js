@@ -30,6 +30,15 @@
         return { records: ctx.deepClone(ctx.seedRecords || []) };
       }
 
+      if (typeof ctx.isCentralSyncMode === "function" && ctx.isCentralSyncMode()) {
+        var rawCentral = ctx.readStorageValue(globalScope.sessionStorage, ctx.storageKey);
+        if (rawCentral) {
+          var parsedCentral = JSON.parse(rawCentral);
+          if (parsedCentral && Array.isArray(parsedCentral.records)) return parsedCentral;
+        }
+        return { records: [] };
+      }
+
       var primary = ctx.getPrimaryStorage();
       var secondary = ctx.getSecondaryStorage();
       var raw = ctx.readStorageValue(primary, ctx.storageKey);
@@ -72,6 +81,12 @@
     var currentState = ctx.getState();
     syncActiveUsersCache(currentState.records || [], ctx);
     var data = JSON.stringify(currentState);
+    if (typeof ctx.isCentralSyncMode === "function" && ctx.isCentralSyncMode()) {
+      globalScope.sessionStorage.setItem(ctx.storageKey, data);
+      globalScope.localStorage.removeItem(ctx.storageKey);
+      if (!silentSync) notifyStateUpdated(ctx);
+      return;
+    }
     var primary = ctx.getPrimaryStorage();
     var secondary = ctx.getSecondaryStorage();
     primary.setItem(ctx.storageKey, data);

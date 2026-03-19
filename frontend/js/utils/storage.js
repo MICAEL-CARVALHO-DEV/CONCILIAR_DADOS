@@ -5,6 +5,36 @@
   var STORAGE_MODE_LOCAL = "local";
   var STORAGE_MODE_SESSION = "session";
 
+  function getRuntimeConfig() {
+    return global.SEC_APP_CONFIG && typeof global.SEC_APP_CONFIG === "object"
+      ? global.SEC_APP_CONFIG
+      : {};
+  }
+
+  function getCurrentHost() {
+    return global.location && global.location.hostname
+      ? String(global.location.hostname || "").trim().toLowerCase()
+      : "";
+  }
+
+  function isLocalHost(host) {
+    return !host || host === "localhost" || host === "127.0.0.1";
+  }
+
+  function readRuntimeAppEnv() {
+    var cfg = getRuntimeConfig();
+    var host = getCurrentHost();
+    var raw = String(cfg.APP_ENV || "local").trim().toLowerCase();
+    if (isLocalHost(host) && (raw === "prod" || raw === "production")) return "local";
+    if (raw === "prod") return "production";
+    return raw || "local";
+  }
+
+  function isCentralSyncMode() {
+    var host = getCurrentHost();
+    return !isLocalHost(host) && readRuntimeAppEnv() === "production";
+  }
+
   function safeGetItem(storage, key) {
     try {
       return storage ? String(storage.getItem(key) || "") : "";
@@ -51,6 +81,7 @@
   }
 
   function getStorageMode(storageModeKey) {
+    if (isCentralSyncMode()) return STORAGE_MODE_SESSION;
     var key = toText(storageModeKey || STORAGE_MODE_KEY_DEFAULT).trim() || STORAGE_MODE_KEY_DEFAULT;
     return readStorageValue(global.localStorage, key).toLowerCase() === STORAGE_MODE_LOCAL
       ? STORAGE_MODE_LOCAL
@@ -106,6 +137,7 @@
     readStorageValue: readStorageValue,
     writeStorageValue: writeStorageValue,
     removeStorageValue: removeStorageValue,
+    isCentralSyncMode: isCentralSyncMode,
     getStorageMode: getStorageMode,
     getPrimaryStorage: getPrimaryStorage,
     getSecondaryStorage: getSecondaryStorage,

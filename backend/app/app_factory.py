@@ -20,6 +20,17 @@ from .services.ai_orchestrator import AIOrchestrator
 from .settings import settings
 
 
+def _validate_runtime_configuration() -> None:
+    if not settings.is_production:
+        return
+    if settings.database_backend != "postgresql":
+        raise RuntimeError("APP_ENV=production exige PostgreSQL em DATABASE_URL.")
+    if settings.db_auto_bootstrap_enabled:
+        raise RuntimeError("APP_ENV=production exige DB_AUTO_BOOTSTRAP=false.")
+    if settings.demo_mode_enabled:
+        raise RuntimeError("APP_ENV=production exige ENABLE_DEMO_MODE=false.")
+
+
 def create_app() -> FastAPI:
     app = FastAPI(title="API Emendas", version="0.5.0")
 
@@ -51,8 +62,10 @@ def create_app() -> FastAPI:
     @app.on_event("startup")
     def startup() -> None:
         _validate_runtime_security_settings()
-        Base.metadata.create_all(bind=engine)
-        platform_service.ensure_legacy_schema(engine)
+        _validate_runtime_configuration()
+        if settings.db_auto_bootstrap_enabled:
+            Base.metadata.create_all(bind=engine)
+            platform_service.ensure_legacy_schema(engine)
 
     app.include_router(create_platform_router(settings, ai_orchestrator, ROLES))
     app.include_router(create_auth_router(_broadcast_update))

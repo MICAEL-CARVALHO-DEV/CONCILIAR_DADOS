@@ -9,12 +9,20 @@
     var readOnlyMeta = ctx.getReadOnlyRoleMeta();
     var canManageData = ["APG", "SUPERVISAO", "POWERBI", "PROGRAMADOR"].indexOf(String(ctx.currentRole || "").trim().toUpperCase()) >= 0;
     var canCreateProfiles = isOwner;
+    var isCentralSyncMode = typeof ctx.isCentralSyncMode === "function" ? !!ctx.isCentralSyncMode() : false;
+    var canOperateCentralData = typeof ctx.canOperateCentralData === "function" ? !!ctx.canOperateCentralData() : true;
     var isWorkspaceOperational = typeof ctx.isWorkspaceOperational === "function" ? !!ctx.isWorkspaceOperational() : true;
     var canUseWorkspaceDataset = typeof ctx.canUseWorkspaceDataset === "function" ? !!ctx.canUseWorkspaceDataset() : isWorkspaceOperational;
     var canUseDemoTools = typeof ctx.canUseDemoTools === "function" ? !!ctx.canUseDemoTools() : false;
-    var canImportData = canUseWorkspaceDataset && (typeof ctx.canImportData === "function" ? !!ctx.canImportData() : canManageData);
-    var apiTag = ctx.apiOnline ? "API online" : "modo local";
-    var storageTag = ctx.getStorageMode() === ctx.STORAGE_MODE_LOCAL ? "persistencia local" : "sessao";
+    var canImportData = canUseWorkspaceDataset
+      && (typeof ctx.canImportData === "function" ? !!ctx.canImportData() : canManageData)
+      && (!isCentralSyncMode || canOperateCentralData);
+    var apiTag = isCentralSyncMode
+      ? (ctx.apiOnline ? "base central online" : "base central offline")
+      : (ctx.apiOnline ? "API online" : "modo local");
+    var storageTag = isCentralSyncMode
+      ? "cache de sessao"
+      : (ctx.getStorageMode() === ctx.STORAGE_MODE_LOCAL ? "persistencia local" : "sessao");
     var viewTag = isOwner ? " (dono)" : (readOnlyMeta ? readOnlyMeta.viewTag : "");
     var userName = String(ctx.currentUser || "").trim() || "Usuario";
     var userRole = String(ctx.currentRole || "").trim() || "PERFIL";
@@ -49,6 +57,7 @@
     if (ctx.btnPendingApprovals) ctx.btnPendingApprovals.style.display = isOwner && isWorkspaceOperational ? "flex" : "none";
     if (ctx.btnCreateProfile) ctx.btnCreateProfile.style.display = canCreateProfiles ? "inline-block" : "none";
     if (ctx.importLabel) ctx.importLabel.style.display = canImportData ? "inline-block" : "none";
+    if (ctx.fileCsv) ctx.fileCsv.disabled = !canImportData;
     if (ctx.btnReset) ctx.btnReset.style.display = isOwner && canUseDemoTools ? "inline-block" : "none";
     if (ctx.btnDemo4Users) ctx.btnDemo4Users.style.display = isOwner && canUseDemoTools ? "inline-block" : "none";
     if (ctx.btnProfile) ctx.btnProfile.style.display = "flex";

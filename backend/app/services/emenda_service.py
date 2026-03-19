@@ -7,7 +7,7 @@ from typing import Callable
 
 from fastapi import HTTPException
 from sqlalchemy import or_
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from ..core.dependencies import OWNER_ROLE
 from ..core.security import _mask_history_pair, _utcnow
@@ -358,7 +358,7 @@ def list_emendas_service(
     q: str | None = None,
     include_old: bool = False,
 ):
-    query = db.query(Emenda)
+    query = db.query(Emenda).options(selectinload(Emenda.historicos))
 
     if not include_old:
         query = query.filter(Emenda.is_current.is_(True))
@@ -383,7 +383,53 @@ def list_emendas_service(
             )
         )
 
-    return query.order_by(Emenda.updated_at.desc(), Emenda.id.desc()).all()
+    emendas = query.order_by(Emenda.updated_at.desc(), Emenda.id.desc()).all()
+    return [_serialize_emenda_snapshot(item) for item in emendas]
+
+
+def _serialize_historico_event(item: Historico) -> dict:
+    return {
+        "at": item.data_hora.isoformat() + "Z" if item.data_hora else "",
+        "actor_user": str(item.usuario_nome or ""),
+        "actor_role": str(item.setor or ""),
+        "type": str(item.tipo_evento or ""),
+        "field": str(item.campo_alterado or ""),
+        "from": item.valor_antigo or "",
+        "to": item.valor_novo or "",
+        "note": item.motivo or "",
+    }
+
+
+def _serialize_emenda_snapshot(emenda: Emenda) -> dict:
+    eventos = sorted(list(emenda.historicos or []), key=lambda item: (item.data_hora or datetime.min), reverse=True)
+    return {
+        "id": emenda.id,
+        "id_interno": emenda.id_interno,
+        "ano": emenda.ano,
+        "identificacao": emenda.identificacao,
+        "cod_subfonte": emenda.cod_subfonte or "",
+        "deputado": emenda.deputado or "",
+        "cod_uo": emenda.cod_uo or "",
+        "sigla_uo": emenda.sigla_uo or "",
+        "cod_orgao": emenda.cod_orgao or "",
+        "cod_acao": emenda.cod_acao or "",
+        "descricao_acao": emenda.descricao_acao or "",
+        "objetivo_epi": emenda.objetivo_epi or "",
+        "plan_a": emenda.plan_a or "",
+        "plan_b": emenda.plan_b or "",
+        "municipio": emenda.municipio or "",
+        "valor_inicial": float(emenda.valor_inicial or 0),
+        "valor_atual": float(emenda.valor_atual or 0),
+        "processo_sei": emenda.processo_sei or "",
+        "status_oficial": emenda.status_oficial or "",
+        "parent_id": emenda.parent_id,
+        "version": int(emenda.version or 1),
+        "row_version": _emenda_row_version(emenda),
+        "is_current": bool(emenda.is_current),
+        "created_at": emenda.created_at,
+        "updated_at": emenda.updated_at,
+        "eventos": [_serialize_historico_event(item) for item in eventos],
+    }
 
 
 def obter_emenda_service(*, emenda_id: int, db: Session) -> Emenda:

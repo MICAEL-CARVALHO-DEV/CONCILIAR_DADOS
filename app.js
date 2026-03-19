@@ -61,6 +61,28 @@ const STORAGE_MODE_LOCAL = "local";
 const STORAGE_MODE_SESSION = "session";
 const DEFAULT_API_BASE_URL = "http://localhost:8000";
 const RUNTIME_CONFIG = (typeof window !== "undefined" && window.SEC_APP_CONFIG && typeof window.SEC_APP_CONFIG === "object") ? window.SEC_APP_CONFIG : {};
+const FRONTEND_HOST = (typeof window !== "undefined" && window.location && window.location.hostname) ? String(window.location.hostname).trim().toLowerCase() : "";
+const IS_LOCAL_FRONTEND = !FRONTEND_HOST || FRONTEND_HOST === "localhost" || FRONTEND_HOST === "127.0.0.1";
+const APP_ENV = (function () {
+  const raw = String(RUNTIME_CONFIG.APP_ENV || "local").trim().toLowerCase();
+  if (IS_LOCAL_FRONTEND && (raw === "prod" || raw === "production")) return "local";
+  if (raw === "prod") return "production";
+  return raw || "local";
+})();
+const CENTRAL_SYNC_REQUIRED = !IS_LOCAL_FRONTEND && APP_ENV === "production";
+const DEMO_MODE_ENABLED = (function () {
+  if (IS_LOCAL_FRONTEND && APP_ENV === "local") {
+    return true;
+  }
+  if (!Object.prototype.hasOwnProperty.call(RUNTIME_CONFIG, "ENABLE_DEMO_MODE")) {
+    return APP_ENV !== "production";
+  }
+  const raw = RUNTIME_CONFIG.ENABLE_DEMO_MODE;
+  if (typeof raw === "string") {
+    return raw.trim().toLowerCase() !== "false";
+  }
+  return raw !== false;
+})();
 const SEC_FRONTEND = (function () {
   if (typeof window === "undefined") return {};
   const registry = (window.SECFrontend && typeof window.SECFrontend === "object")
@@ -1353,11 +1375,17 @@ function getImportControlsContext() {
       return isApiBackedWorkspace() && isApiEnabled();
     },
     previewImportXlsx: previewImportXlsx,
+    syncImportedEmendasToApi: syncImportedEmendasToApi,
     purgeDemoBeforeOfficialImport: purgeDemoBeforeOfficialImport,
     processImportedRows: processImportedRows,
     showImportReport: showImportReport,
     syncImportBatchToApi: syncImportBatchToApi,
     syncImportLinesToApi: syncImportLinesToApi,
+    refreshRemoteEmendasFromApi: function (forceRender) {
+      return refreshRemoteEmendasFromApi(!!forceRender);
+    },
+    canOperateCentralData: canOperateCentralData,
+    getCentralSyncBlockReason: getCentralSyncBlockReason,
     refreshImportLots: function (forceRender) {
       return refreshBetaImportLotsFromApi(!!forceRender);
     },
@@ -1450,6 +1478,7 @@ function canSaveDraftNow() {
   }
   if (!canMutateRecords()) return false;
   if (isEmendaLockReadOnly()) return false;
+  if (getCentralSyncBlockReason()) return false;
   if (hasPendingModalAction()) return true;
   const selectedStatus = markStatus ? (markStatus.value || "").trim() : "";
   const reason = (markReason ? (markReason.value || "") : "").trim();
@@ -1464,6 +1493,8 @@ function getDraftSaveBlockReason() {
   if (moduleFn) {
     return moduleFn(getModalDraftStateContext());
   }
+  const centralReason = getCentralSyncBlockReason();
+  if (centralReason) return centralReason;
   if (!canMutateRecords()) {
     return getReadOnlyRoleMessage() || "Perfil em leitura: sem alteracao de dados.";
   }
@@ -3457,7 +3488,7 @@ function canMutateInCurrentWorkspace() {
 }
 
 function canUseDemoWorkspaceTools() {
-  return !!getCurrentWorkspaceDefinition().demoTools;
+  return DEMO_MODE_ENABLED && !!getCurrentWorkspaceDefinition().demoTools;
 }
 
 function isLoaMitigationNoiseRecord(rec) {
@@ -5361,6 +5392,7 @@ function getModalDraftStateContext() {
     updateModalDraftUi: updateModalDraftUi,
     canMutateRecords: canMutateRecords,
     isEmendaLockReadOnly: isEmendaLockReadOnly,
+    getCentralSyncBlockReason: getCentralSyncBlockReason,
     getReadOnlyRoleMessage: getReadOnlyRoleMessage,
     hasFieldChanged: hasFieldChanged,
     normalizeStatus: normalizeStatus,
@@ -5681,6 +5713,7 @@ function getLocalStateContext() {
     workspaceKey: getCurrentWorkspaceDefinition().key,
     seedRecords: getWorkspaceSeedRecords(),
     ignorePersistedState: isLoaPreBetaLocked(),
+    isCentralSyncMode: isCentralSyncMode,
     getPrimaryStorage: getPrimaryStorage,
     getSecondaryStorage: getSecondaryStorage,
     readStorageValue: readStorageValue,
@@ -5769,8 +5802,10 @@ function getAppLifecycleContext() {
 function getApiStateSyncContext() {
   return {
     isApiEnabled: isApiEnabled,
+    isCentralSyncMode: isCentralSyncMode,
     apiRequest: apiRequest,
     mergeRemoteEmendas: mergeRemoteEmendas,
+    replaceStateWithRemoteEmendas: replaceStateWithRemoteEmendas,
     setApiOnline: function (nextOnline) {
       apiOnline = !!nextOnline;
     },
@@ -5799,6 +5834,9 @@ function getApiSyncOpsContext() {
     deriveStatusForBackend: deriveStatusForBackend,
     quickHashString: quickHashString,
     exportScopeAtuais: EXPORT_SCOPE.ATUAIS,
+    getState: function () {
+      return state;
+    },
     getApiEmendaIdByInterno: function (idInterno) {
       return apiEmendaIdByInterno[idInterno];
     },
@@ -5823,6 +5861,8 @@ function getApiSyncOpsContext() {
     refreshRecordConcurrencyFromApi: refreshRecordConcurrencyFromApi,
     conflictMessageFromError: conflictMessageFromError,
     showModalSaveFeedback: showModalSaveFeedback,
+    buildReferenceKey: buildReferenceKey,
+    normalizeStatus: normalizeStatus,
     restoreRecordFromSnapshot: restoreRecordFromSnapshot
   };
 }
@@ -5891,6 +5931,14 @@ async function previewImportXlsx(file) {
     return await moduleFn(file, getApiSyncOpsContext());
   }
   throw new Error("Preview de importacao indisponivel.");
+}
+
+async function syncImportedEmendasToApi(file, report) {
+  const moduleFn = getApiSyncOpsUtil("syncImportedEmendasToApi");
+  if (moduleFn) {
+    return await moduleFn(file, report, getApiSyncOpsContext());
+  }
+  return null;
 }
 
 function getBetaHistoryContext() {
@@ -6089,7 +6137,9 @@ function getAuxModalContext() {
       userName: CURRENT_USER,
       userRole: CURRENT_ROLE,
       apiEnabled: isApiEnabled(),
-      apiOnline: apiOnline
+      apiOnline: apiOnline,
+      isCentralSyncMode: isCentralSyncMode(),
+      canOperateCentralData: canOperateCentralData()
     },
     modal: profileModal,
     syncFilters: syncCustomExportFilters,
@@ -6124,12 +6174,15 @@ function getAccessProfileContext() {
     btnPendingApprovals: btnPendingApprovals,
     btnCreateProfile: btnCreateProfile,
     importLabel: importLabel,
+    fileCsv: fileCsv,
     btnReset: btnReset,
     btnDemo4Users: btnDemo4Users,
     btnProfile: btnProfile,
     btnChangePassword: btnChangePassword,
     btnLogout: btnLogout,
     getStorageMode: getStorageMode,
+    isCentralSyncMode: isCentralSyncMode,
+    canOperateCentralData: canOperateCentralData,
     isWorkspaceOperational: isOperationalWorkspace,
     canUseWorkspaceDataset: canRenderWorkspaceDataset,
     canUseDemoTools: canUseDemoWorkspaceTools,
@@ -7128,7 +7181,71 @@ async function bootstrapApiIntegration() {
 }
 
 
+function normalizeRemoteEvent(ev) {
+  return {
+    at: ev && ev.at ? String(ev.at) : isoNow(),
+    actor_user: text(ev && ev.actor_user) || SYSTEM_MIGRATION_USER,
+    actor_role: normalizeUserRole(text(ev && ev.actor_role) || SYSTEM_MIGRATION_ROLE),
+    type: text(ev && ev.type) || "IMPORT",
+    field: text(ev && ev.field) || null,
+    from: ev && Object.prototype.hasOwnProperty.call(ev, "from") ? ev.from : null,
+    to: ev && Object.prototype.hasOwnProperty.call(ev, "to") ? ev.to : null,
+    note: text(ev && ev.note)
+  };
+}
+
+function replaceStateWithRemoteEmendas(remoteList) {
+  const nextRecords = [];
+  apiEmendaIdByInterno = {};
+
+  (remoteList || []).forEach(function (re) {
+    const idInterno = text(re && re.id_interno);
+    if (!idInterno) return;
+
+    const backendId = re && re.id != null ? Number(re.id) : null;
+    if (backendId) apiEmendaIdByInterno[idInterno] = backendId;
+
+    nextRecords.push(normalizeRecordShape({
+      id: idInterno,
+      backend_id: backendId,
+      ano: toInt(re && re.ano) || currentYear(),
+      identificacao: text(re && re.identificacao) || "-",
+      cod_subfonte: text(re && re.cod_subfonte),
+      deputado: text(re && re.deputado) || "-",
+      cod_uo: text(re && re.cod_uo),
+      sigla_uo: text(re && re.sigla_uo),
+      cod_orgao: text(re && re.cod_orgao),
+      cod_acao: text(re && re.cod_acao),
+      descricao_acao: text(re && re.descricao_acao),
+      municipio: text(re && re.municipio) || "-",
+      valor_inicial: re && re.valor_inicial != null ? re.valor_inicial : 0,
+      valor_atual: re && re.valor_atual != null ? re.valor_atual : (re && re.valor_inicial != null ? re.valor_inicial : 0),
+      processo_sei: text(re && re.processo_sei),
+      status_oficial: normalizeStatus((re && re.status_oficial) || "Recebido"),
+      parent_id: re && re.parent_id != null ? Number(re.parent_id) : null,
+      version: re && re.version != null ? Number(re.version) : 1,
+      is_current: !re || re.is_current !== false,
+      created_at: re && re.created_at ? re.created_at : isoNow(),
+      updated_at: re && re.updated_at ? re.updated_at : isoNow(),
+      eventos: Array.isArray(re && re.eventos) ? re.eventos.map(normalizeRemoteEvent) : [],
+      source_sheet: "Controle de EPI",
+      source_row: null,
+      all_fields: {}
+    }));
+  });
+
+  state = { records: nextRecords };
+  migrateLegacyStatusRecords(state.records);
+  idCountersByYear = buildIdCounters(state.records);
+  assignMissingIds(state.records, idCountersByYear);
+  syncReferenceKeys(state.records);
+}
+
 function mergeRemoteEmendas(remoteList) {
+  if (isCentralSyncMode()) {
+    replaceStateWithRemoteEmendas(remoteList);
+    return;
+  }
   const localByInternal = {};
   state.records.forEach(function (r) {
     localByInternal[r.id] = r;
@@ -7633,6 +7750,7 @@ function buildApiHeaders(eventOrigin) {
 }
 
 function getStorageMode() {
+  if (isCentralSyncMode()) return STORAGE_MODE_SESSION;
   const getStorageModeUtil = getStorageUtil("getStorageMode");
   if (getStorageModeUtil) {
     const mode = String(getStorageModeUtil(STORAGE_MODE_KEY) || "").toLowerCase();
@@ -7642,6 +7760,19 @@ function getStorageMode() {
   const configured = readStorageValue(localStorage, STORAGE_MODE_KEY).toLowerCase();
   if (configured === STORAGE_MODE_LOCAL) return STORAGE_MODE_LOCAL;
   return STORAGE_MODE_SESSION;
+}
+
+function isCentralSyncMode() {
+  return CENTRAL_SYNC_REQUIRED;
+}
+
+function canOperateCentralData() {
+  return !isCentralSyncMode() || apiOnline;
+}
+
+function getCentralSyncBlockReason() {
+  if (!isCentralSyncMode() || apiOnline) return "";
+  return "Base oficial indisponivel. Aguarde a reconexao com a API para operar.";
 }
 
 function getPrimaryStorage() {
