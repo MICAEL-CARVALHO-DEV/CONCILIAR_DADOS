@@ -1,17 +1,19 @@
-# @ORQ DUAS TRILHAS - BACKEND E FRONT BETA
+# @ORQ TRES TRILHAS - BACKEND, FRONT BETA E QA/BI
 
 CHECKLIST
-Goal: Operar `Codex VS Code` e `Codex Desktop` em paralelo com ORQ, acelerando `backend + deve de casa` e `front beta` sem perder contexto nem quebrar contrato entre as frentes.
+Goal: Operar `Codex VS Code`, `Codex Desktop` e `Antigravity` em paralelo com ORQ, acelerando backend, front beta e qualidade/BI sem perder contexto nem quebrar contrato entre as frentes.
 Success: Cada sessao sabe o que pode tocar, qual entrega vem primeiro, quando precisa fazer handoff e onde registrar bloqueio.
 
 ## Regra oficial desta fase
 - `Codex VS Code` assume `backend + deve de casa tecnico`.
 - `Codex Desktop` assume `front beta + Figma + organizacao visual`.
+- `Antigravity` assume `QA, BI, modulos JS modulares, refatoracao de frontend/js/ui/ e varredura de codebase`.
 - `ORQ` decide prioridade, integra contratos e destrava conflito.
-- As duas sessoes trabalham como `irmaos`: podem ler, revisar e acompanhar o que o outro esta fazendo no `front` e no `back` para manter a mesma linha de ideia.
+- As tres sessoes trabalham como `irmaos`: podem ler, revisar e acompanhar o que as outras estao fazendo.
 - A separacao existe para evitar conflito de edicao, nao para isolar pensamento.
 - Mudanca de contrato de API precisa virar handoff antes do front consumir.
 - Mudanca visual grande do front nao pode remover `id` ou classe congelada em `@front_beta.md`.
+- `Antigravity` pode tocar qualquer arquivo em `frontend/js/` EXCETO `app.js`.
 
 ## Entradas oficiais
 - Regra funcional: `@deve_de_casa_beta.md`
@@ -124,7 +126,94 @@ Proximo passo:
 5. `ORQ-BACK-03`
 6. `ORQ-FRONT-03`
 
+## TRILHA C - QA / BI / MODULOS JS / Antigravity
+- [DONE] `ORQ-QA-01` Criar roteiro de teste multiusuario (sync Corte 1).
+- [DONE] `ORQ-QA-02` Criar criterios de aceite da governanca de import (Corte 2).
+- [DONE] `ORQ-QA-03` Consolidar backlog do BI Beta em fases 6A, 6B e 6C.
+- [DONE] `ORQ-QA-04` Revisao de codigo nos modulos JS (bugs + riscos).
+- [DONE] `ORQ-QA-05` Implementar U06 filtro de Ano no BI (powerBiData.js + betaPowerBi.js).
+- [DONE] `ORQ-QA-06` Implementar U07 mapa real IBGE com GeoJSON + choropleth.
+- [DONE] `ORQ-QA-07` Varredura codebase pasta por pasta (bugs, codigo morto, ferramentas).
+- [ ] `ORQ-QA-08` Extrair `formatters.js` utilitario de moeda/data para frontend/js/utils/.
+- [ ] `ORQ-QA-09` Auditar e limpar `betaWorkspace.js` (fusao ou remocao de codigo morto).
+- [ ] `ORQ-QA-10` Configurar ESLint no projeto para varredura automatica.
+- [ ] `ORQ-QA-11` Gerar handoff de bugs para Codex Desktop corrigir `pass` silenciosos no backend.
+- [ ] `ORQ-QA-12` Documentar contrato entre `betaImports.js` e `importControls.js`.
+
+## Arquivos permitidos por trilha
+
+### Codex VS Code
+- `backend/app/**/*.py`
+- `backend/alembic/**`
+- `render.yaml`, `.env.example`
+
+### Codex Desktop
+- `index.html`, `style.css`, `login.html`, `cadastro.html`, `reset-senha.html`
+- `config.js`, `config.production.js`
+- `.github/workflows/**`
+
+### Antigravity
+- `frontend/js/ui/**` (EXCETO via app.js)
+- `frontend/js/api/**`
+- `frontend/js/utils/**`
+- `frontend/js/auth/**`
+- `frontend/js/realtime/**`
+- `scripts/**`, `assets/**`
+- `checks/**` (documentacao e QA)
+- `*.md` de documentacao
+
+### Ninguem toca sem ORQ
+- `app.js` (qualquer sessao que quiser editar deve registrar handoff antes)
+
+## Radar cruzado oficial
+### Backend / VS Code
+- Estado: backend ativo, com trilha de governanca tecnica e endpoints de resumo publicados.
+- Ultimo corte validado: `py_compile` ok + smoke com `FastAPI TestClient` ok.
+- Arquivos quentes: `backend/app/api/operations.py`, `backend/app/schemas.py`, `backend/app/services/*.py`.
+- Bugs pendentes (handoff de Antigravity): `pass` silenciosos em `ai_orchestrator.py` L26/30, `realtime_service.py` L219/221, `db.py` L12.
+
+### Front / Desktop
+- Estado: front principal concluido e adaptado ao contrato atual.
+- Ultimo corte validado: IDs criticos unicos, `node --check` ok e smoke HTTP ok.
+- Arquivos quentes: `index.html`, `style.css`, `app.js`.
+- Bug pendente: `planilha-indicadores` classe CSS antiga em `app.js` L8714.
+
+### QA / BI / Antigravity
+- Estado: ATIVO. Modulos JS de BI com filtro de Ano, mapa GeoJSON IBGE, choropleth e legenda implementados.
+- Ultimo corte validado: U06 e U07 entregues em `betaPowerBi.js` e `powerBiData.js`.
+- Arquivos quentes: `frontend/js/ui/betaPowerBi.js`, `frontend/js/ui/powerBiData.js`.
+- Proximo: extrair `formatters.js`, auditar `betaWorkspace.js`, configurar ESLint.
+
+## Protocolo de sincronia entre irmaos
+- Qualquer IA pode ler os arquivos das outras trilhas para acompanhar o contexto.
+- Apenas a IA dona da trilha edita o arquivo sem handoff previo.
+- Se duas IAs quiserem tocar `app.js` ao mesmo tempo: volta para ORQ.
+- Mudou payload ou endpoint: publicar handoff aqui antes do front consumir.
+- Mudou modulo JS ou hook: Antigravity notifica Desktop antes de plugar.
+
+## Handoff Antigravity -> Codex VS Code (bugs backend)
+```txt
+Objetivo: Corrigir 3 blocos `pass` silenciosos que podem causar falhas mudas no backend.
+Arquivos tocados: backend/app/services/ai_orchestrator.py (L26, L30), backend/app/services/realtime_service.py (L219, L221), backend/app/app/db.py (L12)
+Contrato afetado: nenhum contrato de API muda; apenas tratamento de erro interno
+Campos novos: nenhum
+Campos removidos: nenhum
+Nao quebrar: contrato de retorno dos endpoints existentes
+Proximo passo: substituir cada `pass` por raise NotImplementedError (stubs) ou logger.warning (handlers ignorados)
+```
+
+## Handoff Antigravity -> Codex Desktop (bug CSS)
+```txt
+Objetivo: Remover referencia de UI antiga `planilha-indicadores` em app.js.
+Arquivos tocados: app.js L8714
+Contrato afetado: visual apenas; nenhuma logica de negocio
+Campos novos: nenhum
+Campos removidos: classe CSS sem estilo ativo
+Nao quebrar: IDs e classes congeladas em @front_beta.md
+Proximo passo: substituir a classe por equivalente atual ou remover o div wrapper
+```
+
 ## Checkpoint
-Active: `ORQ-FRONT-05`
-Blocked: nenhum
-Resume from: backend base validado; proxima rodada depende do consumo desses resumos pelo front beta ou de novas decisoes do `@deve_de_casa_beta.md`.
+Active: `U01` validado no backend com roteiro automatizado + worker visual fechando `U02/U03/U04/U05`
+Blocked: validacao manual final de duas sessoes reais no Cloudflare
+Resume from: usar `scripts/validar_u01_sync_backend.py` como pre-check e `scripts/QA_ROTEIRO_SYNC_MULTIUSUARIO.md` como aceite manual antes de marcar `U01` estavel no beta.
