@@ -89,6 +89,27 @@ def _sanitize_url(value: str) -> str:
     return urlunsplit((parts.scheme, parts.netloc, parts.path, safe_query, parts.fragment))
 
 
+def _validated_provider_url(value: str) -> str:
+    raw = _clean_text(value)
+    if not raw:
+        raise ProviderCallError("endpoint do provider ausente")
+
+    try:
+        parts = urlsplit(raw)
+    except Exception as exc:  # noqa: BLE001
+        raise ProviderCallError("endpoint do provider invalido") from exc
+
+    scheme = _clean_text(parts.scheme).lower()
+    hostname = _clean_text(parts.hostname).lower()
+    if scheme == "https" and hostname:
+        return raw
+
+    if scheme == "http" and hostname in {"127.0.0.1", "localhost", "::1"}:
+        return raw
+
+    raise ProviderCallError("endpoint do provider deve usar https ou loopback local")
+
+
 def _criteria_block(criteria: list[str]) -> str:
     if not criteria:
         return "- Entregar resposta objetiva\n- Mostrar riscos e validacoes"
@@ -650,10 +671,11 @@ class AIOrchestrator:
 
     def _post_json(self, *, url: str, headers: dict[str, str], payload: dict[str, Any]) -> dict[str, Any]:
         request_data = json.dumps(payload).encode("utf-8")
-        req = Request(url=url, data=request_data, headers=headers, method="POST")
+        validated_url = _validated_provider_url(url)
+        req = Request(url=validated_url, data=request_data, headers=headers, method="POST")
         safe_url = _sanitize_url(url)
         try:
-            with urlopen(req, timeout=self.timeout_seconds) as response:
+            with urlopen(req, timeout=self.timeout_seconds) as response:  # nosec B310 - URL validada (https ou loopback local)
                 body = response.read().decode("utf-8", errors="replace")
         except HTTPError as exc:
             detail = exc.read().decode("utf-8", errors="replace")

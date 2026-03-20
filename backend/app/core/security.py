@@ -6,7 +6,7 @@ import json
 import re
 import secrets
 from urllib.error import HTTPError, URLError
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlsplit
 from urllib.request import urlopen
 
 from fastapi import HTTPException, Request, status
@@ -63,6 +63,8 @@ RE_EMAIL = re.compile(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", re.IGNORECASE)
 RE_CPF = re.compile(r"\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b")
 RE_CNPJ = re.compile(r"\b\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}\b")
 RE_BEARER_OR_JWT = re.compile(r"(?i)(bearer\s+[a-z0-9\-._~+/]+=*|eyJ[a-zA-Z0-9_\-\.]{20,})")
+GOOGLE_TOKENINFO_HOST = "oauth2.googleapis.com"
+GOOGLE_TOKENINFO_PATH = "/tokeninfo"
 
 
 def _utcnow() -> datetime:
@@ -75,6 +77,27 @@ def _hash_text(value: str) -> str:
 
 def _hash_password(password: str) -> str:
     return pwd_context.hash(password)
+
+
+def _validated_google_tokeninfo_url(raw_url: str) -> str:
+    candidate = (raw_url or "").strip()
+    if not candidate:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="login com google indisponivel",
+        )
+
+    parsed = urlsplit(candidate)
+    scheme = (parsed.scheme or "").strip().lower()
+    hostname = (parsed.hostname or "").strip().lower()
+    path = (parsed.path or "").strip()
+
+    if scheme != "https" or hostname != GOOGLE_TOKENINFO_HOST or path != GOOGLE_TOKENINFO_PATH:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="configuracao do verificador google invalida",
+        )
+    return candidate
 
 
 def _validate_runtime_security_settings() -> None:
@@ -207,10 +230,11 @@ def _verify_google_identity_token(id_token: str) -> dict:
         raise HTTPException(status_code=400, detail="credential google ausente")
 
     query = urlencode({"id_token": raw_token})
-    verify_url = f"{settings.GOOGLE_TOKENINFO_URL}?{query}"
+    verify_base_url = _validated_google_tokeninfo_url(settings.GOOGLE_TOKENINFO_URL)
+    verify_url = f"{verify_base_url}?{query}"
 
     try:
-        with urlopen(verify_url, timeout=8) as response:
+        with urlopen(verify_url, timeout=8) as response:  # nosec B310 - URL validada com host/path fixos do Google
             payload = json.loads(response.read().decode("utf-8"))
     except HTTPError:
         raise HTTPException(status_code=401, detail="token google invalido")
