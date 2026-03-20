@@ -24,8 +24,8 @@ def _support_actor_matches_thread(thread: SupportThread, actor: dict | None) -> 
     if actor_id is not None and thread.usuario_id is not None:
         try:
             return int(actor_id) == int(thread.usuario_id)
-        except Exception:
-            pass
+        except (TypeError, ValueError):
+            actor_id = None
     actor_name = str(actor.get("name") or "").strip().lower()
     actor_role = str(actor.get("role") or "").strip().upper()
     return actor_name == str(thread.usuario_nome or "").strip().lower() and actor_role == str(thread.setor or "").strip().upper()

@@ -13,7 +13,7 @@ from openpyxl import load_workbook
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..models import Emenda, EmendaLock, ExportLog, Historico, ImportGovernancaLog, ImportLinha, ImportLote, SupportThread
+from ..models import Emenda, ExportLog, Historico, ImportGovernancaLog, ImportLinha, ImportLote
 
 
 IMPORT_ALIASES = {
@@ -820,8 +820,8 @@ def _actor_matches_lote(lote: ImportLote, actor: dict | None) -> bool:
     if actor_id is not None and lote.usuario_id is not None:
         try:
             return int(actor_id) == int(lote.usuario_id)
-        except Exception:
-            pass
+        except (TypeError, ValueError):
+            actor_id = None
     actor_name = str(actor.get("name") or "").strip().lower()
     actor_role = str(actor.get("role") or "").strip().upper()
     return actor_name == str(lote.usuario_nome or "").strip().lower() and actor_role == str(lote.setor or "").strip().upper()
@@ -1240,7 +1240,7 @@ def apply_imported_emendas_service(
         payload=payload,
         actor=actor,
         arquivo_hash=preview_hash,
-        resolve_event_origin=lambda origem, current_actor, fallback: event_origin,
+        resolve_event_origin=lambda origem, _current_actor, _fallback: event_origin,
         utcnow=utcnow,
         db=db,
         status_governanca="APLICADO",

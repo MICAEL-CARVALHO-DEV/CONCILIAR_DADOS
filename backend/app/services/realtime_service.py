@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from datetime import datetime
 from typing import Callable
 
 from fastapi import WebSocket, WebSocketDisconnect
+
+
+logger = logging.getLogger(__name__)
 
 
 class WsConnectionBroker:
@@ -216,9 +220,9 @@ async def websocket_updates_service(
 
             await ws_broker.broadcast(build_presence_payload(emenda_id, users, utcnow))
     except WebSocketDisconnect:
-        pass
-    except Exception:
-        pass
+        logger.warning("presence websocket desconectado durante escuta")
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("falha no loop de presence websocket: %s", exc, exc_info=True)
     finally:
         await ws_broker.disconnect(websocket)
         changes = await presence_broker.disconnect(websocket)

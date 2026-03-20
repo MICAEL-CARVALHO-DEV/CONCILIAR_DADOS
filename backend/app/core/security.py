@@ -28,6 +28,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 GOOGLE_ISSUERS = {"accounts.google.com", "https://accounts.google.com"}
 GOOGLE_USERNAME_SANITIZE_RE = re.compile(r"\s+")
 AUTH_AUDIT_UA_MAX_LEN = 255
+LEGACY_HEX_RE = re.compile(r"^[0-9a-fA-F]+$")
 PLACEHOLDER_SECRET_TOKENS = {
     "",
     "troque-esta-chave",
@@ -146,19 +147,23 @@ def _verify_password_modern(password: str, stored_hash: str) -> bool:
 
 
 def _hash_password_legacy(password: str, salt_hex: str) -> str:
-    salt = bytes.fromhex(salt_hex)
+    normalized_salt = (salt_hex or "").strip()
+    if len(normalized_salt) < 2 or len(normalized_salt) % 2 != 0 or not LEGACY_HEX_RE.fullmatch(normalized_salt):
+        raise ValueError("legacy salt hex invalido")
+    salt = bytes.fromhex(normalized_salt)
     digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 120_000)
     return digest.hex()
 
 
 def _verify_password_legacy(password: str, salt_hex: str, expected_hash: str) -> bool:
-    if not salt_hex or not expected_hash:
+    normalized_hash = (expected_hash or "").strip().lower()
+    if not salt_hex or not normalized_hash:
         return False
     try:
         calc_hash = _hash_password_legacy(password, salt_hex)
     except ValueError:
         return False
-    return secrets.compare_digest(calc_hash, expected_hash)
+    return secrets.compare_digest(calc_hash, normalized_hash)
 
 
 def _verify_user_password(user: Usuario, password: str) -> tuple[bool, bool]:

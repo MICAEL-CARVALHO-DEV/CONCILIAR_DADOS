@@ -23,11 +23,11 @@ PROMPT_PREVIEW_LIMIT = 320
 
 
 class ProviderCallError(RuntimeError):
-    pass
+    """Raised when an AI provider call fails."""
 
 
 class OrchestrationError(RuntimeError):
-    pass
+    """Raised when the orchestration workflow cannot continue."""
 
 
 @dataclass
