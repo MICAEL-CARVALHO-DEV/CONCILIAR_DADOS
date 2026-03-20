@@ -177,7 +177,11 @@
       var mapped = previewRow && previewRow.dados && typeof previewRow.dados === "object"
         ? previewRow.dados
         : {};
+      var ano = ctx.toInt(mapped.ano) || ctx.currentYear();
       var idInterno = ctx.text(mapped.id != null ? mapped.id : (ln && ln.id_interno));
+      if (!idInterno && typeof ctx.generateInternalIdForYear === "function") {
+        idInterno = ctx.text(ctx.generateInternalIdForYear(ano));
+      }
       if (!idInterno || seen.has(idInterno)) return;
 
       seen.add(idInterno);
@@ -194,7 +198,7 @@
 
       out.push({
         id_interno: idInterno,
-        ano: ctx.toInt(mapped.ano) || ctx.currentYear(),
+        ano: ano,
         identificacao: ctx.text(mapped.identificacao) || idInterno || "-",
         cod_subfonte: ctx.text(mapped.cod_subfonte),
         deputado: ctx.text(mapped.deputado),

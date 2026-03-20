@@ -5853,6 +5853,9 @@ function getApiSyncOpsContext() {
     toInt: toInt,
     toNumber: toNumber,
     currentYear: currentYear,
+    generateInternalIdForYear: function (ano) {
+      return generateInternalId(ano, idCountersByYear);
+    },
     deriveStatusForBackend: deriveStatusForBackend,
     quickHashString: quickHashString,
     exportScopeAtuais: EXPORT_SCOPE.ATUAIS,
