@@ -1335,6 +1335,7 @@ function getImportControlsContext() {
     fileCsv: fileCsv,
     canMutateRecords: canMutateRecords,
     canImportData: canImportData,
+    canApplyImportGovernance: canApplyImportGovernance,
     canUseDemoTools: canUseDemoWorkspaceTools,
     getState: function () {
       return state;
@@ -3338,6 +3339,10 @@ function canUseSupportApi() {
 
 function canImportData() {
   return requireModuleFunction(getRoleAccessUtil, "canImportData", "roleAccessUtils")(getRoleAccessContext());
+}
+
+function canApplyImportGovernance() {
+  return requireModuleFunction(getRoleAccessUtil, "canApplyImportGovernance", "roleAccessUtils")(getRoleAccessContext());
 }
 
 function canMutateRecords() {
@@ -8628,6 +8633,7 @@ function getConcurrencyConfigContext() {
 
 function renderImportDashboard() {
   const ctx = getImportReportContext();
+  wireImportReviewActions();
   const renderImportDashboardUtil = getImportReportUtil("renderImportDashboard");
   if (renderImportDashboardUtil) {
     renderImportDashboardUtil(
@@ -9002,8 +9008,119 @@ function describeEventForPanel(item) {
 }
 
 function showImportReport(report) {
-  latestImportReport = report || null;
+  latestImportReport = report && typeof report === "object"
+    ? Object.assign({
+      applyPending: false,
+      applyBusy: false,
+      applyError: "",
+      applyMessage: "",
+      canApplyGovernance: false,
+      defaultImportTab: "planilha1"
+    }, report)
+    : null;
   renderImportDashboard();
+}
+
+function patchLatestImportReport(patch) {
+  if (!latestImportReport || typeof latestImportReport !== "object") return;
+  latestImportReport = Object.assign({}, latestImportReport, patch || {});
+  renderImportDashboard();
+}
+
+async function applyCurrentImportPreview() {
+  if (!latestImportReport || !latestImportReport.applyPending) {
+    alert("Nenhum preview pendente para aplicar.");
+    return;
+  }
+  if (!canApplyImportGovernance()) {
+    alert("A aplicacao do lote exige perfil SUPERVISAO ou PROGRAMADOR.");
+    return;
+  }
+  const centralReason = getCentralSyncBlockReason();
+  if (centralReason) {
+    alert(centralReason);
+    return;
+  }
+  if (latestImportReport.applyBusy) return;
+
+  patchLatestImportReport({
+    applyBusy: true,
+    applyError: "",
+    applyMessage: "Aplicando preview na base oficial...",
+    defaultImportTab: "revisao"
+  });
+
+  try {
+    const response = await applyImportedEmendasToApi(null, latestImportReport);
+    if (response && response.lote_id) {
+      betaImportSelectedLotId = Number(response.lote_id || 0);
+    }
+
+    if (Array.isArray(latestImportReport.planilha1Aoa) && latestImportReport.planilha1Aoa.length) {
+      lastImportedPlanilha1Aoa = latestImportReport.planilha1Aoa;
+    }
+
+    await refreshBetaImportLotsFromApi(false);
+    await refreshRemoteEmendasFromApi(true);
+    Promise.resolve(refreshBetaAuditFromApi(false)).catch(function () { /* no-op */ });
+
+    latestImportReport = Object.assign({}, latestImportReport, {
+      applyPending: false,
+      applyBusy: false,
+      applyError: "",
+      centralSync: response || null,
+      applyResult: response || null,
+      applyMessage: response && response.reason === "same_hash"
+        ? "Preview conferido: a base oficial ja estava no mesmo hash."
+        : "Preview aplicado na base oficial e registrado na governanca.",
+      defaultImportTab: "resumo"
+    });
+    renderImportDashboard();
+
+    alert(
+      response && response.reason === "same_hash"
+        ? "Preview validado. A base oficial ja estava alinhada com este lote."
+        : "Importacao aplicada com sucesso na base oficial."
+    );
+  } catch (err) {
+    patchLatestImportReport({
+      applyBusy: false,
+      applyError: extractApiError(err, "Falha ao aplicar preview de importacao."),
+      applyMessage: ""
+    });
+  }
+}
+
+function discardCurrentImportPreview() {
+  if (!latestImportReport || !latestImportReport.applyPending) {
+    hideImportReport();
+    return;
+  }
+  hideImportReport();
+}
+
+function wireImportReviewActions() {
+  if (!importReport || importReport.__secImportReviewBound) return;
+  importReport.__secImportReviewBound = true;
+  importReport.addEventListener("click", function (event) {
+    const actionTrigger = event && event.target && typeof event.target.closest === "function"
+      ? event.target.closest("[data-import-action]")
+      : null;
+    if (!actionTrigger || !importReport.contains(actionTrigger)) return;
+
+    const action = String(actionTrigger.getAttribute("data-import-action") || "").trim();
+    if (!action) return;
+
+    event.preventDefault();
+    if (action === "apply-preview") {
+      applyCurrentImportPreview();
+      return;
+    }
+    if (action === "discard-preview") {
+      const confirmed = confirm("Descartar este preview e voltar sem aplicar a planilha oficial?");
+      if (confirmed) discardCurrentImportPreview();
+    }
+  });
 }
 
 function wireImportReportTabs(targetOrTab, maybeDefaultTab) {

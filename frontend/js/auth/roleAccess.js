@@ -64,6 +64,20 @@
       && canUsePreviewApi;
   }
 
+  function canApplyImportGovernance(ctx) {
+    var canUsePreviewApi = false;
+    if (typeof ctx.isImportPreviewApiEnabled === "function") {
+      canUsePreviewApi = !!ctx.isImportPreviewApiEnabled();
+    } else if (typeof ctx.isApiEnabled === "function") {
+      canUsePreviewApi = !!ctx.isApiEnabled();
+    }
+    var role = String((ctx || {}).currentRole || "").trim().toUpperCase();
+    return !!ctx.currentUser
+      && !!ctx.workspaceAllowsImport
+      && canUsePreviewApi
+      && (role === "SUPERVISAO" || role === "PROGRAMADOR");
+  }
+
   function canMutateRecords(ctx) {
     return !!ctx.workspaceAllowsMutation && isOperationalRoleUser(ctx) && !isReadOnlyRoleUser(ctx);
   }
@@ -80,6 +94,7 @@
     canViewGlobalAuditApi: canViewGlobalAuditApi,
     canUseSupportApi: canUseSupportApi,
     canImportData: canImportData,
+    canApplyImportGovernance: canApplyImportGovernance,
     canMutateRecords: canMutateRecords
   };
 })(typeof window !== "undefined" ? window : globalThis);

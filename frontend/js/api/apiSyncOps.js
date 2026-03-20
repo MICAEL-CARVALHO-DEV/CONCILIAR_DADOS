@@ -161,6 +161,61 @@
     return out;
   }
 
+  function buildImportApplyRecordsFromPreview(report, ctx) {
+    var source = report && typeof report === "object" ? report : {};
+    var rows = Array.isArray(source.sourceRows) ? source.sourceRows : [];
+    var details = Array.isArray(source.rowDetails) ? source.rowDetails : [];
+    var acceptedStatuses = { CREATED: true, UPDATED: true, UNCHANGED: true };
+    var out = [];
+    var seen = new Set();
+
+    details.forEach(function (ln, idx) {
+      var status = String(ln && ln.status_linha ? ln.status_linha : "").trim().toUpperCase();
+      if (!acceptedStatuses[status]) return;
+
+      var previewRow = rows[idx] && typeof rows[idx] === "object" ? rows[idx] : null;
+      var mapped = previewRow && previewRow.dados && typeof previewRow.dados === "object"
+        ? previewRow.dados
+        : {};
+      var idInterno = ctx.text(mapped.id != null ? mapped.id : (ln && ln.id_interno));
+      if (!idInterno || seen.has(idInterno)) return;
+
+      seen.add(idInterno);
+
+      var valorInicialRaw = mapped.valor_inicial;
+      var valorAtualRaw = mapped.valor_atual;
+      var valorInicial = ctx.text(valorInicialRaw) !== "" ? ctx.toNumber(valorInicialRaw) : 0;
+      var valorAtual = ctx.text(valorAtualRaw) !== "" ? ctx.toNumber(valorAtualRaw) : valorInicial;
+      var statusOficial = ctx.text(mapped.status_oficial) || "Recebido";
+      var sourceSheet = ctx.text(previewRow && previewRow.aba) || ctx.text(ln && ln.sheet_name) || "Controle de EPI";
+      var sourceRow = previewRow && previewRow.linha != null
+        ? Number(previewRow.linha)
+        : (ln && ln.row_number != null ? Number(ln.row_number) : null);
+
+      out.push({
+        id_interno: idInterno,
+        ano: ctx.toInt(mapped.ano) || ctx.currentYear(),
+        identificacao: ctx.text(mapped.identificacao) || idInterno || "-",
+        cod_subfonte: ctx.text(mapped.cod_subfonte),
+        deputado: ctx.text(mapped.deputado),
+        cod_uo: ctx.text(mapped.cod_uo),
+        sigla_uo: ctx.text(mapped.sigla_uo),
+        cod_orgao: ctx.text(mapped.cod_orgao),
+        cod_acao: ctx.text(mapped.cod_acao),
+        descricao_acao: ctx.text(mapped.descricao_acao),
+        municipio: ctx.text(mapped.municipio),
+        valor_inicial: valorInicial,
+        valor_atual: valorAtual,
+        processo_sei: ctx.text(mapped.processo_sei),
+        status_oficial: statusOficial,
+        source_sheet: sourceSheet,
+        source_row: sourceRow
+      });
+    });
+
+    return out;
+  }
+
   function buildImportApplyPayload(file, report, ctx) {
     var source = report && typeof report === "object" ? report : {};
     var previewHash = String(source.fileHash || "").trim().toLowerCase();
@@ -171,7 +226,7 @@
     return {
       preview_hash: previewHash,
       arquivo_nome: file && file.name ? file.name : (source.fileName || "importacao.xlsx"),
-      registros: buildImportSyncRecords(source, ctx),
+      registros: buildImportApplyRecordsFromPreview(source, ctx),
       linhas_lidas: Number(source.totalRows || 0),
       linhas_validas: Number(source.consideredRows || 0),
       linhas_ignoradas: Number(source.skippedRows || 0),

@@ -104,6 +104,128 @@
     return [];
   }
 
+  function buildImportReviewHtml(report, escapeHtmlFn) {
+    var escapeHtml = typeof escapeHtmlFn === "function" ? escapeHtmlFn : escape;
+    var source = report && typeof report === "object" ? report : {};
+    var rowDetails = safeArr(source.rowDetails);
+    var newRowsPreview = safeArr(source.newRowsPreview);
+    var visibleRows = rowDetails.slice(0, 120);
+
+    var statusCounters = rowDetails.reduce(function (acc, item) {
+      var status = text(item && item.status_linha).toUpperCase() || "DESCONHECIDO";
+      acc[status] = Number(acc[status] || 0) + 1;
+      return acc;
+    }, {});
+    var metricItems = Object.keys(statusCounters).sort().map(function (status) {
+      return {
+        label: status.replaceAll("_", " "),
+        value: statusCounters[status]
+      };
+    });
+
+    var html = ""
+      + "<h4>Revisao antes do apply</h4>"
+      + "<p class=\"muted small\">Confira o reflexo linha a linha antes de gravar na base oficial.</p>"
+      + buildMetricGridHtml(metricItems.length ? metricItems : [{ label: "Linhas mapeadas", value: rowDetails.length }], escapeHtml);
+
+    if (newRowsPreview.length) {
+      html += ""
+        + "<div style=\"margin-top:12px\">"
+        + "  <h4 style=\"margin-bottom:8px\">Novos registros previstos</h4>"
+        + "  <div class=\"table-wrap\"><table class=\"table\" style=\"min-width:760px\"><thead><tr><th>Ordem</th><th>Aba</th><th>Linha</th><th>ID</th><th>Identificacao</th><th>Deputado</th><th>Municipio</th></tr></thead><tbody>";
+      newRowsPreview.slice(0, 20).forEach(function (item) {
+        html += ""
+          + "<tr>"
+          + "  <td>" + escapeHtml(String(item && item.ordem != null ? item.ordem : "-")) + "</td>"
+          + "  <td>" + escapeHtml(text(item && item.sheet_name) || "-") + "</td>"
+          + "  <td>" + escapeHtml(String(item && item.row_number != null ? item.row_number : "-")) + "</td>"
+          + "  <td>" + escapeHtml(text(item && item.id_interno) || "-") + "</td>"
+          + "  <td>" + escapeHtml(text(item && item.identificacao) || "-") + "</td>"
+          + "  <td>" + escapeHtml(text(item && item.deputado) || "-") + "</td>"
+          + "  <td>" + escapeHtml(text(item && item.municipio) || "-") + "</td>"
+          + "</tr>";
+      });
+      html += "</tbody></table></div></div>";
+    }
+
+    html += ""
+      + "<div style=\"margin-top:12px\">"
+      + "  <h4 style=\"margin-bottom:8px\">Linhas revisadas</h4>"
+      + "  <div class=\"table-wrap\"><table class=\"table\" style=\"min-width:860px\"><thead><tr><th>Ordem</th><th>Aba</th><th>Linha</th><th>Status</th><th>ID</th><th>Ref</th><th>Mensagem</th></tr></thead><tbody>";
+
+    if (!visibleRows.length) {
+      html += "<tr><td colspan=\"7\" class=\"muted small\">Sem linhas classificadas para revisao.</td></tr>";
+    } else {
+      visibleRows.forEach(function (item) {
+        html += ""
+          + "<tr>"
+          + "  <td>" + escapeHtml(String(item && item.ordem != null ? item.ordem : "-")) + "</td>"
+          + "  <td>" + escapeHtml(text(item && item.sheet_name) || "-") + "</td>"
+          + "  <td>" + escapeHtml(String(item && item.row_number != null ? item.row_number : "-")) + "</td>"
+          + "  <td>" + escapeHtml(text(item && item.status_linha) || "-") + "</td>"
+          + "  <td>" + escapeHtml(text(item && item.id_interno) || "-") + "</td>"
+          + "  <td>" + escapeHtml(text(item && item.ref_key) || "-") + "</td>"
+          + "  <td>" + escapeHtml(text(item && item.mensagem) || "-") + "</td>"
+          + "</tr>";
+      });
+    }
+
+    html += "</tbody></table></div>";
+    if (rowDetails.length > visibleRows.length) {
+      html += "<p class=\"muted small\" style=\"margin-top:8px\">Mostrando as primeiras " + String(visibleRows.length) + " linhas do preview.</p>";
+    }
+    html += "</div>";
+    return html;
+  }
+
+  function buildImportGovernanceHtml(report, escapeHtmlFn) {
+    var escapeHtml = typeof escapeHtmlFn === "function" ? escapeHtmlFn : escape;
+    var source = report && typeof report === "object" ? report : {};
+    var applyPending = !!source.applyPending;
+    var applyBusy = !!source.applyBusy;
+    var canApply = !!source.canApplyGovernance;
+    var localOnly = !!source.localOnly;
+    var applyError = text(source.applyError);
+    var applyMessage = text(source.applyMessage);
+    var applyResult = source.applyResult && typeof source.applyResult === "object" ? source.applyResult : null;
+
+    if (localOnly) {
+      return ""
+        + "<div class=\"import-governance-block\" style=\"margin-top:16px; padding:12px; background:var(--bg-layer-2); border:1px solid var(--border-color); border-radius:6px;\">"
+        + "  <h4 style=\"margin-bottom:8px;\">Modo local</h4>"
+        + "  <p class=\"muted small\" style=\"margin-bottom:0;\">" + escapeHtml(applyMessage || "Importacao isolada neste workspace, sem enviar lote para a base oficial.") + "</p>"
+        + "</div>";
+    }
+
+    if (applyPending) {
+      return ""
+        + "<div class=\"import-governance-block\" style=\"margin-top:16px; padding:12px; background:var(--bg-layer-2); border:1px solid var(--border-color); border-radius:6px;\">"
+        + "  <h4 style=\"margin-bottom:8px;\">Governanca do Lote</h4>"
+        + "  <p class=\"muted small\" style=\"margin-bottom:0;\">Este preview ainda nao foi aplicado. Revise o lote, valide os impactos e so depois confirme a gravacao na base oficial.</p>"
+        + (applyMessage ? ("<p class=\"muted small\" style=\"margin-top:10px; margin-bottom:0;\">" + escapeHtml(applyMessage) + "</p>") : "")
+        + (applyError ? ("<p class=\"muted small\" style=\"margin-top:10px; margin-bottom:0; color:#b42318;\">" + escapeHtml(applyError) + "</p>") : "")
+        + "  <div style=\"display:flex; flex-wrap:wrap; gap:8px; margin-top:12px;\">"
+        + "    <button type=\"button\" class=\"import-tab-btn active\" data-import-action=\"apply-preview\"" + (applyBusy || !canApply ? " disabled" : "") + ">" + escapeHtml(applyBusy ? "Aplicando..." : "Aplicar na base oficial") + "</button>"
+        + "    <button type=\"button\" class=\"import-tab-btn\" data-import-action=\"discard-preview\"" + (applyBusy ? " disabled" : "") + ">Descartar preview</button>"
+        + "  </div>"
+        + (canApply
+          ? "<p class=\"muted small\" style=\"margin-top:10px; margin-bottom:0;\">A aplicacao cria o lote oficial, grava as linhas de governanca e sincroniza a base central.</p>"
+          : "<p class=\"muted small\" style=\"margin-top:10px; margin-bottom:0;\">A aplicacao final exige perfil SUPERVISAO ou PROGRAMADOR.</p>")
+        + "</div>";
+    }
+
+    var appliedSummary = applyResult
+      ? ("Lote: " + escapeHtml(String(applyResult.lote_id != null ? applyResult.lote_id : "-")) + " | Processados: " + escapeHtml(String(applyResult.processed != null ? applyResult.processed : 0)))
+      : "Lote oficial aplicado e rastreado na governanca.";
+
+    return ""
+      + "<div class=\"import-governance-block\" style=\"margin-top:16px; padding:12px; background:var(--bg-layer-2); border:1px solid var(--border-color); border-radius:6px;\">"
+      + "  <h4 style=\"margin-bottom:8px;\">Governanca do Lote</h4>"
+      + "  <p class=\"muted small\" style=\"margin-bottom:0;\">" + escapeHtml(applyMessage || "A importacao foi aplicada na base oficial e registrada na trilha de governanca.") + "</p>"
+      + "  <p class=\"muted small\" style=\"margin-top:10px; margin-bottom:0;\">" + appliedSummary + "</p>"
+      + "</div>";
+  }
+
   function renderImportDashboard(stateRecords, latestImportReport, lastImportedPlanilha1Aoa, importReportEl, fmtDateTimeFn, escapeHtmlFn, buildPlanilha1AoaFn, normalizeLooseTextFn, buildPlanilha1HtmlFn, getRecentChangesForPanelFn, wireImportReportTabsFn, latestExportReport, buildExportSummaryBadgeHtmlFn, exportScopeLabelFn, recentChangesLimit) {
     if (!importReportEl) return;
 
@@ -139,7 +261,7 @@
       "<div class=\"import-report-stack\"><section class=\"import-dashboard-left\">" + left + "</section></div>";
 
     if (latestImportReport && typeof wireImportReportTabsFn === "function") {
-      wireImportReportTabsFn(importReportEl, "planilha1");
+      wireImportReportTabsFn(importReportEl, latestImportReport.defaultImportTab || (latestImportReport.applyPending ? "revisao" : "planilha1"));
     }
 
   }
@@ -184,7 +306,11 @@
     var sheets = (report && Array.isArray(report.sheetNames) && report.sheetNames.length) ? report.sheetNames.join(", ") : "-";
     var fileName = report && report.fileName ? report.fileName : "-";
 
-    var planilha1Aoa = safeBuildRecordPlanilha1Aoa(lastImportedPlanilha1Aoa, buildPlanilha1AoaFn, stateRecords);
+    var planilha1Aoa = safeBuildRecordPlanilha1Aoa(
+      safeArr(report && report.planilha1Aoa).length ? report.planilha1Aoa : lastImportedPlanilha1Aoa,
+      buildPlanilha1AoaFn,
+      stateRecords
+    );
     var planilha1Html = buildPlanilha1HtmlFromUtils(planilha1Aoa, escapeHtml, normalizeLooseTextFn) ||
       (typeof buildPlanilha1HtmlFn === "function" ? buildPlanilha1HtmlFn(planilha1Aoa) : "");
 
@@ -193,6 +319,7 @@
       "<p class=\"muted small\">Arquivo: " + escapeHtml(fileName) + " | Abas lidas: " + escapeHtml(sheets) + "</p>" +
       "<div class=\"import-tabs\" role=\"tablist\" aria-label=\"Abas do relatorio de importacao\">" +
       "  <button type=\"button\" class=\"import-tab-btn active\" data-import-tab=\"resumo\" role=\"tab\" aria-selected=\"true\">Resumo da importacao</button>" +
+      "  <button type=\"button\" class=\"import-tab-btn\" data-import-tab=\"revisao\" role=\"tab\" aria-selected=\"false\">Revisao</button>" +
       "  <button type=\"button\" class=\"import-tab-btn\" data-import-tab=\"planilha1\" role=\"tab\" aria-selected=\"false\">Planilha1 (Reflexo)</button>" +
       "  <button type=\"button\" class=\"import-tab-btn\" data-import-tab=\"validacao\" role=\"tab\" aria-selected=\"false\">Validacao</button>" +
       "</div>" +
@@ -211,13 +338,12 @@
         { label: "Conflito ID x chave", value: report.conflictIdVsRef || 0 }
       ], escapeHtml);
 
-    var governanceHtml = "" +
-      "<div class=\"import-governance-block\" style=\"margin-top:16px; padding:12px; background:var(--bg-layer-2); border:1px solid var(--border-color); border-radius:6px;\">" +
-      "  <h4 style=\"margin-bottom:8px;\">Governanca do Lote</h4>" +
-      "  <p class=\"muted small\" style=\"margin-bottom:0;\">A importacao foi sincronizada com a base oficial e registrada na trilha de governanca. Se precisar ajustar ou remover, use o painel principal de governanca de import.</p>" +
-      "</div>";
+    var governanceHtml = buildImportGovernanceHtml(report, escapeHtmlFn);
 
     var finishResumo = governanceHtml + "  </section>" +
+      "  <section class=\"import-tab-panel\" data-import-panel=\"revisao\">" +
+      buildImportReviewHtml(report, escapeHtmlFn) +
+      "  </section>" +
       "  <section class=\"import-tab-panel import-report-right\" data-import-panel=\"planilha1\">" +
       "    <h4 style=\"margin-bottom:8px\">Reflexo operacional em Planilha1</h4>" +
       planilha1Html +

@@ -28,6 +28,7 @@
       conflictIdVsRef: Number(source.conflictIdVsRef || 0),
       sheetNames: Array.isArray(source.sheetNames) ? source.sheetNames.slice() : [],
       rowDetails: Array.isArray(source.rowDetails) ? source.rowDetails.slice() : [],
+      sourceRows: Array.isArray(source.sourceRows) ? source.sourceRows.slice() : [],
       validation: source.validation || null,
       newRowsPreview: Array.isArray(source.newRowsPreview) ? source.newRowsPreview.slice() : [],
       planilha1Aoa: Array.isArray(source.planilha1Aoa) ? source.planilha1Aoa : null
@@ -149,7 +150,7 @@
               })
             : [];
 
-          if (Array.isArray(authoritativePreview && authoritativePreview.planilha1Aoa)) {
+          if (!shouldSyncImportToApi && Array.isArray(authoritativePreview && authoritativePreview.planilha1Aoa)) {
             opts.setLastImportedPlanilha1Aoa(authoritativePreview.planilha1Aoa);
           }
           if (typeof opts.setLastImportValidation === "function") {
@@ -172,12 +173,6 @@
             return;
           }
 
-          var removedDemo = shouldSyncImportToApi ? opts.purgeDemoBeforeOfficialImport() : 0;
-          if (removedDemo > 0) {
-            var currentState = opts.getState();
-            opts.setIdCountersByYear(opts.buildIdCounters((currentState && currentState.records) || []));
-          }
-
           if (shouldSyncImportToApi && typeof opts.canOperateCentralData === "function" && !opts.canOperateCentralData()) {
             throw new Error(
               (typeof opts.getCentralSyncBlockReason === "function" && opts.getCentralSyncBlockReason())
@@ -185,59 +180,38 @@
             );
           }
 
-          // Backend preview continua sendo a fonte autoritativa para metricas;
-          // o JS aplica as rows classificadas para refletir o estado operacional.
-          opts.processImportedRows(sourceRows, file.name);
-          var importChanged = true;
-          var importSkipReason = "";
-
           if (shouldSyncImportToApi) {
-            if (typeof opts.syncImportedEmendasToApi === "function") {
-              report.centralSync = await opts.syncImportedEmendasToApi(file, report);
-            }
-            var loteSyncResult = await opts.syncImportBatchToApi(file, report);
-            var loteId = null;
-            if (loteSyncResult && typeof loteSyncResult === "object") {
-              loteId = loteSyncResult.loteId != null ? Number(loteSyncResult.loteId) : null;
-              importChanged = loteSyncResult.changed !== false;
-              importSkipReason = loteSyncResult.reason ? String(loteSyncResult.reason) : "";
-            } else if (loteSyncResult) {
-              loteId = Number(loteSyncResult);
+            report.applyPending = true;
+            report.applyBusy = false;
+            report.applyError = "";
+            report.applyMessage = typeof opts.canApplyImportGovernance === "function" && opts.canApplyImportGovernance()
+              ? "Preview pronto. Revise o lote e aplique na base oficial quando estiver seguro."
+              : "Preview pronto. A aplicacao na base oficial exige perfil SUPERVISAO ou PROGRAMADOR.";
+            report.canApplyGovernance = typeof opts.canApplyImportGovernance === "function" ? !!opts.canApplyImportGovernance() : false;
+            report.defaultImportTab = "revisao";
+            opts.showImportReport(report);
+            globalScope.alert("Preview concluido. Revise o lote antes de aplicar na base oficial.");
+          } else {
+            var removedDemo = opts.purgeDemoBeforeOfficialImport ? opts.purgeDemoBeforeOfficialImport() : 0;
+            if (removedDemo > 0) {
+              var currentState = opts.getState();
+              opts.setIdCountersByYear(opts.buildIdCounters((currentState && currentState.records) || []));
             }
 
-            if (loteId && importChanged) {
-              await opts.syncImportLinesToApi(loteId, report.rowDetails || []);
-              if (typeof opts.refreshImportLots === "function") {
-                Promise.resolve(opts.refreshImportLots(false)).catch(function () { /* no-op */ });
-              }
-            }
-            if (typeof opts.refreshRemoteEmendasFromApi === "function") {
-              await opts.refreshRemoteEmendasFromApi(true);
-            } else {
-              opts.saveState();
-              opts.syncYearFilter();
-              opts.render();
-            }
-          } else {
+            // Backend preview continua sendo a fonte autoritativa para metricas;
+            // no modo local o JS aplica as rows classificadas para refletir o estado operacional.
+            opts.processImportedRows(sourceRows, file.name);
             opts.saveState();
             opts.syncYearFilter();
             opts.render();
-          }
+            report.localOnly = true;
+            report.applyMessage = "Importacao isolada neste workspace, sem criar lote oficial na API.";
+            opts.showImportReport(report);
 
-          opts.showImportReport(report);
-
-          var extraDemoInfo = removedDemo > 0 ? (" | Demos removidos: " + String(removedDemo)) : "";
-          var syncInfo = " | Importacao isolada neste workspace (sem enviar lote para API oficial).";
-          if (shouldSyncImportToApi) {
-            syncInfo = importChanged
-              ? " | Sincronizado com API oficial e lote registrado na governanca."
-              : (
-                importSkipReason === "same_hash"
-                  ? " | Planilha oficial sem alteracao: lote ja existente."
-                  : " | API oficial sem novo lote nesta execucao."
-              );
+            var extraDemoInfo = removedDemo > 0 ? (" | Demos removidos: " + String(removedDemo)) : "";
+            var syncInfo = " | Importacao isolada neste workspace (sem enviar lote para API oficial).";
+            globalScope.alert("Importacao concluida. Criados: " + report.created + " | Atualizados: " + report.updated + " | Sem alteracao: " + report.unchanged + " | Linhas lidas: " + report.totalRows + extraDemoInfo + syncInfo);
           }
-          globalScope.alert("Importacao concluida. Criados: " + report.created + " | Atualizados: " + report.updated + " | Sem alteracao: " + report.unchanged + " | Linhas lidas: " + report.totalRows + extraDemoInfo + syncInfo);
         } catch (err) {
           globalScope.console.error(err);
           if (typeof previousStateSnapshot !== "undefined" && previousStateSnapshot) {
