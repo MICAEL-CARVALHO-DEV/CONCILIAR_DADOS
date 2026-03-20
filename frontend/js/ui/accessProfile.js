@@ -1,3 +1,14 @@
+// =============================================================
+// accessProfile.js — CONTROLE DE ACESSO E PERFIL DE USUARIO
+// Dono: Antigravity (frontend/js/ui/)
+// Responsabilidade: Aplicar visibilidade de controles baseada no perfil
+//   do usuario logado (PROGRAMADOR, APG, SUPERVISAO, POWERBI).
+// Regras: PROGRAMADOR tem acesso total; APG e SUPERVISAO tem acesso operacional;
+//   POWERBI tem acesso apenas leitura ao BI.
+// Exports: SECFrontend.accessProfileUtils
+//   applyAccessProfile(ctx) — chamado apos login e troca de workspace.
+// Nao tocar: app.js, index.html, style.css
+// =============================================================
 (function (globalScope) {
   "use strict";
 

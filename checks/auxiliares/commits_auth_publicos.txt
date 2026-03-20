@@ -1,0 +1,40 @@
+﻿eae193d fix(ui): incluir username oculto no form de senha
+fd7d54b fix(auth): colocar troca de senha dentro de formulario valido
+61ae897 fix(auth): atualizar oauth client para novo id oficial
+88fc827 fix(auth): corrigir client id google para 109...lfv9
+9766f51 feat(auth): migrar oauth para client 109 e incluir troca de senha no perfil
+4fc8298 fix(cors): liberar cloudflare pages prod e previews
+42cd981 feat(homolog): suporte a host por sufixo (.pages.dev) em api e oauth
+e49074a fix: correct auth redirects on published pages
+39c8807 refactor(back): extract auth emendas and operations routers
+1137509 refactor(front): consolidate auth and beta state helpers
+8d857f0 refactor(front): remove auth and local state fallbacks
+7a1fc6c refactor(front): extract auth session module
+bb995ea refactor(front): extract auth flow module
+ba117ec refactor(front): extract auth gate ui module
+d1585aa refactor(back): extract auth and emenda services
+cba6e65 refactor(back): extract auth dependency helpers
+c6110f8 refactor(back): extract auth security core helpers
+5987243 refactor(front): reuse storageUtils in authStore
+3c230c0 refactor(front): centralize session token fallback in authStore
+733b336 refactor(front): move legacy auth fallback into authStore
+f958ec1 refactor(front): centralize auth profile load via authStore
+d582e05 refactor(front): centralize auth state access via authStore
+22c5dcd refactor(front): centralize auth/session storage access via helpers
+0a17bbb fix(front): centralizar fallback auth no apiRequest
+8bbca13 refactor(front): integrar modulos base de auth api lock no frontend
+78ef915 chore: update frontend auth flow and cloudflare deploy docs
+24c6fc3 feat: consolida hardening de auth e operacao
+07de541 feat: amplia fluxo de login e auditoria de autenticacao
+d4fe800 feat: permite login com nome de usuario ou gmail
+2ec267c feat: prepara login google e endurece fluxo de autenticacao
+84f4a3d fix: endurece API publica e refina tela de cadastro
+6c868a8 fix: redireciona raiz para login sem sessao
+dfdea52 fix: simplifica navegacao da tela de cadastro
+c6fee7a feat: refina login e cadastro com nova identidade visual
+834056b feat: cadastro em analise e aba de aprovacao para programador
+4ba6c1d feat: remove quick login, add profile modal and explicit logout
+a802257 fix: harden CORS for github pages and local origins
+cf292d7 fix: normalize CORS origins from render env values
+76314fa fix: robust CORS_ORIGINS parsing for render env formatting
+59c5bf1 auth: simplifica acesso de teste com entrar rapido no login

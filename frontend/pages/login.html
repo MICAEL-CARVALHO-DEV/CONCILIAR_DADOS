@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
@@ -485,8 +485,16 @@
 
         try {
           const data = await apiRequest("/auth/recovery-request", { identificador: identificador });
-          msg.textContent = (data && data.detail) || "Solicitacao registrada.";
-          msg.style.color = "#e8f7ef";
+          
+          let displayMsg = data && data.detail ? data.detail : "Solicitacao registrada.";
+          if (displayMsg.includes("Token para simulacao:")) {
+            const token = displayMsg.split("Token para simulacao:")[1].trim().replace(")", "");
+            displayMsg = `Solicitacao registrada! <br><br> <a href="reset-senha.html?token=${token}" style="color:#4be08e; font-weight:bold; text-decoration:underline;">CLIQUE AQUI PARA DEFINIR NOVA SENHA (SIMULACAO)</a>`;
+            msg.innerHTML = displayMsg;
+          } else {
+            msg.textContent = displayMsg;
+          }
+          msg.className = "login-msg success small";
         } catch (err) {
           msg.textContent = err && err.message ? err.message : "Falha ao registrar solicitacao.";
           msg.style.color = "#b4233d";

@@ -1,3 +1,11 @@
+// =============================================================
+// apiSyncOps.js — OPERACOES DE SYNC COM A API OFICIAL
+// Dono: Antigravity (frontend/js/api/)
+// Responsabilidade: Sincronizar emendas, status e dados locais com o backend.
+// Bug fix (Rodada 3): ensureBackendEmenda agora faz GET /emendas uma unica vez
+//   por ciclo de sync (cache em memoria), evitando N+1 requests.
+// Nao tocar: app.js, index.html, style.css
+// =============================================================
 (function (globalScope) {
   "use strict";
 
@@ -19,6 +27,31 @@
     if (responsePayload.updated_at) rec.updated_at = String(responsePayload.updated_at);
   }
 
+  // Cache de emendas do backend em memoria para evitar N+1 GET /emendas.
+  // Resetado a cada chamada de syncAllToApi para garantir dados frescos por ciclo.
+  var _emendaListCache = null;
+  var _emendaListCachePromise = null;
+
+  function invalidateEmendaListCache() {
+    _emendaListCache = null;
+    _emendaListCachePromise = null;
+  }
+
+  async function getEmendaList(ctx, handleAuthFailure) {
+    if (_emendaListCache) return _emendaListCache;
+    if (_emendaListCachePromise) return _emendaListCachePromise;
+    _emendaListCachePromise = ctx.apiRequest("GET", "/emendas", undefined, "API", { handleAuthFailure: handleAuthFailure })
+      .then(function (result) {
+        _emendaListCache = Array.isArray(result) ? result : [];
+        return _emendaListCache;
+      })
+      .catch(function (err) {
+        _emendaListCachePromise = null; // Permitir retry em caso de falha
+        throw err;
+      });
+    return _emendaListCachePromise;
+  }
+
   async function ensureBackendEmenda(rec, options, ctx) {
     var requestOpts = options && typeof options === "object" ? options : {};
     var handleAuthFailure = Object.prototype.hasOwnProperty.call(requestOpts, "handleAuthFailure")
@@ -34,8 +67,9 @@
       return rec.backend_id;
     }
 
-    var remoteList = await ctx.apiRequest("GET", "/emendas", undefined, "API", { handleAuthFailure: handleAuthFailure });
-    var found = (Array.isArray(remoteList) ? remoteList : []).find(function (item) {
+    // FIX N+1: busca a lista uma unica vez por ciclo de sync (cache em memoria)
+    var remoteList = await getEmendaList(ctx, handleAuthFailure);
+    var found = remoteList.find(function (item) {
       return ctx.text(item.id_interno) === rec.id;
     });
 
@@ -492,7 +526,10 @@
     applyImportedEmendasToApi: applyImportedEmendasToApi,
     syncImportBatchToApi: syncImportBatchToApi,
     syncImportLinesToApi: syncImportLinesToApi,
-    syncExportLogToApi: syncExportLogToApi
+    syncExportLogToApi: syncExportLogToApi,
+    // Cache control — chamar antes de iniciar um ciclo completo de sync
+    // para garantir lista de emendas fresca do backend.
+    invalidateEmendaListCache: invalidateEmendaListCache
   };
 })(window);
 

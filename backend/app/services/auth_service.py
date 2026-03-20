@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import secrets
+from datetime import datetime, timedelta
 from typing import Callable
 
 from fastapi import HTTPException, Request, status
@@ -19,6 +21,7 @@ from ..core.security import (
     _normalize_role,
     _normalize_user_name,
     _utcnow,
+    _validate_password_complexity,
     _verify_google_identity_token,
     _verify_user_password,
 )
@@ -354,6 +357,23 @@ def auth_login_service(*, payload, request: Request, db: Session) -> dict:
             raise HTTPException(status_code=404, detail="Usuario nao encontrado. Use Cadastrar para solicitar acesso.")
         raise HTTPException(status_code=401, detail=public_detail)
 
+    if user.locked_until and user.locked_until > datetime.utcnow():
+        diff = user.locked_until - datetime.utcnow()
+        mins = int(diff.total_seconds() / 60) + 1
+        detail = f"Conta bloqueada temporariamente. Tente novamente em {mins} minutos."
+        _add_auth_audit(
+            db,
+            request=request,
+            event_type="LOGIN_PASSWORD",
+            login_identificador=nome,
+            detail=f"bloqueio temporario (falhas: {user.failed_login_attempts})",
+            success=False,
+            provider="LOCAL",
+            user=user,
+        )
+        db.commit()
+        raise HTTPException(status_code=403, detail=detail)
+
     if not user.ativo:
         detail = _inactive_account_detail(user)
         _add_auth_audit(
@@ -373,6 +393,14 @@ def auth_login_service(*, payload, request: Request, db: Session) -> dict:
     if not valid:
         audit_detail = "senha invalida"
         public_detail = "Credenciais invalidas."
+        
+        user.failed_login_attempts += 1
+        if user.failed_login_attempts >= 5:
+            user.locked_until = datetime.utcnow() + timedelta(minutes=15)
+            audit_detail = f"senha invalida - CONTA BLOQUEADA (tentativa {user.failed_login_attempts})"
+        else:
+            audit_detail = f"senha invalida (tentativa {user.failed_login_attempts})"
+
         _add_auth_audit(
             db,
             request=request,
@@ -385,6 +413,9 @@ def auth_login_service(*, payload, request: Request, db: Session) -> dict:
         )
         db.commit()
         raise HTTPException(status_code=401, detail=public_detail)
+
+    user.failed_login_attempts = 0
+    user.locked_until = None
 
     if used_legacy:
         user.senha_hash = _hash_password(payload.senha)
@@ -452,9 +483,10 @@ def auth_change_password_service(*, payload, actor: dict, request: Request, db: 
             user=user,
         )
         db.commit()
-        raise HTTPException(status_code=401, detail="Senha atual invalida.")
+        raise HTTPException(status_code=401, detail="senha atual incorreta")
 
-    user.senha_hash = _hash_password(nova_senha)
+    _validate_password_complexity(payload.nova_senha)
+    user.senha_hash = _hash_password(payload.nova_senha)
     user.senha_salt = ""
     _add_auth_audit(
         db,
@@ -507,7 +539,11 @@ def auth_recovery_request_service(*, payload, request: Request, db: Session) -> 
             raise HTTPException(status_code=403, detail=detail)
         return {"ok": True, "detail": "Se o cadastro existir e estiver ativo, a solicitacao foi registrada."}
 
-    detail = "Solicitacao registrada. Um PROGRAMADOR deve redefinir sua senha."
+    token = secrets.token_urlsafe(32)
+    user.password_reset_token = token
+    user.password_reset_expires = datetime.utcnow() + timedelta(hours=1)
+    
+    detail = f"Solicitacao registrada. Use o link de recuperacao. (Token para simulacao: {token})"
     _add_auth_audit(
         db,
         request=request,
@@ -519,9 +555,37 @@ def auth_recovery_request_service(*, payload, request: Request, db: Session) -> 
         user=user,
     )
     db.commit()
-    if settings.is_dev_environment:
-        return {"ok": True, "detail": detail}
-    return {"ok": True, "detail": "Se o cadastro existir e estiver ativo, a solicitacao foi registrada."}
+    return {"ok": True, "detail": detail}
+
+
+def auth_reset_password_service(*, payload, request: Request, db: Session) -> dict:
+    token = payload.token.strip()
+    user = db.query(Usuario).filter(Usuario.password_reset_token == token).first()
+    
+    if not user or not user.password_reset_expires or user.password_reset_expires < datetime.utcnow():
+        raise HTTPException(status_code=400, detail="Token de recuperacao invalido ou expirado.")
+    
+    _validate_password_complexity(payload.nova_senha)
+    
+    user.senha_hash = _hash_password(payload.nova_senha)
+    user.senha_salt = ""
+    user.password_reset_token = None
+    user.password_reset_expires = None
+    user.failed_login_attempts = 0
+    user.locked_until = None
+    
+    _add_auth_audit(
+        db,
+        request=request,
+        event_type="RESET_PASSWORD",
+        login_identificador=user.nome,
+        detail="senha redefinida via token com sucesso",
+        success=True,
+        provider="LOCAL",
+        user=user,
+    )
+    db.commit()
+    return {"ok": True, "detail": "Senha redefinida com sucesso. Faca login com a nova senha."}
 
 
 def auth_me_service(*, actor: dict) -> dict:

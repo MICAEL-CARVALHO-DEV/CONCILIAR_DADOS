@@ -1,3 +1,13 @@
+// =============================================================
+// modalShell.js — CICLO DE VIDA DO MODAL DE EMENDA
+// Dono: Antigravity (frontend/js/ui/)
+// Responsabilidade: Gerenciar abertura, fechamento, descarte de rascunho
+//   e refresh do modal de emenda, incluindo controle de lock e sincronização.
+// Exports: SECFrontend.modalShellUtils
+//   openModal, forceCloseModal, requestCloseModal, discardModalDraftChanges,
+//   refreshOpenModalAfterSave, refreshOpenModalAfterRemoteSync
+// Nao tocar: app.js, index.html, style.css
+// =============================================================
 (function (globalScope) {
   "use strict";
 

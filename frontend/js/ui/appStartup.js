@@ -1,3 +1,13 @@
+// =============================================================
+// appStartup.js — ORQUESTRADOR DE INICIALIZACAO DA APLICACAO
+// Dono: Antigravity (frontend/js/ui/)
+// Responsabilidade: Executar a sequencia de boot da app:
+//   configureFrontendModules → loadUserConfig → bootstrapAppUi
+//   → bindUiShellEvents → bindImportControls.
+// Exports: SECFrontend.appStartupUtils
+//   initializeAppStartup(opts) — chamado uma unica vez em app.js no DOMContentLoaded.
+// Nao tocar: app.js, index.html, style.css
+// =============================================================
 (function (global) {
   "use strict";
 

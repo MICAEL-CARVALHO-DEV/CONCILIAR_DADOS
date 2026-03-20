@@ -1,3 +1,14 @@
+```
+// =============================================================
+// modalDraftState.js — CICLO DE VIDA DO RASCUNHO LOCAL DO MODAL
+// Dono: Antigravity (frontend/js/ui/)
+// Responsabilidade: Gerenciar o estado de rascunho do modal em memoria:
+//   iniciar, marcar dirty, persistir em localStorage, restaurar e limpar.
+// Ponto critico: persistModalDraftSnapshot gravara rascunho por usuario+perfil+emenda.
+//   Sempre limpar com clearPersistedModalDraft apos salvar oficialmente.
+// Exports: SECFrontend.modalDraftStateUtils (15 funcoes)
+// Nao tocar: app.js, index.html, style.css
+// =============================================================
 (function (globalScope) {
   "use strict";
 

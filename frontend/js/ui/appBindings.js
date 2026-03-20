@@ -1,3 +1,24 @@
+// =============================================================
+// appBindings.js — BINDING DE EVENTOS DO SHELL PRINCIPAL
+// Dono: Antigravity (frontend/js/ui/)
+// Responsabilidade: Centraliza todos os addEventListener do shell:
+//   sidebar (toggle, foco-forte, menu usuario), temas, Escape / beforeunload,
+//   modal de emenda (salvar / fechar / autosave), marcacao de status,
+//   exportacoes (individual, atuais, historico, personalizado),
+//   perfil, troca de senha, aprovacao de usuarios pendentes.
+//   Nao possui logica de negocio — apenas binding de UI.
+// Contrato de opts (bindUiShellEvents): render, debounce, openProfileModal,
+//   openChangePasswordModal, logoutCurrentUser, redirectToAuth,
+//   requestCloseModal, saveModalDraftChanges, forceCloseModal,
+//   updateModalDraftUi, scheduleModalAutosave, hasPendingModalDraft,
+//   showModalSaveFeedback, flushModalAutosave, getSelected, canMutateRecords,
+//   getReadOnlyRoleMessage, normalizeStatus, exportOne, runExportAtuais,
+//   runExportHistorico, runCustomExport, approvePendingUser, rejectPendingUser,
+//   + referencias a elementos DOM (btnSidebarToggle, modal, markStatus, etc.).
+// Exports: SECFrontend.appBindingsUtils
+//   bindUiShellEvents(opts) -> void
+// Nao tocar: app.js, index.html, style.css
+// =============================================================
 (function (global) {
   var root = global.SECFrontend = global.SECFrontend || {};
 
@@ -28,6 +49,8 @@
     var canMutateRecords = typeof opts.canMutateRecords === "function" ? opts.canMutateRecords : function () { return false; };
     var getReadOnlyRoleMessage = typeof opts.getReadOnlyRoleMessage === "function" ? opts.getReadOnlyRoleMessage : function () { return ""; };
     var normalizeStatus = typeof opts.normalizeStatus === "function" ? opts.normalizeStatus : function (value) { return value; };
+    var btnCreateEmenda = opts.btnCreateEmenda || null;
+    var openCreateModal = typeof opts.openCreateModal === "function" ? opts.openCreateModal : noop;
     var btnMarkStatus = opts.btnMarkStatus || null;
     var markStatus = opts.markStatus || null;
     var markReason = opts.markReason || null;
@@ -51,6 +74,8 @@
     var exportCustomStatus = opts.exportCustomStatus || null;
     var exportCustomDeputado = opts.exportCustomDeputado || null;
     var exportCustomMunicipio = opts.exportCustomMunicipio || null;
+    var exportCustomDataInicio = opts.exportCustomDataInicio || null;
+    var exportCustomDataFim = opts.exportCustomDataFim || null;
     var exportCustomIncludeOld = opts.exportCustomIncludeOld || null;
     var btnProfileClose = opts.btnProfileClose || null;
     var btnProfileCloseX = opts.btnProfileCloseX || null;
@@ -61,6 +86,9 @@
     var closeChangePasswordModal = typeof opts.closeChangePasswordModal === "function" ? opts.closeChangePasswordModal : noop;
     var changePasswordModal = opts.changePasswordModal || null;
     var changePasswordForm = opts.changePasswordForm || null;
+    var changePasswordCurrent = global.document ? global.document.getElementById("changePasswordCurrent") : null;
+    var changePasswordNew = global.document ? global.document.getElementById("changePasswordNew") : null;
+    var changePasswordConfirm = global.document ? global.document.getElementById("changePasswordConfirm") : null;
     var btnChangePasswordSubmit = opts.btnChangePasswordSubmit || null;
     var submitChangePassword = typeof opts.submitChangePassword === "function" ? opts.submitChangePassword : function () { return Promise.resolve(); };
     var btnPendingApprovals = opts.btnPendingApprovals || null;
@@ -195,6 +223,20 @@
         closeSidebarUserMenu();
         openChangePasswordModal();
       });
+    }
+
+    if (changePasswordNew) {
+      changePasswordNew.addEventListener("input", function () {
+        const val = changePasswordNew.value || "";
+        document.getElementById("reqLenChange").classList.toggle("valid", val.length >= 8);
+        document.getElementById("reqUpperChange").classList.toggle("valid", /[A-Z]/.test(val));
+        document.getElementById("reqLowerChange").classList.toggle("valid", /[a-z]/.test(val));
+        document.getElementById("reqNumChange").classList.toggle("valid", /[0-9]/.test(val));
+        document.getElementById("reqSpecChange").classList.toggle("valid", /[@$!%*#?&]/.test(val));
+      });
+    }
+
+    if (changePasswordForm) {
     }
     if (btnLogout) {
       btnLogout.addEventListener("click", async function () {
@@ -348,6 +390,12 @@
       });
     }
 
+    if (btnCreateEmenda) {
+      btnCreateEmenda.addEventListener("click", function () {
+        openCreateModal();
+      });
+    }
+
     if (btnExportOne) {
       btnExportOne.addEventListener("click", async function () {
         await exportOne();
@@ -375,6 +423,8 @@
           status: exportCustomStatus ? exportCustomStatus.value : "",
           deputado: exportCustomDeputado ? String(exportCustomDeputado.value || "").trim() : "",
           municipio: exportCustomMunicipio ? String(exportCustomMunicipio.value || "").trim() : "",
+          dataInicio: exportCustomDataInicio ? String(exportCustomDataInicio.value || "").trim() : "",
+          dataFim: exportCustomDataFim ? String(exportCustomDataFim.value || "").trim() : "",
           include_old: !!(exportCustomIncludeOld && exportCustomIncludeOld.checked)
         };
         var ok = await runCustomExport(filters);
@@ -392,6 +442,8 @@
     if (exportCustomStatus) exportCustomStatus.addEventListener("change", refreshCustomExportSummary);
     if (exportCustomDeputado) exportCustomDeputado.addEventListener("input", debounce(refreshCustomExportSummary, 120));
     if (exportCustomMunicipio) exportCustomMunicipio.addEventListener("input", debounce(refreshCustomExportSummary, 120));
+    if (exportCustomDataInicio) exportCustomDataInicio.addEventListener("change", refreshCustomExportSummary);
+    if (exportCustomDataFim) exportCustomDataFim.addEventListener("change", refreshCustomExportSummary);
     if (exportCustomIncludeOld) exportCustomIncludeOld.addEventListener("change", refreshCustomExportSummary);
 
     if (btnProfileClose) btnProfileClose.addEventListener("click", closeProfileModal);
@@ -456,4 +508,4 @@
   root.appBindingsUtils = {
     bindUiShellEvents: bindUiShellEvents
   };
-})(window);
+})(typeof window !== "undefined" ? window : globalThis);

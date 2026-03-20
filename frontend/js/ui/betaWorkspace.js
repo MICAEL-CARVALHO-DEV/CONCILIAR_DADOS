@@ -1,3 +1,13 @@
+// =============================================================
+// betaWorkspace.js — SHELL DE ABAS DO BETA WORKSPACE
+// Dono: Antigravity (frontend/js/ui/)
+// Responsabilidade: Renderizar o shell de abas (Historico, PowerBI, Suporte, Imports)
+//   e despachar o render correto para cada aba via callbacks de opts.
+// Nao quebrar: IDs congelados em checks/@front_beta.md
+// Nao tocar: app.js, index.html, style.css
+// Contrato: recebe filteredRows e opts com renderHistory, renderPowerBi,
+//   renderSupport, renderImports como callbacks. Nao possui logica de negocio propria.
+// =============================================================
 (function (global) {
   var root = global.SECFrontend = global.SECFrontend || {};
 
@@ -71,7 +81,7 @@
     target.appendChild(head);
 
     var panel = document.createElement("div");
-    panel.className = "beta-tab-panel";
+    panel.className = "beta-tab-panel beta-workspace-panel";
     target.appendChild(panel);
 
     if (activeTab === "imports" && showImportGovernance) {

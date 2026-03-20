@@ -109,6 +109,7 @@
         <section class="app-sidebar-panel app-sidebar-actions-panel">
           <span class="app-panel-label">Operacao</span>
           <div class="actions app-sidebar-actions">
+            <button id="btnCreateEmenda" class="btn primary">Nova Emenda</button>
             <label class="btn primary file-btn" for="fileCsv">Importar XLSX</label>
             <input id="fileCsv" type="file" accept=".xlsx" />
             <button id="btnExportAtuais" class="btn primary">Exportar (Atuais)</button>
@@ -347,7 +348,7 @@
       <div class="modal-head">
         <div>
           <h3 id="exportCustomTitle">Exportacao personalizada</h3>
-          <p class="muted">Defina filtros para gerar um XLSX sob medida.</p>
+          <p class="muted">Defina periodo e recorte para gerar um XLSX enxuto, pronto para consumo analitico e Power BI.</p>
         </div>
         <button id="btnExportCustomClose" class="icon-btn" title="Fechar" aria-label="Fechar modal">x</button>
       </div>
@@ -368,6 +369,14 @@
           <div class="field">
             <label for="exportCustomMunicipio">Municipio</label>
             <input id="exportCustomMunicipio" placeholder="Ex.: Salvador" />
+          </div>
+          <div class="field">
+            <label for="exportCustomDataInicio">Data Início</label>
+            <input type="date" id="exportCustomDataInicio" />
+          </div>
+          <div class="field">
+            <label for="exportCustomDataFim">Data Fim</label>
+            <input type="date" id="exportCustomDataFim" />
           </div>
         </div>
         <label class="export-checkbox">
@@ -444,6 +453,13 @@
               <label for="changePasswordConfirm">Confirmar nova senha</label>
               <input id="changePasswordConfirm" type="password" autocomplete="new-password" />
             </div>
+          </div>
+          <div class="password-requirements" id="passReqsChange">
+            <div class="req-item" id="reqLenChange">Mínimo 8 caracteres</div>
+            <div class="req-item" id="reqUpperChange">Letra maiúscula</div>
+            <div class="req-item" id="reqLowerChange">Letra minúscula</div>
+            <div class="req-item" id="reqNumChange">Número</div>
+            <div class="req-item" id="reqSpecChange">Caractere especial (@$!%*#?&)</div>
           </div>
           <p id="changePasswordMessage" class="muted small"></p>
         </div>
@@ -525,6 +541,7 @@
           "frontend/js/ui/modalSections.js?v=" + encodeURIComponent(appVer),
           "frontend/js/ui/auxModals.js?v=" + encodeURIComponent(appVer),
           "frontend/js/ui/pendingUsers.js?v=" + encodeURIComponent(appVer),
+          "frontend/js/ui/modalCreate.js?v=" + encodeURIComponent(appVer),
           "frontend/js/ui/betaData.js?v=" + encodeURIComponent(appVer),
           "frontend/js/ui/betaSync.js?v=" + encodeURIComponent(appVer),
           "frontend/js/ui/betaHistory.js?v=" + encodeURIComponent(appVer),

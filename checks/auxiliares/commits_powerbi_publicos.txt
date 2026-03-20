@@ -1,0 +1,3 @@
+﻿31d7e29 feat(powerbi): export enxuto, mapa interativo e calibracao desktop 1366-1920
+b7b26df refactor(front): extract powerbi data module
+5ad4b9e refactor(front): extract beta powerbi panel module

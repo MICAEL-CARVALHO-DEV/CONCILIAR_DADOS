@@ -98,6 +98,42 @@
     }).join("") + '</div>';
   }
 
+  function buildImportFlowBannerHtml(report, escapeHtmlFn) {
+    var escapeHtml = typeof escapeHtmlFn === "function" ? escapeHtmlFn : escape;
+    var source = report && typeof report === "object" ? report : {};
+    var applyPending = !!source.applyPending;
+    var applyResult = source.applyResult && typeof source.applyResult === "object" ? source.applyResult : null;
+    var activeStep = applyPending ? "revisao" : (applyResult ? "aplicar" : "preview");
+    var title = applyPending
+      ? "Preview aguardando revisao"
+      : (applyResult ? "Lote ja aplicado" : "Fluxo oficial preparado para leitura");
+    var subtitle = applyPending
+      ? "Revise as linhas, confirme os impactos e depois aplique na base oficial."
+      : (applyResult
+        ? "A importacao foi gravada com trilha de governanca e reflexo operacional."
+        : "A leitura do arquivo cai primeiro em preview, depois em revisao e so entao no apply.");
+
+    return ''
+      + '<section class="import-flow-banner">'
+      + '  <div class="import-flow-banner-copy">'
+      + '    <span class="import-flow-kicker">U02 | governanca de import</span>'
+      + '    <h4>' + escapeHtml(title) + '</h4>'
+      + '    <p class="muted small">' + escapeHtml(subtitle) + '</p>'
+      + '  </div>'
+      + '  <div class="import-flow-stepper" aria-label="Fluxo preview revisao aplicar">'
+      + '    <span class="import-flow-step ' + (activeStep === "preview" ? "is-active" : "is-done") + '">'
+      + '      <strong>1</strong><span>Preview</span><small>leitura e reflexo</small>'
+      + '    </span>'
+      + '    <span class="import-flow-step ' + (activeStep === "revisao" ? "is-active" : (activeStep === "aplicar" ? "is-done" : "")) + '">'
+      + '      <strong>2</strong><span>Revisao</span><small>conferir linhas</small>'
+      + '    </span>'
+      + '    <span class="import-flow-step ' + (activeStep === "aplicar" ? "is-active" : (applyResult ? "is-done" : "")) + '">'
+      + '      <strong>3</strong><span>Aplicar</span><small>base oficial</small>'
+      + '    </span>'
+      + '  </div>'
+      + '</section>';
+  }
+
   function safeBuildRecordPlanilha1Aoa(lastImportedPlanilha1Aoa, buildPlanilha1AoaFn, records) {
     if (safeArr(lastImportedPlanilha1Aoa).length) return lastImportedPlanilha1Aoa;
     if (typeof buildPlanilha1AoaFn === "function") return buildPlanilha1AoaFn(records || []);
@@ -124,15 +160,19 @@
     });
 
     var html = ""
-      + "<h4>Revisao antes do apply</h4>"
-      + "<p class=\"muted small\">Confira o reflexo linha a linha antes de gravar na base oficial.</p>"
+      + "<section class=\"import-review-card\">"
+      + "  <div class=\"import-review-head\">"
+      + "    <span class=\"import-flow-kicker\">Revisao governada</span>"
+      + "    <h4>Revisao antes do apply</h4>"
+      + "    <p class=\"muted small\">Confira o reflexo linha a linha antes de gravar na base oficial.</p>"
+      + "  </div>"
       + buildMetricGridHtml(metricItems.length ? metricItems : [{ label: "Linhas mapeadas", value: rowDetails.length }], escapeHtml);
 
     if (newRowsPreview.length) {
       html += ""
-        + "<div style=\"margin-top:12px\">"
-        + "  <h4 style=\"margin-bottom:8px\">Novos registros previstos</h4>"
-        + "  <div class=\"table-wrap\"><table class=\"table\" style=\"min-width:760px\"><thead><tr><th>Ordem</th><th>Aba</th><th>Linha</th><th>ID</th><th>Identificacao</th><th>Deputado</th><th>Municipio</th></tr></thead><tbody>";
+        + "<div class=\"import-review-section\">"
+        + "  <h4>Novos registros previstos</h4>"
+        + "  <div class=\"table-wrap import-review-table-wrap\"><table class=\"table\" style=\"min-width:760px\"><thead><tr><th>Ordem</th><th>Aba</th><th>Linha</th><th>ID</th><th>Identificacao</th><th>Deputado</th><th>Municipio</th></tr></thead><tbody>";
       newRowsPreview.slice(0, 20).forEach(function (item) {
         html += ""
           + "<tr>"
@@ -149,9 +189,9 @@
     }
 
     html += ""
-      + "<div style=\"margin-top:12px\">"
-      + "  <h4 style=\"margin-bottom:8px\">Linhas revisadas</h4>"
-      + "  <div class=\"table-wrap\"><table class=\"table\" style=\"min-width:860px\"><thead><tr><th>Ordem</th><th>Aba</th><th>Linha</th><th>Status</th><th>ID</th><th>Ref</th><th>Mensagem</th></tr></thead><tbody>";
+      + "<div class=\"import-review-section\">"
+      + "  <h4>Linhas revisadas</h4>"
+      + "  <div class=\"table-wrap import-review-table-wrap\"><table class=\"table\" style=\"min-width:860px\"><thead><tr><th>Ordem</th><th>Aba</th><th>Linha</th><th>Status</th><th>ID</th><th>Ref</th><th>Mensagem</th></tr></thead><tbody>";
 
     if (!visibleRows.length) {
       html += "<tr><td colspan=\"7\" class=\"muted small\">Sem linhas classificadas para revisao.</td></tr>";
@@ -172,9 +212,9 @@
 
     html += "</tbody></table></div>";
     if (rowDetails.length > visibleRows.length) {
-      html += "<p class=\"muted small\" style=\"margin-top:8px\">Mostrando as primeiras " + String(visibleRows.length) + " linhas do preview.</p>";
+      html += "<p class=\"muted small import-review-footnote\">Mostrando as primeiras " + String(visibleRows.length) + " linhas do preview.</p>";
     }
-    html += "</div>";
+    html += "</div></section>";
     return html;
   }
 
@@ -191,26 +231,28 @@
 
     if (localOnly) {
       return ""
-        + "<div class=\"import-governance-block\" style=\"margin-top:16px; padding:12px; background:var(--bg-layer-2); border:1px solid var(--border-color); border-radius:6px;\">"
-        + "  <h4 style=\"margin-bottom:8px;\">Modo local</h4>"
-        + "  <p class=\"muted small\" style=\"margin-bottom:0;\">" + escapeHtml(applyMessage || "Importacao isolada neste workspace, sem enviar lote para a base oficial.") + "</p>"
+        + "<div class=\"import-governance-block is-local\">"
+        + "  <span class=\"import-governance-kicker\">Modo local</span>"
+        + "  <h4>Importacao isolada</h4>"
+        + "  <p class=\"muted small\">" + escapeHtml(applyMessage || "Importacao isolada neste workspace, sem enviar lote para a base oficial.") + "</p>"
         + "</div>";
     }
 
     if (applyPending) {
       return ""
-        + "<div class=\"import-governance-block\" style=\"margin-top:16px; padding:12px; background:var(--bg-layer-2); border:1px solid var(--border-color); border-radius:6px;\">"
-        + "  <h4 style=\"margin-bottom:8px;\">Governanca do Lote</h4>"
-        + "  <p class=\"muted small\" style=\"margin-bottom:0;\">Este preview ainda nao foi aplicado. Revise o lote, valide os impactos e so depois confirme a gravacao na base oficial.</p>"
-        + (applyMessage ? ("<p class=\"muted small\" style=\"margin-top:10px; margin-bottom:0;\">" + escapeHtml(applyMessage) + "</p>") : "")
-        + (applyError ? ("<p class=\"muted small\" style=\"margin-top:10px; margin-bottom:0; color:#b42318;\">" + escapeHtml(applyError) + "</p>") : "")
-        + "  <div style=\"display:flex; flex-wrap:wrap; gap:8px; margin-top:12px;\">"
+        + "<div class=\"import-governance-block is-pending\">"
+        + "  <span class=\"import-governance-kicker\">Governanca do lote</span>"
+        + "  <h4>Preview aguardando aplicacao</h4>"
+        + "  <p class=\"muted small\">Este preview ainda nao foi aplicado. Revise o lote, valide os impactos e so depois confirme a gravacao na base oficial.</p>"
+        + (applyMessage ? ("<p class=\"muted small import-governance-message\">" + escapeHtml(applyMessage) + "</p>") : "")
+        + (applyError ? ("<p class=\"muted small import-governance-error\">" + escapeHtml(applyError) + "</p>") : "")
+        + "  <div class=\"import-governance-actions\">"
         + "    <button type=\"button\" class=\"import-tab-btn active\" data-import-action=\"apply-preview\"" + (applyBusy || !canApply ? " disabled" : "") + ">" + escapeHtml(applyBusy ? "Aplicando..." : "Aplicar na base oficial") + "</button>"
         + "    <button type=\"button\" class=\"import-tab-btn\" data-import-action=\"discard-preview\"" + (applyBusy ? " disabled" : "") + ">Descartar preview</button>"
         + "  </div>"
         + (canApply
-          ? "<p class=\"muted small\" style=\"margin-top:10px; margin-bottom:0;\">A aplicacao cria o lote oficial, grava as linhas de governanca e sincroniza a base central.</p>"
-          : "<p class=\"muted small\" style=\"margin-top:10px; margin-bottom:0;\">A aplicacao final exige perfil SUPERVISAO ou PROGRAMADOR.</p>")
+          ? "<p class=\"muted small import-governance-footnote\">A aplicacao cria o lote oficial, grava as linhas de governanca e sincroniza a base central.</p>"
+          : "<p class=\"muted small import-governance-footnote\">A aplicacao final exige perfil SUPERVISAO ou PROGRAMADOR.</p>")
         + "</div>";
     }
 
@@ -219,10 +261,11 @@
       : "Lote oficial aplicado e rastreado na governanca.";
 
     return ""
-      + "<div class=\"import-governance-block\" style=\"margin-top:16px; padding:12px; background:var(--bg-layer-2); border:1px solid var(--border-color); border-radius:6px;\">"
-      + "  <h4 style=\"margin-bottom:8px;\">Governanca do Lote</h4>"
-      + "  <p class=\"muted small\" style=\"margin-bottom:0;\">" + escapeHtml(applyMessage || "A importacao foi aplicada na base oficial e registrada na trilha de governanca.") + "</p>"
-      + "  <p class=\"muted small\" style=\"margin-top:10px; margin-bottom:0;\">" + appliedSummary + "</p>"
+      + "<div class=\"import-governance-block is-applied\">"
+      + "  <span class=\"import-governance-kicker\">Governanca do lote</span>"
+      + "  <h4>Aplicacao concluida</h4>"
+      + "  <p class=\"muted small\">" + escapeHtml(applyMessage || "A importacao foi aplicada na base oficial e registrada na trilha de governanca.") + "</p>"
+      + "  <p class=\"muted small import-governance-summary\">" + appliedSummary + "</p>"
       + "</div>";
   }
 
@@ -285,18 +328,21 @@
     var lastBy = last && last.actor_user ? escapeHtml(last.actor_user) + " (" + escapeHtml(last.actor_role || "") + ")" : "-";
 
     return "" +
-      '<h4>Resumo da base atual</h4>' +
-      '<p class="muted small">Sem importacao nova nesta sessao. Os dados atuais continuam ativos.</p>' +
+      '<section class="import-summary-placeholder">' +
+      '  <span class="import-flow-kicker">U02 | leitura da base atual</span>' +
+      '  <h4>Resumo da base atual</h4>' +
+      '  <p class="muted small">Sem importacao nova nesta sessao. Os dados atuais continuam ativos.</p>' +
+      buildImportFlowBannerHtml(null, escapeHtmlFn) +
       buildMetricGridHtml([
         { label: "Registros carregados", value: totalRegistros },
         { label: "Eventos no historico", value: totalEventos },
         { label: "Ultima alteracao", value: lastAt },
         { label: "Responsavel da ultima alteracao", value: lastBy }
       ], escapeHtml) +
-      '<div style="margin-top:12px">' +
-      '  <h4 style="margin-bottom:8px">Reflexo operacional em Planilha1</h4>' +
+      '<div class="import-review-section">' +
+      '  <h4>Reflexo operacional em Planilha1</h4>' +
       planilha1Html +
-      '</div>';
+      '</div></section>';
   }
 
   function buildImportSummaryHtml(report, stateRecords, lastImportedPlanilha1Aoa, escapeHtmlFn, fmtDateTimeFn, buildPlanilha1AoaFn, normalizeLooseTextFn, buildPlanilha1HtmlFn) {
@@ -315,8 +361,11 @@
       (typeof buildPlanilha1HtmlFn === "function" ? buildPlanilha1HtmlFn(planilha1Aoa) : "");
 
     var htmlInicio = "" +
+      "<section class=\"import-summary-shell\">" +
+      "<span class=\"import-flow-kicker\">Importacao oficial</span>" +
       "<h4>Resumo da importacao</h4>" +
       "<p class=\"muted small\">Arquivo: " + escapeHtml(fileName) + " | Abas lidas: " + escapeHtml(sheets) + "</p>" +
+      buildImportFlowBannerHtml(report, escapeHtmlFn) +
       "<div class=\"import-tabs\" role=\"tablist\" aria-label=\"Abas do relatorio de importacao\">" +
       "  <button type=\"button\" class=\"import-tab-btn active\" data-import-tab=\"resumo\" role=\"tab\" aria-selected=\"true\">Resumo da importacao</button>" +
       "  <button type=\"button\" class=\"import-tab-btn\" data-import-tab=\"revisao\" role=\"tab\" aria-selected=\"false\">Revisao</button>" +
@@ -353,7 +402,7 @@
       "  </section>" +
       "</div>";
 
-    return htmlInicio + finishResumo;
+    return htmlInicio + finishResumo + "</section>";
   }
 
   function buildImportValidationHtml(validation, escapeHtmlFn) {
@@ -404,13 +453,19 @@
     var safeItems = safeArr(items);
     if (!safeItems.length) {
       return "" +
-        "<h4>Painel de alteracoes</h4>" +
-        "<p class=\"muted small\">Sem alteracoes registradas ainda.</p>";
+        "<div class=\"recent-panel-hero\">" +
+        "  <span class=\"import-flow-kicker\">U05 | historico unificado</span>" +
+        "  <h4>Painel de alteracoes</h4>" +
+        "  <p class=\"muted small\">Sem alteracoes registradas ainda.</p>" +
+        "</div>";
     }
 
     var html = "" +
-      "<h4>Painel de alteracoes</h4>" +
-      "<p class=\"muted small\">Ultimos " + String(safeItems.length) + " eventos registrados (inclui sessoes anteriores).</p>" +
+      "<div class=\"recent-panel-hero\">" +
+      "  <span class=\"import-flow-kicker\">U05 | historico unificado</span>" +
+      "  <h4>Painel de alteracoes</h4>" +
+      "  <p class=\"muted small\">Ultimos " + String(safeItems.length) + " eventos registrados (inclui sessoes anteriores).</p>" +
+      "</div>" +
       "<div class=\"recent-list\">";
 
     safeItems.forEach(function (item) {

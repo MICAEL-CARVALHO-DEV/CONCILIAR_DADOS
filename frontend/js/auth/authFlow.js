@@ -105,6 +105,13 @@
     try {
       me = await ctx.apiRequest("GET", "/auth/me");
     } catch (authErr) {
+      if (authErr && (authErr.status === 403 || authErr.message.indexOf("403") >= 0)) {
+        ctx.clearStoredSessionToken();
+        ctx.closeApiSocket();
+        ctx.redirectToAuth(ctx.authLoginPage, "msg=" + encodeURIComponent("Acesso restrito (403). Seu perfil nao tem permissao para acessar."));
+        return;
+      }
+
       if (isLocalFrontendContext(ctx)) {
         try {
           ctx.writeApiBaseUrl("http://127.0.0.1:8000");

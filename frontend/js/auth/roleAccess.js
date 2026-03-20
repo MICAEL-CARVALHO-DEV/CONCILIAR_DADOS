@@ -13,7 +13,25 @@
   }
 
   function isOperationalRoleUser(ctx) {
+    if (ctx && ctx.sessionMeta && Array.isArray(ctx.sessionMeta.permissions) && ctx.sessionMeta.permissions.indexOf("OPERATIONAL") >= 0) {
+      return true;
+    }
     return ["APG", "SUPERVISAO", "POWERBI", "PROGRAMADOR"].indexOf(String((ctx || {}).currentRole || "").trim().toUpperCase()) >= 0;
+  }
+
+  function hasPermission(ctx, permString) {
+    if (!ctx || !permString) return false;
+    if (ctx.sessionMeta && Array.isArray(ctx.sessionMeta.permissions)) {
+      return ctx.sessionMeta.permissions.indexOf(permString) >= 0;
+    }
+    return false;
+  }
+
+  function getUserScope(ctx) {
+    if (ctx && ctx.sessionMeta && typeof ctx.sessionMeta.scope === "object") {
+      return ctx.sessionMeta.scope;
+    }
+    return null;
   }
 
   function isSupportManagerUser(ctx) {
@@ -95,7 +113,9 @@
     canUseSupportApi: canUseSupportApi,
     canImportData: canImportData,
     canApplyImportGovernance: canApplyImportGovernance,
-    canMutateRecords: canMutateRecords
+    canMutateRecords: canMutateRecords,
+    hasPermission: hasPermission,
+    getUserScope: getUserScope
   };
 })(typeof window !== "undefined" ? window : globalThis);
 

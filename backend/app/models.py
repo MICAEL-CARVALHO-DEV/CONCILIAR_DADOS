@@ -22,6 +22,10 @@ class Usuario(Base):
     senha_hash: Mapped[str] = mapped_column(String(255), default="", nullable=False)
     ativo: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     status_cadastro: Mapped[str] = mapped_column(String(20), default="APROVADO", nullable=False)
+    failed_login_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    password_reset_token: Mapped[Optional[str]] = mapped_column(String(255), index=True, nullable=True)
+    password_reset_expires: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     ultimo_login: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
@@ -261,4 +265,3 @@ class SupportMessage(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     thread: Mapped["SupportThread"] = relationship(back_populates="mensagens")
-

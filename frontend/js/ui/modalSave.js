@@ -1,3 +1,13 @@
+// =============================================================
+// modalSave.js — FLUXO DE SALVAMENTO OFICIAL DO MODAL
+// Dono: Antigravity (frontend/js/ui/)
+// Responsabilidade: Orquestrar o salvamento de rascunho local para o estado
+//   oficial (localStorage + API), com autosave debounced e feedback visual.
+// Ponto critico: saveModalDraftChanges usa lock de promise para evitar double-save.
+//   Sempre aguardar a promise antes de executar outra acao de save.
+// Exports: SECFrontend.modalSaveUtils (7 funcoes)
+// Nao tocar: app.js, index.html, style.css
+// =============================================================
 (function (globalScope) {
   "use strict";
 

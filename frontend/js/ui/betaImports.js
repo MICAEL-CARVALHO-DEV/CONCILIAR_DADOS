@@ -1,3 +1,15 @@
+// =============================================================
+// betaImports.js — PAINEL DE GOVERNANÇA DE IMPORTS (UI)
+// Dono: Antigravity (frontend/js/ui/)
+// Responsabilidade: Renderizar a aba "Governança de Imports" —
+//   lista de lotes, detalhe de linhas, auditoria e ações de governança.
+// Contrato com importControls.js:
+//   - importControls.js → responsável pelo FLUXO de importação (upload, preview, apply)
+//   - betaImports.js → responsável pela VIEW de lotes já importados (lista, linhas, logs)
+//   - NÃO duplicar lógica de upload/preview aqui
+// Nao quebrar: IDs congelados em checks/@front_beta.md
+// Nao tocar: app.js, index.html, style.css
+// =============================================================
 (function (global) {
   var root = global.SECFrontend = global.SECFrontend || global.SEC_FRONTEND || {};
   global.SEC_FRONTEND = root;
@@ -149,7 +161,7 @@
     introTitle.textContent = "Governanca de imports";
     var introText = document.createElement("p");
     introText.className = "muted small";
-    introText.textContent = "Fluxo operacional unificado: usuarios operacionais podem importar, corrigir e remover imports com trilha de auditoria.";
+    introText.textContent = "Fluxo operacional unificado: preview -> revisao -> apply, com trilha de auditoria para usuarios operacionais.";
     intro.appendChild(introTitle);
     intro.appendChild(introText);
     target.appendChild(intro);

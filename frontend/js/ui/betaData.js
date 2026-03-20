@@ -1,3 +1,25 @@
+// =============================================================
+// betaData.js — TRANSFORMACOES DE DADOS DE AUDITORIA E SUPORTE
+// Dono: Antigravity (frontend/js/ui/)
+// Responsabilidade: Camada de transformacao de dados pura (sem renderizacao).
+//   Flatten de eventos locais para linhas de auditoria, filtros compostos,
+//   construcao de blobs de busca, opcoes de mes/ano e queries de suporte.
+//   Nao possui efeitos colaterais de DOM.
+// Contrato de contexto (ctx): text, normalizeLooseText, filters,
+//   canViewGlobalAuditApi, getBetaAuditRows, getBackendIdForRecord,
+//   findRecordByBackendId, isSupportManagerUser, getSupportFilters, supportLimit.
+// Exports: SECFrontend.betaDataUtils
+//   flattenLocalAuditRows(records, ctx) -> AuditRow[]
+//   buildAuditMonthOptions(rows, yearValue, ctx) -> {label,value}[]
+//   applyBetaAuditFilters(rows, ctx) -> AuditRow[]
+//   getVisibleAuditRows(filteredRows, ctx) -> {source, rows}
+//   getAuditRecordMeta(row, ctx) -> {code, detail}
+//   getSupportScopeValue(ctx) -> "mine"|"all"
+//   getSupportThreadEmendaLabel(thread, ctx) -> string
+//   buildSupportUserOptions(threads, ctx) -> string[]
+//   buildSupportApiQuery(ctx) -> URLSearchParams string
+// Nao tocar: app.js, index.html, style.css
+// =============================================================
 (function (globalScope) {
   "use strict";
 

@@ -1,3 +1,14 @@
+// =============================================================
+// metrics.js — METRICAS DE PROGRESSO E CHIPS DE MEMBRO
+// Dono: Antigravity (frontend/js/ui/)
+// Responsabilidade: Calcular e renderizar progresso de emendas por usuario,
+//   chips visuais de membro, barra de progresso e alertas de atencao.
+// Exports: SECFrontend.progressUtils
+//   getActiveUsersWithLastMark, calcProgress, getAttentionIssues,
+//   getGlobalProgressState, renderMemberChips, renderProgressBar,
+//   lastEventAt, daysSince, whoIsDelaying
+// Nao tocar: app.js, index.html, style.css
+// =============================================================
 (function (win) {
   const SECFrontend = (win && win.SECFrontend && typeof win.SECFrontend === "object") ? win.SECFrontend : (win.SECFrontend = {});
 
@@ -184,15 +195,15 @@
   }
 
   SECFrontend.progressUtils = {
-    getActiveUsersWithLastMark,
-    calcProgress,
-    getAttentionIssues,
-    getGlobalProgressState,
-    getInitials,
-    renderMemberChips,
-    renderProgressBar,
-    lastEventAt,
-    daysSince,
-    whoIsDelaying
+    getActiveUsersWithLastMark: getActiveUsersWithLastMark,
+    calcProgress: calcProgress,
+    getAttentionIssues: getAttentionIssues,
+    getGlobalProgressState: getGlobalProgressState,
+    getInitials: getInitials,
+    renderMemberChips: renderMemberChips,
+    renderProgressBar: renderProgressBar,
+    lastEventAt: lastEventAt,
+    daysSince: daysSince,
+    whoIsDelaying: whoIsDelaying
   };
 })(typeof window !== "undefined" ? window : globalThis);

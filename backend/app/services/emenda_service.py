@@ -469,19 +469,29 @@ def liberar_lock_emenda_service(*, emenda_id: int, actor: dict, db: Session) -> 
 
 def criar_emenda_service(
     *,
-    payload,
+    payload: EmendaCreate,
     actor: dict,
     event_origin: str,
     db: Session,
     broadcast_update: Callable[[str, int | None], None],
 ) -> Emenda:
-    exists = db.query(Emenda).filter(Emenda.id_interno == payload.id_interno).first()
+    id_interno = (payload.id_interno or "").strip()
+    if not id_interno:
+        # Gera ID automatico: EPI-ANO-MAN-COUNT
+        count = db.query(Emenda).filter(Emenda.ano == payload.ano).count()
+        id_interno = f"EPI-{payload.ano}-MAN-{count + 1:04d}"
+        
+    exists = db.query(Emenda).filter(Emenda.id_interno == id_interno).first()
     if exists:
-        raise HTTPException(status_code=409, detail="id_interno ja existe")
+        # Se o sequencial falhar (concorrencia), usa timestamp
+        if not payload.id_interno:
+            id_interno = f"EPI-{payload.ano}-MAN-{int(datetime.now().timestamp())}"
+        else:
+            raise HTTPException(status_code=409, detail="id_interno ja existe")
 
     now = _utcnow()
     emenda = Emenda(
-        id_interno=payload.id_interno,
+        id_interno=id_interno,
         ano=payload.ano,
         identificacao=payload.identificacao,
         cod_subfonte=payload.cod_subfonte,
@@ -498,7 +508,7 @@ def criar_emenda_service(
         valor_inicial=payload.valor_inicial,
         valor_atual=payload.valor_atual,
         processo_sei=payload.processo_sei,
-        status_oficial=payload.status_oficial,
+        status_oficial=payload.status_oficial or "Sem marcacoes",
         parent_id=None,
         version=1,
         row_version=1,
@@ -515,9 +525,9 @@ def criar_emenda_service(
             usuario_id=actor["id"],
             usuario_nome=actor["name"],
             setor=actor["role"],
-            tipo_evento="IMPORT",
+            tipo_evento="CRIACAO_MANUAL",
             origem_evento=event_origin,
-            motivo="Criacao inicial",
+            motivo="Criacao manual via interface.",
         )
     )
     db.commit()

@@ -30,6 +30,7 @@ EVENT_TYPES = {
     "EDIT_FIELD",
     "NOTE",
     "VERSIONAR",
+    "CRIACAO_MANUAL",
 }
 
 EXPORT_SCOPES = {"ATUAIS", "HISTORICO", "PERSONALIZADO"}
@@ -123,6 +124,11 @@ class AuthRecoveryRequestIn(BaseModel):
     identificador: str = Field(min_length=2, max_length=255)
 
 
+class AuthResetPasswordIn(BaseModel):
+    token: str
+    nova_senha: str = Field(min_length=2, max_length=255)
+
+
 class AuthChangePasswordIn(BaseModel):
     senha_atual: str = Field(min_length=4, max_length=120)
     nova_senha: str = Field(min_length=4, max_length=120)
@@ -154,7 +160,7 @@ class AuthAuditLogOut(BaseModel):
 
 
 class EmendaCreate(BaseModel):
-    id_interno: str
+    id_interno: str = ""
     ano: int
     identificacao: str
     cod_subfonte: str = ""

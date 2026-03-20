@@ -1,3 +1,13 @@
+// =============================================================
+// modalSections.js — SECOES INTERNAS DO MODAL DE EMENDA
+// Dono: Antigravity (frontend/js/ui/)
+// Responsabilidade: Atualizar as secoes do modal (cabecalho, campos KV readonly,
+//   historico, progresso, membros, conflitos e perfil de acesso).
+// Exports: SECFrontend.modalSectionsUtils
+//   refreshModalSections, refreshModalRecordHeader,
+//   syncModalReadonlyFieldValues, renderHistoryFallback
+// Nao tocar: app.js, index.html, style.css
+// =============================================================
 (function (global) {
   var root = global.SECFrontend = global.SECFrontend || {};
 

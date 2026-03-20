@@ -12,6 +12,8 @@ from ..schemas import (
     AuthOut,
     AuthRecoveryRequestIn,
     AuthRegisterIn,
+    AuthResetPasswordIn,
+    UserAdminOut,
     UserAdminOut,
     UserOut,
     UserStatusUpdate,
@@ -47,6 +49,10 @@ def create_auth_router(broadcast_update) -> APIRouter:
     @router.post("/auth/recovery-request")
     def auth_recovery_request(payload: AuthRecoveryRequestIn, request: Request, db=Depends(get_db)):
         return auth_service.auth_recovery_request_service(payload=payload, request=request, db=db)
+
+    @router.post("/auth/reset-password")
+    def auth_reset_password(payload: AuthResetPasswordIn, request: Request, db=Depends(get_db)):
+        return auth_service.auth_reset_password_service(payload=payload, request=request, db=db)
 
     @router.post("/auth/change-password")
     def auth_change_password(payload: AuthChangePasswordIn, request: Request, actor: dict = Depends(_actor_from_headers), db=Depends(get_db)):

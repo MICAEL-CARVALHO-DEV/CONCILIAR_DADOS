@@ -1,3 +1,22 @@
+// =============================================================
+// betaSupport.js — PAINEL DE SUPORTE E MONITOR DE CUSTOS
+// Dono: Antigravity (frontend/js/ui/)
+// Responsabilidade: Renderiza o painel de suporte (chamados, respostas,
+//   inbox do programador) e o Monitor de Limites (Cloudflare / Render /
+//   Supabase). Estado de custo persiste em localStorage.
+// Contrato de opts (renderBetaSupportPanel): text, fmtDateTime,
+//   normalizeLooseText, setSelectOptions, apiRequest, isSupportManagerUser,
+//   canUseSupportApi, isApiEnabled, getSupportScopeValue, refreshSupportFromApi,
+//   refreshSupportMessagesFromApi, rerender, setSupportFilters,
+//   setSelectedThreadId, setLastRequest, setMessagesError,
+//   threads, messages, filters, lastRequest, supportCategories,
+//   supportThreadStatus, supportFilterDefaults, selectedThreadId,
+//   loading, messagesLoading, error, messagesError, lastSyncAt.
+// Exports: SECFrontend.betaSupportUtils
+//   buildSupportUserOptions(threads, textFn) -> string[]
+//   renderBetaSupportPanel(target, filteredRows, opts) -> void
+// Nao tocar: app.js, index.html, style.css
+// =============================================================
 (function (global) {
   var root = global.SECFrontend = global.SECFrontend || {};
   var COST_MONITOR_STORAGE_KEY = "SEC_BETA_COST_MONITOR";
@@ -707,10 +726,10 @@
       loading.textContent = "Carregando chamados...";
       threadList.appendChild(loading);
     } else if (!threads.length) {
-      var empty = document.createElement("p");
-      empty.className = "beta-empty";
-      empty.textContent = "Nenhum chamado encontrado para o filtro atual.";
-      threadList.appendChild(empty);
+      var emptyMsg = document.createElement("p");
+      emptyMsg.className = "beta-empty";
+      emptyMsg.textContent = "Nenhum chamado encontrado para o filtro atual.";
+      threadList.appendChild(emptyMsg);
     } else {
       threads.forEach(function (thread) {
         var button = document.createElement("button");
@@ -914,4 +933,4 @@
     buildSupportUserOptions: buildSupportUserOptions,
     renderBetaSupportPanel: renderBetaSupportPanel
   };
-})(window);
+})(typeof window !== "undefined" ? window : globalThis);

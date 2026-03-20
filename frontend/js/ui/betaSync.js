@@ -1,3 +1,11 @@
+// =============================================================
+// betaSync.js — PAINEL DE SINCRONIZACAO BETA (UI)
+// Dono: Antigravity (frontend/js/ui/)
+// Responsabilidade: Renderizar o painel de controle de sincronizacao
+//   com a API, mostrando status, progresso e erros de sync por lote.
+// Exports: SECFrontend.betaSyncUtils
+// Nao tocar: app.js, index.html, style.css
+// =============================================================
 (function (global) {
   var root = global.SECFrontend = global.SECFrontend || {};
 

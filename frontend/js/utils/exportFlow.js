@@ -16,6 +16,8 @@
       var status = String(filters.status || "").trim();
       var deputado = String(filters.deputado || "").trim();
       var municipio = String(filters.municipio || "").trim();
+      var dataInicio = String(filters.dataInicio || "").trim();
+      var dataFim = String(filters.dataFim || "").trim();
       var includeOld = !!filters.include_old;
 
       return list.filter(function (record) {
@@ -26,6 +28,15 @@
         }
         if (typeof dep.matchesTextFilter === "function" && !dep.matchesTextFilter(record && record.deputado, deputado)) return false;
         if (typeof dep.matchesTextFilter === "function" && !dep.matchesTextFilter(record && record.municipio, municipio)) return false;
+        
+        if (dataInicio || dataFim) {
+          var recDate = record && record.updated_at ? String(record.updated_at).substring(0, 10) : "";
+          if (recDate) {
+            if (dataInicio && recDate < dataInicio) return false;
+            if (dataFim && recDate > dataFim) return false;
+          }
+        }
+        
         return true;
       });
     }

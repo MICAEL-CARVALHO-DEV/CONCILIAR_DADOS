@@ -63,6 +63,10 @@ RE_EMAIL = re.compile(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", re.IGNORECASE)
 RE_CPF = re.compile(r"\b\d{3}\.?\d{3}\.?\d{3}-?\d{2}\b")
 RE_CNPJ = re.compile(r"\b\d{2}\.?\d{3}\.?\d{3}/?\d{4}-?\d{2}\b")
 RE_BEARER_OR_JWT = re.compile(r"(?i)(bearer\s+[a-z0-9\-._~+/]+=*|eyJ[a-zA-Z0-9_\-\.]{20,})")
+RE_PWD_UPPER = re.compile(r"[A-Z]")
+RE_PWD_LOWER = re.compile(r"[a-z]")
+RE_PWD_DIGIT = re.compile(r"\d")
+RE_PWD_SPECIAL = re.compile(r"[!@#$%^&*(),.?\":{}|<>]")
 GOOGLE_TOKENINFO_HOST = "oauth2.googleapis.com"
 GOOGLE_TOKENINFO_PATH = "/tokeninfo"
 
@@ -77,6 +81,20 @@ def _hash_text(value: str) -> str:
 
 def _hash_password(password: str) -> str:
     return pwd_context.hash(password)
+
+
+def _validate_password_complexity(password: str) -> None:
+    pwd = (password or "").strip()
+    if len(pwd) < 8:
+        raise HTTPException(status_code=400, detail="A senha deve ter pelo menos 8 caracteres.")
+    if not RE_PWD_UPPER.search(pwd):
+        raise HTTPException(status_code=400, detail="A senha deve conter pelo menos uma letra maiuscula.")
+    if not RE_PWD_LOWER.search(pwd):
+        raise HTTPException(status_code=400, detail="A senha deve conter pelo menos uma letra minuscula.")
+    if not RE_PWD_DIGIT.search(pwd):
+        raise HTTPException(status_code=400, detail="A senha deve conter pelo menos um numero.")
+    if not RE_PWD_SPECIAL.search(pwd):
+        raise HTTPException(status_code=400, detail="A senha deve conter pelo menos um caractere especial.")
 
 
 def _validated_google_tokeninfo_url(raw_url: str) -> str:

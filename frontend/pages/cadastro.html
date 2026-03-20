@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
@@ -76,6 +76,14 @@
                 <span class="login-input-icon" aria-hidden="true">🔐</span>
                 <input id="senha2" type="password" autocomplete="new-password" placeholder="Confirmar senha" aria-label="Confirmar senha" required />
               </div>
+            </div>
+
+            <div class="password-requirements" id="passReqs">
+              <div class="req-item" id="reqLen">Mínimo 8 caracteres</div>
+              <div class="req-item" id="reqUpper">Letra maiúscula</div>
+              <div class="req-item" id="reqLower">Letra minúscula</div>
+              <div class="req-item" id="reqNum">Número</div>
+              <div class="req-item" id="reqSpec">Caractere especial (@$!%*#?&)</div>
             </div>
             <button type="submit" class="btn primary login-submit auth-submit">Criar perfil</button>
           </form>
@@ -380,6 +388,24 @@
         clearPendingGoogleRegistration();
       }
 
+      function validateComplexity(val) {
+        if (!val) {
+          document.querySelectorAll('.req-item').forEach(el => el.classList.remove('valid'));
+          return false;
+        }
+        document.getElementById("reqLen").classList.toggle("valid", val.length >= 8);
+        document.getElementById("reqUpper").classList.toggle("valid", /[A-Z]/.test(val));
+        document.getElementById("reqLower").classList.toggle("valid", /[a-z]/.test(val));
+        document.getElementById("reqNum").classList.toggle("valid", /[0-9]/.test(val));
+        document.getElementById("reqSpec").classList.toggle("valid", /[@$!%*#?&]/.test(val));
+        
+        return val.length >= 8 && /[A-Z]/.test(val) && /[a-z]/.test(val) && /[0-9]/.test(val) && /[@$!%*#?&]/.test(val);
+      }
+
+      senha.addEventListener("input", () => {
+        if (!usingGoogleRegister) validateComplexity(senha.value);
+      });
+
       // Valida credential Google no backend e preenche nome/email.
       async function prefillGoogleRegistration(credential) {
         const raw = String(credential || "").trim();
@@ -532,7 +558,12 @@
           }
           if (s1 !== s2) {
             msg.textContent = "As senhas nao conferem.";
-            msg.style.color = "#b4233d";
+            msg.className = "login-msg error small";
+            return;
+          }
+          if (!validateComplexity(s1)) {
+            msg.textContent = "A senha nao atende aos requisitos de seguranca.";
+            msg.className = "login-msg error small";
             return;
           }
         } else if (!pendingGoogleCredential) {

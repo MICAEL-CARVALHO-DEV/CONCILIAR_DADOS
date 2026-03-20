@@ -1,0 +1,24 @@
+﻿b376829 feat(beta): endurecer sync remoto e refinar operacao
+c55f657 fix(sync): endurecer bloqueio central no front oficial
+b4443c2 feat: centralize official sync flow
+4fc8298 fix(cors): liberar cloudflare pages prod e previews
+4b6c2f7 docs(beta): finalize closing checklist and unlock loa workspace
+40da0dd refactor(back): extract app factory and realtime router
+b4adf25 refactor(front): extract api sync operations module
+20897d4 refactor(front): extract modal section sync module
+5582bed refactor(front): extract api state sync module
+88a0261 refactor(front): extract beta polling sync module
+80174c3 refactor(front): extract pending users and aux modal flows
+9d959d5 refactor(back): extract operations audit and realtime services
+a1c1a61 fix(beta): disable realtime user test panel
+e293d23 test(back): align C34 lock validation with hybrid mode
+6ac6f5c refactor(front): extract canonical raw-field sync helpers
+80dffc6 refactor(front): highlight modal readonly lock state
+e52e976 refactor(front): render main table rows via uiRender
+bf9f5eb refactor(front): offload modal render blocks to uiRender
+8bbca13 refactor(front): integrar modulos base de auth api lock no frontend
+361a36c feat: lock de edicao por emenda e fluxo de orquestracao IA
+107f098 feat: restrict profile creation by role and separate owner/supervisor views
+38f62e7 chore: add one-click startup script and fix Windows front launcher
+ff2c32c feat(import): persist row-level import lines and sync from UI
+3a9ae13 feat: baseline operacional + logs de import/export + workflow e realtime

@@ -58,6 +58,229 @@
     return document.createElementNS("http://www.w3.org/2000/svg", tagName);
   }
 
+  // --- U07: Mapa Real da Bahia via GeoJSON IBGE ---
+  var BAHIA_GEOJSON_CACHE_KEY = "SEC_BAHIA_GEOJSON_CACHE";
+  var BAHIA_GEOJSON_CACHE_TTL = 86400000; // 24h em ms
+  var IBGE_GEOJSON_URL = "https://servicodados.ibge.gov.br/api/v3/malhas/estados/29?formato=application/vnd.geo%2Bjson&qualidade=minima";
+
+  function loadBahiaGeoJson(callback) {
+    try {
+      var cached = global.localStorage && global.localStorage.getItem(BAHIA_GEOJSON_CACHE_KEY);
+      if (cached) {
+        var parsed = JSON.parse(cached);
+        if (parsed && parsed.ts && (Date.now() - parsed.ts < BAHIA_GEOJSON_CACHE_TTL) && parsed.data) {
+          callback(null, parsed.data);
+          return;
+        }
+      }
+    } catch (_e) {}
+
+    if (typeof global.fetch !== "function") {
+      callback(new Error("fetch nao disponivel neste ambiente"));
+      return;
+    }
+
+    global.fetch(IBGE_GEOJSON_URL)
+      .then(function (res) {
+        if (!res.ok) throw new Error("IBGE retornou status " + res.status);
+        return res.json();
+      })
+      .then(function (geoJson) {
+        try {
+          if (global.localStorage) {
+            global.localStorage.setItem(BAHIA_GEOJSON_CACHE_KEY, JSON.stringify({ ts: Date.now(), data: geoJson }));
+          }
+        } catch (_e) {}
+        callback(null, geoJson);
+      })
+      .catch(function (err) {
+        callback(err);
+      });
+  }
+
+  function projectGeoJsonToSvg(features, viewW, viewH) {
+    // Calcula bounding box de todas as coordenadas
+    var lonMin = Infinity, lonMax = -Infinity, latMin = Infinity, latMax = -Infinity;
+    function scanCoords(coords) {
+      if (!Array.isArray(coords)) return;
+      if (typeof coords[0] === "number") {
+        if (coords[0] < lonMin) lonMin = coords[0];
+        if (coords[0] > lonMax) lonMax = coords[0];
+        if (coords[1] < latMin) latMin = coords[1];
+        if (coords[1] > latMax) latMax = coords[1];
+        return;
+      }
+      coords.forEach(scanCoords);
+    }
+    features.forEach(function (f) {
+      if (f.geometry) scanCoords(f.geometry.coordinates);
+    });
+    if (!isFinite(lonMin)) { lonMin = -46; lonMax = -36; latMin = -18; latMax = -8; }
+    var lonRange = lonMax - lonMin || 1;
+    var latRange = latMax - latMin || 1;
+    var pad = 2;
+
+    function project(lon, lat) {
+      var x = pad + ((lon - lonMin) / lonRange) * (viewW - pad * 2);
+      var y = pad + ((latMax - lat) / latRange) * (viewH - pad * 2); // Y invertido
+      return [x.toFixed(2), y.toFixed(2)];
+    }
+
+    function ringToPath(ring) {
+      return ring.map(function (pt, i) {
+        var p = project(pt[0], pt[1]);
+        return (i === 0 ? "M" : "L") + p[0] + " " + p[1];
+      }).join(" ") + " Z";
+    }
+
+    function geometryToPath(geom) {
+      if (!geom) return "";
+      if (geom.type === "Polygon") {
+        return geom.coordinates.map(ringToPath).join(" ");
+      }
+      if (geom.type === "MultiPolygon") {
+        return geom.coordinates.map(function (poly) {
+          return poly.map(ringToPath).join(" ");
+        }).join(" ");
+      }
+      return "";
+    }
+
+    return { project: project, geometryToPath: geometryToPath };
+  }
+
+  function normalizeMunName(name) {
+    return String(name || "")
+      .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9 ]/gi, "").toLowerCase().trim();
+  }
+
+  function renderMunicipioMapCardGeoJson(target, mapModel, geoJson, options) {
+    var opts = options || {};
+    var setPowerBiFilters = typeof opts.setPowerBiFilters === "function" ? opts.setPowerBiFilters : noop;
+    var rerender = typeof opts.rerender === "function" ? opts.rerender : noop;
+    var fmtMoney = typeof opts.fmtMoney === "function" ? opts.fmtMoney : safeText;
+    var filters = opts.filters && typeof opts.filters === "object" ? opts.filters : {};
+
+    var model = mapModel && typeof mapModel === "object" ? mapModel : {};
+    var points = safeArray(model.points);
+
+    // Indice de municipios por nome normalizado
+    var munIndex = {};
+    points.forEach(function (p) { munIndex[normalizeMunName(p.label)] = p; });
+
+    var maxValor = points.reduce(function (acc, p) { return Math.max(acc, toFiniteNumber(p.valor, 0)); }, 1);
+
+    function choroplethFill(valor) {
+      var intensity = clamp(toFiniteNumber(valor, 0) / maxValor, 0, 1);
+      var l = Math.round(90 - intensity * 60);
+      var s = Math.round(55 + intensity * 30);
+      return "hsl(210," + s + "%," + l + "%)";
+    }
+
+    var mapCard = document.createElement("section");
+    mapCard.className = "beta-panel-card beta-map-card";
+    var mapTitle = document.createElement("h4");
+    mapTitle.textContent = "Mapa real da Bahia (417 municipios)";
+    mapCard.appendChild(mapTitle);
+
+    var mapHint = document.createElement("p");
+    mapHint.className = "muted small";
+    mapHint.textContent = "Poligonos reais via IBGE. Clique em um municipio para filtrar o dashboard.";
+    mapCard.appendChild(mapHint);
+
+    var stage = document.createElement("div");
+    stage.className = "beta-map-stage";
+    var SVG_W = 100, SVG_H = 100;
+    var svg = createSvgNode("svg");
+    svg.setAttribute("class", "beta-map-svg beta-map-svg-geo");
+    svg.setAttribute("viewBox", "0 0 " + SVG_W + " " + SVG_H);
+    svg.setAttribute("role", "img");
+    svg.setAttribute("aria-label", "Mapa coroplético real da Bahia com poligonos do IBGE");
+
+    var features = safeArray(geoJson && geoJson.features);
+    var proj = projectGeoJsonToSvg(features, SVG_W, SVG_H);
+
+    var tooltip = document.createElement("div");
+    tooltip.className = "beta-map-tooltip hidden";
+
+    function showTip(pt, ex, ey) {
+      var pct = maxValor > 0 ? Math.round((toFiniteNumber(pt.valor, 0) / maxValor) * 100) : 0;
+      tooltip.innerHTML = "<strong>" + safeText(pt.label) + "</strong>"
+        + "<span>Emendas: " + String(pt.total || 0) + "</span>"
+        + "<span>Valor: R$ " + fmtMoney(pt.valor || 0) + "</span>"
+        + "<span>Concentracao: " + pct + "%</span>"
+        + (pt.attention ? "<span class=\"beta-map-tooltip-alert\">&#9888; " + pt.attention + " em atencao</span>" : "");
+      tooltip.style.left = clamp(ex + 10, 8, stage.clientWidth - 260) + "px";
+      tooltip.style.top = clamp(ey - 12, 4, stage.clientHeight - 120) + "px";
+      tooltip.classList.remove("hidden");
+    }
+
+    features.forEach(function (feature) {
+      var pathD = proj.geometryToPath(feature.geometry);
+      if (!pathD) return;
+
+      var rawName = (feature.properties && (feature.properties.NM_MUN || feature.properties.name || feature.properties.nome)) || "";
+      var point = munIndex[normalizeMunName(rawName)] || null;
+      var isActive = point && safeText(filters.municipio) && normalizeMunName(filters.municipio) === normalizeMunName(point.label);
+
+      var path = createSvgNode("path");
+      path.setAttribute("d", pathD);
+      path.setAttribute("fill", isActive ? "#f59e0b" : (point ? choroplethFill(point.valor) : "#e5e7eb"));
+      path.setAttribute("stroke", "#94a3b8");
+      path.setAttribute("stroke-width", "0.2");
+      path.setAttribute("class", "beta-map-geo-path" + (isActive ? " is-active" : "") + (point ? " has-data" : ""));
+      if (point) {
+        path.setAttribute("tabindex", "0");
+        path.setAttribute("role", "button");
+        path.setAttribute("aria-label", "Filtrar " + safeText(point.label));
+        path.addEventListener("mouseenter", function (ev) { showTip(point, ev.offsetX, ev.offsetY); });
+        path.addEventListener("mousemove", function (ev) { showTip(point, ev.offsetX, ev.offsetY); });
+        path.addEventListener("mouseleave", function () { tooltip.classList.add("hidden"); });
+        path.addEventListener("click", function () {
+          setPowerBiFilters({
+            deputado: safeText(filters.deputado || ""),
+            municipio: safeText(point.label),
+            status: safeText(filters.status || ""),
+            objetivo_epi: safeText(filters.objetivo_epi || ""),
+            q: safeText(filters.q || ""),
+            ano: safeText(filters.ano || "")
+          });
+          rerender();
+        });
+        path.addEventListener("keydown", function (e) {
+          if (e.key === "Enter" || e.key === " ") { e.preventDefault(); path.click(); }
+        });
+      }
+      svg.appendChild(path);
+    });
+
+    // Legenda
+    var legG = createSvgNode("g");
+    var legBg = createSvgNode("rect");
+    legBg.setAttribute("x","1"); legBg.setAttribute("y","88"); legBg.setAttribute("width","42"); legBg.setAttribute("height","11");
+    legBg.setAttribute("fill","rgba(255,255,255,0.85)"); legBg.setAttribute("rx","2");
+    legG.appendChild(legBg);
+    [0,0.33,0.66,1].forEach(function(v,i){
+      var r = createSvgNode("rect");
+      r.setAttribute("x", String(3 + i * 9)); r.setAttribute("y","90");
+      r.setAttribute("width","7"); r.setAttribute("height","4");
+      r.setAttribute("fill", choroplethFill(v * maxValor)); r.setAttribute("rx","1");
+      legG.appendChild(r);
+    });
+    var legTxt = createSvgNode("text");
+    legTxt.setAttribute("x","38"); legTxt.setAttribute("y","95");
+    legTxt.setAttribute("font-size","2.6"); legTxt.setAttribute("fill","#374151");
+    legTxt.textContent = "\u2191 R$";
+    legG.appendChild(legTxt);
+    svg.appendChild(legG);
+
+    stage.appendChild(svg);
+    stage.appendChild(tooltip);
+    mapCard.appendChild(stage);
+    target.appendChild(mapCard);
+  }
+
   function renderMunicipioMapCard(target, mapModel, options) {
     var opts = options || {};
     var setPowerBiFilters = typeof opts.setPowerBiFilters === "function" ? opts.setPowerBiFilters : noop;
@@ -145,14 +368,28 @@
       return Math.max(acc, toFiniteNumber(item.total, 0));
     }, 1);
 
+    var maxValor = points.reduce(function (acc, item) {
+      return Math.max(acc, toFiniteNumber(item.valor, 0));
+    }, 1);
+
+    function choroplethColor(valor) {
+      var intensity = clamp(toFiniteNumber(valor, 0) / maxValor, 0, 1);
+      // hsl: azul claro (210 90% 85%) -> azul escuro (210 80% 30%)
+      var lightness = Math.round(85 - intensity * 55);
+      var saturation = Math.round(60 + intensity * 25);
+      return "hsl(210," + saturation + "%," + lightness + "%)";
+    }
+
     function setTooltip(point, px, py) {
+      var pct = maxValor > 0 ? Math.round((toFiniteNumber(point.valor, 0) / maxValor) * 100) : 0;
       tooltip.innerHTML = ""
         + "<strong>" + safeText(point.label) + "</strong>"
         + "<span>Emendas: " + String(point.total || 0) + "</span>"
         + "<span>Valor: R$ " + fmtMoney(point.valor || 0) + "</span>"
-        + "<span>Atencao: " + String(point.attention || 0) + "</span>";
-      tooltip.style.left = clamp(px + 14, 12, stage.clientWidth - 250) + "px";
-      tooltip.style.top = clamp(py - 16, 8, stage.clientHeight - 110) + "px";
+        + "<span>Concentracao: " + String(pct) + "% do maior municipio</span>"
+        + (point.attention ? "<span class=\"beta-map-tooltip-alert\">&#9888; " + String(point.attention) + " em atencao</span>" : "");
+      tooltip.style.left = clamp(px + 14, 12, stage.clientWidth - 260) + "px";
+      tooltip.style.top = clamp(py - 16, 8, stage.clientHeight - 120) + "px";
       tooltip.classList.remove("hidden");
     }
 
@@ -172,6 +409,9 @@
       marker.setAttribute("cx", String(x));
       marker.setAttribute("cy", String(y));
       marker.setAttribute("r", String(radius));
+      marker.setAttribute("fill", isActive ? "#f59e0b" : choroplethColor(point.valor || 0));
+      marker.setAttribute("stroke", isActive ? "#92400e" : "rgba(30,64,175,0.45)");
+      marker.setAttribute("stroke-width", isActive ? "1" : "0.5");
       marker.setAttribute("class", "beta-map-point" + (isActive ? " is-active" : ""));
       marker.setAttribute("tabindex", "0");
       marker.setAttribute("role", "button");
@@ -204,6 +444,30 @@
       svg.appendChild(marker);
     });
 
+    // Legenda choropleth no canto inferior esquerdo do SVG
+    var legendG = createSvgNode("g");
+    var legendBg = createSvgNode("rect");
+    legendBg.setAttribute("x", "1"); legendBg.setAttribute("y", "87");
+    legendBg.setAttribute("width", "38"); legendBg.setAttribute("height", "12");
+    legendBg.setAttribute("fill", "rgba(255,255,255,0.82)"); legendBg.setAttribute("rx", "2");
+    legendG.appendChild(legendBg);
+    [0, 0.33, 0.66, 1].forEach(function (v, i) {
+      var dot = createSvgNode("circle");
+      dot.setAttribute("cx", String(4 + i * 9));
+      dot.setAttribute("cy", "92");
+      dot.setAttribute("r", "2.5");
+      dot.setAttribute("fill", choroplethColor(v * maxValor));
+      dot.setAttribute("stroke", "rgba(30,64,175,0.3)");
+      dot.setAttribute("stroke-width", "0.4");
+      legendG.appendChild(dot);
+    });
+    var legendLabel = createSvgNode("text");
+    legendLabel.setAttribute("x", "31"); legendLabel.setAttribute("y", "94");
+    legendLabel.setAttribute("font-size", "2.8"); legendLabel.setAttribute("fill", "#374151");
+    legendLabel.textContent = "\u2191 Valor";
+    legendG.appendChild(legendLabel);
+    svg.appendChild(legendG);
+
     var side = document.createElement("aside");
     side.className = "beta-map-side";
     var sideTitle = document.createElement("strong");
@@ -220,9 +484,12 @@
       var rowBtn = document.createElement("button");
       rowBtn.type = "button";
       rowBtn.className = "beta-map-list-item" + (safeText(filters.municipio) === safeText(point.label) ? " is-active" : "");
+
+      var barPct = maxValor > 0 ? clamp(Math.round((toFiniteNumber(point.valor, 0) / maxValor) * 100), 0, 100) : 0;
       rowBtn.innerHTML = ""
-        + "<span>" + safeText(point.label) + "</span>"
-        + "<small>" + String(point.total || 0) + " emendas</small>";
+        + "<span class=\"beta-map-list-name\">" + safeText(point.label) + "</span>"
+        + "<small>" + String(point.total || 0) + " emendas</small>"
+        + "<div class=\"beta-map-list-bar\" style=\"width:" + barPct + "%\"></div>";
       rowBtn.addEventListener("click", function () {
         setPowerBiFilters({
           deputado: safeText(filters.deputado || ""),
@@ -410,6 +677,7 @@
       return select;
     }
 
+    var anoSelect = appendSelectField("Ano", safeArray(filterOptions.anos), filters.ano);
     var deputadoSelect = appendSelectField("Deputado", filterOptions.deputados, filters.deputado);
     var municipioSelect = appendSelectField("Municipio", filterOptions.municipios, filters.municipio);
     var statusSelect = appendSelectField("Status atual", filterOptions.statuses, filters.status);
@@ -460,6 +728,7 @@
 
     applyBtn.addEventListener("click", function () {
       setPowerBiFilters({
+        ano: String(anoSelect.value || ""),
         deputado: String(deputadoSelect.value || ""),
         municipio: String(municipioSelect.value || ""),
         status: String(statusSelect.value || ""),
@@ -649,16 +918,108 @@
     controlGrid.appendChild(controlCard);
     target.appendChild(controlGrid);
 
-    // Mapa geografico temporariamente oculto (Escopo: U07 - BI Avancado)
-    // Sera reativado na proxima iteracao para nao poluir o BI Basico Operacional.
-    /*
-    renderMunicipioMapCard(target, mapModel, {
-      setPowerBiFilters: setPowerBiFilters,
-      rerender: rerender,
-      fmtMoney: fmtMoney,
-      filters: filters
+    // --- Mapa interativo de municipios (Fase 6C - Ativo) ---
+    var MAP_STORAGE_KEY = "SEC_POWERBI_MAP_VISIBLE";
+    var mapVisible = false;
+    try { mapVisible = global.localStorage.getItem(MAP_STORAGE_KEY) !== "0"; } catch (_e) {}
+
+    var mapToggleWrap = document.createElement("div");
+    mapToggleWrap.className = "beta-map-toggle-wrap";
+    var mapToggleBtn = document.createElement("button");
+    mapToggleBtn.type = "button";
+    mapToggleBtn.className = "btn";
+    mapToggleBtn.id = "btn-powerbi-map-toggle";
+    mapToggleBtn.textContent = mapVisible ? "Ocultar mapa" : "Mostrar mapa de municipios";
+    mapToggleWrap.appendChild(mapToggleBtn);
+    target.appendChild(mapToggleWrap);
+
+    var mapContainer = document.createElement("div");
+    mapContainer.id = "powerbi-map-container";
+    mapContainer.style.display = mapVisible ? "" : "none";
+    target.appendChild(mapContainer);
+
+    if (mapVisible) {
+      renderMunicipioMapCard(mapContainer, mapModel, {
+        setPowerBiFilters: setPowerBiFilters,
+        rerender: rerender,
+        fmtMoney: fmtMoney,
+        filters: filters
+      });
+    }
+
+    mapToggleBtn.addEventListener("click", function () {
+      mapVisible = !mapVisible;
+      try { global.localStorage.setItem(MAP_STORAGE_KEY, mapVisible ? "1" : "0"); } catch (_e) {}
+      mapToggleBtn.textContent = mapVisible ? "Ocultar mapa" : "Mostrar mapa de municipios";
+      mapContainer.style.display = mapVisible ? "" : "none";
+      if (mapVisible && !mapContainer.hasChildNodes()) {
+        renderMunicipioMapCard(mapContainer, mapModel, {
+          setPowerBiFilters: setPowerBiFilters,
+          rerender: rerender,
+          fmtMoney: fmtMoney,
+          filters: filters
+        });
+      }
     });
-    */
+
+    // --- U07: Mapa Real da Bahia (GeoJSON IBGE) ---
+    var GEO_MAP_KEY = "SEC_POWERBI_GEOMAP_VISIBLE";
+    var geoMapVisible = false;
+    try { geoMapVisible = global.localStorage && global.localStorage.getItem(GEO_MAP_KEY) === "1"; } catch (_e) {}
+
+    var geoMapToggleWrap = document.createElement("div");
+    geoMapToggleWrap.className = "beta-map-toggle-wrap";
+    var geoMapBtn = document.createElement("button");
+    geoMapBtn.type = "button";
+    geoMapBtn.className = "btn primary";
+    geoMapBtn.id = "btn-powerbi-geomap-toggle";
+    geoMapBtn.textContent = geoMapVisible ? "Ocultar Mapa Real" : "Mapa Real IBGE (417 municipios)";
+    geoMapToggleWrap.appendChild(geoMapBtn);
+    target.appendChild(geoMapToggleWrap);
+
+    var geoMapContainer = document.createElement("div");
+    geoMapContainer.id = "powerbi-geomap-container";
+    geoMapContainer.style.display = geoMapVisible ? "" : "none";
+    target.appendChild(geoMapContainer);
+
+    function loadAndRenderGeoMap() {
+      clearNode(geoMapContainer);
+      var loading = document.createElement("p");
+      loading.className = "muted small";
+      loading.textContent = "Carregando mapa real da Bahia via IBGE...";
+      geoMapContainer.appendChild(loading);
+
+      loadBahiaGeoJson(function (err, geoJson) {
+        clearNode(geoMapContainer);
+        if (err) {
+          var errP = document.createElement("p");
+          errP.className = "muted small";
+          errP.textContent = "Nao foi possivel carregar o mapa real. Verifique a conexao com a internet. (" + String(err.message || err) + ")";
+          geoMapContainer.appendChild(errP);
+          return;
+        }
+        renderMunicipioMapCardGeoJson(geoMapContainer, mapModel, geoJson, {
+          setPowerBiFilters: setPowerBiFilters,
+          rerender: rerender,
+          fmtMoney: fmtMoney,
+          filters: filters
+        });
+      });
+    }
+
+    if (geoMapVisible) {
+      loadAndRenderGeoMap();
+    }
+
+    geoMapBtn.addEventListener("click", function () {
+      geoMapVisible = !geoMapVisible;
+      try { global.localStorage && global.localStorage.setItem(GEO_MAP_KEY, geoMapVisible ? "1" : "0"); } catch (_e) {}
+      geoMapBtn.textContent = geoMapVisible ? "Ocultar Mapa Real" : "Mapa Real IBGE (417 municipios)";
+      geoMapContainer.style.display = geoMapVisible ? "" : "none";
+      if (geoMapVisible && !geoMapContainer.hasChildNodes()) {
+        loadAndRenderGeoMap();
+      }
+    });
 
     var deputyTitle = document.createElement("h4");
     deputyTitle.style.marginTop = "14px";

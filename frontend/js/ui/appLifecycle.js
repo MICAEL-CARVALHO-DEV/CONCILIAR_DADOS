@@ -1,3 +1,12 @@
+// =============================================================
+// appLifecycle.js — INICIALIZAÇÃO E SINCRONIZAÇÃO CROSS-TAB
+// Dono: Antigravity (frontend/js/ui/)
+// Responsabilidade: Bootstrapar a UI (initSelects, setupAuthUi, render)
+//   e configurar sincronização entre abas via BroadcastChannel e storage events.
+// Exports: SECFrontend.appLifecycleUtils
+//   bootstrapAppUi(ctx), setupCrossTabSync(ctx)
+// Nao tocar: app.js, index.html, style.css
+// =============================================================
 (function (globalScope) {
   "use strict";
 

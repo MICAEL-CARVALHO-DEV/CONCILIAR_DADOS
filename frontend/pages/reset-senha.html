@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Redefinir Senha - Prototipo SEC Emendas</title>
+  <link rel="icon" href="data:," />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="../../style.css" />
+</head>
+<body class="login-page">
+  <main class="login-layout">
+    <section class="login-brand login-animate-left">
+      <div class="login-logo-frame">
+        <div class="login-logo-flip">
+          <img
+            src="../../assets/sec-logo.png"
+            alt="Brasao do Estado da Bahia"
+            class="login-logo"
+            onerror="var frame=this.closest('.login-logo-frame'); if(frame){ frame.style.display='none'; } else { this.style.display='none'; }"
+          />
+        </div>
+      </div>
+      <div class="login-title-shell">
+        <h1 class="login-title">
+          <span class="login-title-line" data-text="REDEFINIR" style="--line-index: 0;"><span class="login-title-line-core">REDEFINIR</span></span>
+          <span class="login-title-line" data-text="SUA" style="--line-index: 1;"><span class="login-title-line-core">SUA</span></span>
+          <span class="login-title-line" data-text="SENHA" style="--line-index: 2;"><span class="login-title-line-core">SENHA</span></span>
+        </h1>
+      </div>
+    </section>
+
+    <section class="login-panel-wrap login-animate-card">
+      <div class="login-panel-glass">
+        <div class="login-panel">
+          <h2 class="login-panel-title" data-text="Nova Senha">Nova Senha</h2>
+          <form id="resetForm" class="auth-form">
+            <div class="field login-field">
+              <div class="login-input-wrap">
+                <span class="login-input-icon" aria-hidden="true">🔒</span>
+                <input id="senha" type="password" autocomplete="new-password" placeholder="Nova Senha" aria-label="Nova Senha" required />
+              </div>
+            </div>
+            <div class="field login-field">
+              <div class="login-input-wrap">
+                <span class="login-input-icon" aria-hidden="true">🔐</span>
+                <input id="senha2" type="password" autocomplete="new-password" placeholder="Confirmar Senha" aria-label="Confirmar Senha" required />
+              </div>
+            </div>
+
+            <div class="password-requirements" id="passReqs">
+              <div class="req-item" id="reqLen">Mínimo 8 caracteres</div>
+              <div class="req-item" id="reqUpper">Letra maiúscula</div>
+              <div class="req-item" id="reqLower">Letra minúscula</div>
+              <div class="req-item" id="reqNum">Número</div>
+              <div class="req-item" id="reqSpec">Caractere especial (@$!%*#?&)</div>
+            </div>
+
+            <button type="submit" class="btn primary login-submit">Redefinir Senha</button>
+          </form>
+
+          <div class="login-links">
+            <a class="btn login-link" href="login.html">Voltar para Login</a>
+          </div>
+          <p id="msg" class="login-msg muted small"></p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="../config/config.js"></script>
+  <script src="../config/config.production.js"></script>
+  <script>
+    (function () {
+      const query = new URLSearchParams(window.location.search);
+      const token = query.get("token") || "";
+      const msg = document.getElementById("msg");
+      const form = document.getElementById("resetForm");
+      const senha = document.getElementById("senha");
+      const senha2 = document.getElementById("senha2");
+      const submitBtn = form.querySelector(".login-submit");
+
+      if (!token) {
+        msg.textContent = "Token de redefinicao ausente. Solicite uma nova recuperacao.";
+        msg.className = "login-msg error small";
+        submitBtn.disabled = true;
+      }
+
+      const API_BASE_URL_KEY = "SEC_API_BASE_URL";
+      const CFG = (window.SEC_APP_CONFIG && typeof window.SEC_APP_CONFIG === "object") ? window.SEC_APP_CONFIG : {};
+      const CFG_HOST = (window.location && window.location.hostname) ? String(window.location.hostname) : "";
+      const IS_LOCAL_FRONTEND = !CFG_HOST || CFG_HOST === "localhost" || CFG_HOST === "127.0.0.1";
+
+      function getBaseUrl() {
+        const raw = String(localStorage.getItem(API_BASE_URL_KEY) || "").trim();
+        const def = (CFG.API_BASE_URL) || "http://localhost:8000";
+        return (raw || def).replace(/\/+$/, "");
+      }
+
+      function validateComplexity(val) {
+        document.getElementById("reqLen").classList.toggle("valid", val.length >= 8);
+        document.getElementById("reqUpper").classList.toggle("valid", /[A-Z]/.test(val));
+        document.getElementById("reqLower").classList.toggle("valid", /[a-z]/.test(val));
+        document.getElementById("reqNum").classList.toggle("valid", /[0-9]/.test(val));
+        document.getElementById("reqSpec").classList.toggle("valid", /[@$!%*#?&]/.test(val));
+        
+        return val.length >= 8 && /[A-Z]/.test(val) && /[a-z]/.test(val) && /[0-9]/.test(val) && /[@$!%*#?&]/.test(val);
+      }
+
+      senha.addEventListener("input", () => validateComplexity(senha.value));
+
+      form.addEventListener("submit", async function (e) {
+        e.preventDefault();
+        const s1 = senha.value;
+        const s2 = senha2.value;
+
+        if (s1 !== s2) {
+          msg.textContent = "As senhas nao conferem.";
+          msg.className = "login-msg error small";
+          return;
+        }
+
+        if (!validateComplexity(s1)) {
+          msg.textContent = "A senha nao atende aos requisitos de seguranca.";
+          msg.className = "login-msg error small";
+          return;
+        }
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = "Processando...";
+        msg.textContent = "";
+
+        try {
+          const resp = await fetch(getBaseUrl() + "/auth/reset-password", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token: token, nova_senha: s1 })
+          });
+
+          const data = await resp.json();
+          if (resp.ok) {
+            msg.textContent = "Senha redefinida com sucesso! Redirecionando...";
+            msg.className = "login-msg success small";
+            setTimeout(() => window.location.href = "login.html?msg=Senha redefinida com sucesso. Faca seu login.", 2000);
+          } else {
+            msg.textContent = data.detail || "Erro ao redefinir senha.";
+            msg.className = "login-msg error small";
+            submitBtn.disabled = false;
+            submitBtn.textContent = "Redefinir Senha";
+          }
+        } catch (err) {
+          msg.textContent = "Erro de conexao com o servidor.";
+          msg.className = "login-msg error small";
+          submitBtn.disabled = false;
+          submitBtn.textContent = "Redefinir Senha";
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

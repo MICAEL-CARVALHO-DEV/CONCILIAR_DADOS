@@ -1,3 +1,13 @@
+// =============================================================
+// renderers.js — RENDERIZADORES DE DOM CENTRALIZADOS
+// Dono: Antigravity (frontend/js/ui/)
+// Responsabilidade: Funções puras de renderização de DOM para:
+//   tabela principal, modal de emenda, painel de supervisão,
+//   chips de membro, progresso, campos KV e controles de acesso.
+// Nao usa innerHTML — toda construção é via createElement/textContent.
+// Exports: SECFrontend.uiRender (16 funções)
+// Nao tocar: app.js, index.html, style.css
+// =============================================================
 (function (win) {
   var SECFrontend = (win && win.SECFrontend && typeof win.SECFrontend === "object") ? win.SECFrontend : (win.SECFrontend = {});
   var domUtils = SECFrontend.domUtils || null;
@@ -995,25 +1005,25 @@
   }
 
   SECFrontend.uiRender = {
-    renderHistoryToContainer,
-    renderRawFields,
-    renderMarksSummary,
-    renderMainRow,
-    renderRoleNotice,
-    renderSupervisorQuickPanel,
-    renderPendingUsersTable,
-    renderKvEditor,
-    renderUserProgressBox,
-    updateModalDraftUi,
-    applyModalAccessProfile,
-    setModalVisibility,
-    syncProfileModalFields,
-    setPendingUsersFeedbackState,
-    setModalSaveFeedbackState,
-    syncModalRecordHeader,
-    renderConflictState,
-    renderModalAccessState,
-    renderEmendaLockInfo,
-    renderLivePresence
+    renderHistoryToContainer: renderHistoryToContainer,
+    renderRawFields: renderRawFields,
+    renderMarksSummary: renderMarksSummary,
+    renderMainRow: renderMainRow,
+    renderRoleNotice: renderRoleNotice,
+    renderSupervisorQuickPanel: renderSupervisorQuickPanel,
+    renderPendingUsersTable: renderPendingUsersTable,
+    renderKvEditor: renderKvEditor,
+    renderUserProgressBox: renderUserProgressBox,
+    updateModalDraftUi: updateModalDraftUi,
+    applyModalAccessProfile: applyModalAccessProfile,
+    setModalVisibility: setModalVisibility,
+    syncProfileModalFields: syncProfileModalFields,
+    setPendingUsersFeedbackState: setPendingUsersFeedbackState,
+    setModalSaveFeedbackState: setModalSaveFeedbackState,
+    syncModalRecordHeader: syncModalRecordHeader,
+    renderConflictState: renderConflictState,
+    renderModalAccessState: renderModalAccessState,
+    renderEmendaLockInfo: renderEmendaLockInfo,
+    renderLivePresence: renderLivePresence
   };
 })(typeof window !== "undefined" ? window : globalThis);

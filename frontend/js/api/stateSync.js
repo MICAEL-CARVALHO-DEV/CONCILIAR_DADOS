@@ -1,3 +1,13 @@
+// =============================================================
+// stateSync.js — SINCRONIZACAO DE ESTADO REMOTO / LOCAL
+// Dono: Antigravity (frontend/js/api/)
+// Responsabilidade: Gerenciar o ciclo de sync bidirecional entre o estado
+//   local (localStorage) e o backend (API), com debounce e refresh semi-auto.
+// Ponto de invalidacao: chamar apiSyncOps.invalidateEmendaListCache()
+//   no inicio de cada ciclo completo de sync para garantir lista fresca.
+// Exports: SECFrontend.stateSyncUtils
+// Nao tocar: app.js, index.html, style.css
+// =============================================================
 (function (global) {
   var root = global.SECFrontend = global.SECFrontend || {};
   var SEMI_AUTO_REFRESH_MIN_MS = 15000;

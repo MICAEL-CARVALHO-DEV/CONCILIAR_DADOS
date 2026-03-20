@@ -1,3 +1,12 @@
+// =============================================================
+// filters.js — UTILITARIOS DE FILTROS E SELECTS
+// Dono: Antigravity (frontend/js/ui/)
+// Responsabilidade: Gerenciar selects de UI (ano, status, exportacao customizada).
+//   Nao possui logica de negocio — apenas sincronizar opcoes de DOM com dados.
+// Exports: SECFrontend.filterUtils
+//   setSelectOptions, syncYearFilter, syncCustomExportFilters, initSelects, buildYearOptions
+// Nao tocar: app.js, index.html, style.css
+// =============================================================
 (function (global) {
   var root = global.SECFrontend = global.SECFrontend || {};
 

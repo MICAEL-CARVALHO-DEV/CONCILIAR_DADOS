@@ -6,32 +6,42 @@
 
   function buildPowerBiFilterOptions(rows, ctx) {
     var source = Array.isArray(rows) ? rows : [];
-    
-    // Calcula opções disponíveis aplicando os filtros atuáis, 
-    // exceto o filtro da própria categoria
-    
+    var anoAtivo = ctx.filters && ctx.filters.ano ? String(ctx.filters.ano) : "";
+
+    // Calcula opcoes disponíveis aplicando os filtros atuais,
+    // exceto o filtro da propria categoria (logica de cascata cruzada)
+
     var filterForDeputados = source.filter(function(rec) {
+        if (anoAtivo && String(ctx.text(rec && rec.ano) || "") !== anoAtivo) return false;
         if (ctx.filters.municipio && (ctx.text(rec && rec.municipio) || "-") !== ctx.filters.municipio) return false;
         if (ctx.filters.status && (ctx.getRecordCurrentStatus(rec) || "-") !== ctx.filters.status) return false;
         return true;
     });
 
     var filterForMunicipios = source.filter(function(rec) {
+        if (anoAtivo && String(ctx.text(rec && rec.ano) || "") !== anoAtivo) return false;
         if (ctx.filters.deputado && (ctx.text(rec && rec.deputado) || "-") !== ctx.filters.deputado) return false;
         if (ctx.filters.status && (ctx.getRecordCurrentStatus(rec) || "-") !== ctx.filters.status) return false;
         return true;
     });
-    
+
     var filterForStatuses = source.filter(function(rec) {
+        if (anoAtivo && String(ctx.text(rec && rec.ano) || "") !== anoAtivo) return false;
         if (ctx.filters.deputado && (ctx.text(rec && rec.deputado) || "-") !== ctx.filters.deputado) return false;
         if (ctx.filters.municipio && (ctx.text(rec && rec.municipio) || "-") !== ctx.filters.municipio) return false;
         return true;
     });
 
+    // Anos: calculados a partir de todo o source sem filtro de ano para mostrar todos os anos disponíveis
+    var anos = Array.from(new Set(source.map(function(rec) {
+        return String(ctx.text(rec && rec.ano) || "");
+    }).filter(Boolean))).sort().reverse();
+
     var deputados = Array.from(new Set(filterForDeputados.map(function (rec) { return ctx.text(rec && rec.deputado) || "-"; }).filter(Boolean))).sort();
     var municipios = Array.from(new Set(filterForMunicipios.map(function (rec) { return ctx.text(rec && rec.municipio) || "-"; }).filter(Boolean))).sort();
     var statuses = Array.from(new Set(filterForStatuses.map(function (rec) { return ctx.getRecordCurrentStatus(rec) || "-"; }).filter(Boolean))).sort();
     return {
+      anos: anos,
       deputados: deputados,
       municipios: municipios,
       statuses: statuses
@@ -40,11 +50,14 @@
 
   function applyPowerBiDashboardFilters(rows, ctx) {
     var source = Array.isArray(rows) ? rows : [];
+    var anoAtivo = ctx.filters && ctx.filters.ano ? String(ctx.filters.ano) : "";
     return source.filter(function (rec) {
       var deputado = ctx.text(rec && rec.deputado) || "-";
       var municipio = ctx.text(rec && rec.municipio) || "-";
       var objetivoEpi = ctx.text(rec && rec.objetivo_epi) || "-";
       var statusAtual = ctx.getRecordCurrentStatus(rec) || "-";
+      var recAno = String(ctx.text(rec && rec.ano) || "");
+      if (anoAtivo && recAno !== anoAtivo) return false;
       if (ctx.filters.deputado && deputado !== ctx.filters.deputado) return false;
       if (ctx.filters.municipio && municipio !== ctx.filters.municipio) return false;
       if (ctx.filters.status && statusAtual !== ctx.filters.status) return false;
@@ -237,8 +250,16 @@
     };
   }
 
+  // CONTRATO: `filteredRows` deve ser pre-filtrado pelo ANO e STATUS
+  // selecionados na tabela principal ANTES de chamar esta funcao.
+  // Dessa forma os dropdowns cascata (Deputado, Municipio) nao exibiram
+  // opcoes de anos diferentes do filtro ativo.
+  // Responsabilidade do chamador em app.js: passar apenas os records do ano corrente.
   function buildPowerBiDashboardData(filteredRows, ctx) {
     var sourceRows = Array.isArray(filteredRows) ? filteredRows : [];
+    // filterOptions usa sourceRows intencionalmente para calcular opcoes cruzadas:
+    // ex: ao filtrar deputado, recalcula municipios disponiveis E vice-versa.
+    // Mas sourceRows ja deve chegar pre-filtrado por Ano pelo chamador.
     var filterOptions = buildPowerBiFilterOptions(sourceRows, ctx);
     var rows = applyPowerBiDashboardFilters(sourceRows, ctx);
     var scopedAuditRows = getScopedAuditRowsForRecords(rows, ctx);

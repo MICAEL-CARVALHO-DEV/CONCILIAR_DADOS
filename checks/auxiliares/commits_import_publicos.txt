@@ -1,0 +1,27 @@
+﻿a9011cb fix(front): restore import processor bridge
+4978959 feat(import): finalize backend-first xlsx preview flow
+d120c91 feat(beta): add import governance and workspace prebeta flow
+71313d6 refactor(front): consolidate import control context
+a124ada refactor(front): extract import control module
+6b54800 refactor(front): extract workbook import reader
+241789f refactor(front): extract import processing orchestrator
+6bf45e9 refactor(front): extract import pipeline utilities
+d80cf93 refactor(front): extract import validation utilities
+4cf5667 refactor(front): centralize import validation context
+6352249 refactor(front): centralize import pipeline context
+41086a4 refactor(front): reuse getXlsxApi in import flow
+4581ee6 refactor(front): centralize import report wrapper context
+04a9cdf refactor(front): export planilha1 renderer from import report module
+ce92a85 refactor(front): centralize import report module bridge
+0002160 refactor(front): normalize importReportUtils access in app
+2a751dc refactor(front): pass explicit export summary dependencies to import dashboard
+7a65487 refactor(front): normalize import report tab wiring
+0a022f9 refactor(front): delegate import dashboard rendering to module
+e0720f3 refactor(front): delegate export summary badge to importReport utils
+0a506f3 refactor(front): extraise utilidades de relatorio de importacao para modulo
+5018bf0 refactor(front): extract planilha1 html renderer
+96f8377 fix(import): use Planilha1 sheet values for deputado summary
+be02027 fix(import): purge demo records before xlsx import and keep deputado summary visible
+269f1ba feat: enforce xlsx-only flow and surface deputado panel by default
+ff2c32c feat(import): persist row-level import lines and sync from UI
+3a9ae13 feat: baseline operacional + logs de import/export + workflow e realtime

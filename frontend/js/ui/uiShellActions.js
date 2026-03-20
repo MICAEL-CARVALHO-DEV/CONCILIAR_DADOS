@@ -1,3 +1,14 @@
+// =============================================================
+// uiShellActions.js — ACOES DE EXPORTACAO DO SHELL PRINCIPAL
+// Dono: Antigravity (frontend/js/ui/)
+// Responsabilidade: Acoes de exportacao XLSX do shell:
+//   exportar emenda individual, exportar base atual, historico ou personalizado.
+// Contrato: todas as funcoes recebem ctx com getSelected, runExportByScope,
+//   syncExportLogToApi, EXPORT_SCOPE, dateStamp, isoNow.
+// Exports: SECFrontend.uiShellActions
+//   exportOne, runExportAtuais, runExportHistorico, runCustomExport
+// Nao tocar: app.js, index.html, style.css
+// =============================================================
 (function (globalScope) {
   "use strict";
 

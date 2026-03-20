@@ -1,0 +1,230 @@
+﻿# Commits Publicos por Tema
+
+## Auth (40)
+- eae193d fix(ui): incluir username oculto no form de senha
+- fd7d54b fix(auth): colocar troca de senha dentro de formulario valido
+- 61ae897 fix(auth): atualizar oauth client para novo id oficial
+- 88fc827 fix(auth): corrigir client id google para 109...lfv9
+- 9766f51 feat(auth): migrar oauth para client 109 e incluir troca de senha no perfil
+- 4fc8298 fix(cors): liberar cloudflare pages prod e previews
+- 42cd981 feat(homolog): suporte a host por sufixo (.pages.dev) em api e oauth
+- e49074a fix: correct auth redirects on published pages
+- 39c8807 refactor(back): extract auth emendas and operations routers
+- 1137509 refactor(front): consolidate auth and beta state helpers
+- 8d857f0 refactor(front): remove auth and local state fallbacks
+- 7a1fc6c refactor(front): extract auth session module
+- bb995ea refactor(front): extract auth flow module
+- ba117ec refactor(front): extract auth gate ui module
+- d1585aa refactor(back): extract auth and emenda services
+- cba6e65 refactor(back): extract auth dependency helpers
+- c6110f8 refactor(back): extract auth security core helpers
+- 5987243 refactor(front): reuse storageUtils in authStore
+- 3c230c0 refactor(front): centralize session token fallback in authStore
+- 733b336 refactor(front): move legacy auth fallback into authStore
+- f958ec1 refactor(front): centralize auth profile load via authStore
+- d582e05 refactor(front): centralize auth state access via authStore
+- 22c5dcd refactor(front): centralize auth/session storage access via helpers
+- 0a17bbb fix(front): centralizar fallback auth no apiRequest
+- 8bbca13 refactor(front): integrar modulos base de auth api lock no frontend
+- 78ef915 chore: update frontend auth flow and cloudflare deploy docs
+- 24c6fc3 feat: consolida hardening de auth e operacao
+- 07de541 feat: amplia fluxo de login e auditoria de autenticacao
+- d4fe800 feat: permite login com nome de usuario ou gmail
+- 2ec267c feat: prepara login google e endurece fluxo de autenticacao
+- 84f4a3d fix: endurece API publica e refina tela de cadastro
+- 6c868a8 fix: redireciona raiz para login sem sessao
+- dfdea52 fix: simplifica navegacao da tela de cadastro
+- c6fee7a feat: refina login e cadastro com nova identidade visual
+- 834056b feat: cadastro em analise e aba de aprovacao para programador
+- 4ba6c1d feat: remove quick login, add profile modal and explicit logout
+- a802257 fix: harden CORS for github pages and local origins
+- cf292d7 fix: normalize CORS origins from render env values
+- 76314fa fix: robust CORS_ORIGINS parsing for render env formatting
+- 59c5bf1 auth: simplifica acesso de teste com entrar rapido no login
+
+## Sync (22)
+- b376829 feat(beta): endurecer sync remoto e refinar operacao
+- c55f657 fix(sync): endurecer bloqueio central no front oficial
+- b4443c2 feat: centralize official sync flow
+- 4b6c2f7 docs(beta): finalize closing checklist and unlock loa workspace
+- 40da0dd refactor(back): extract app factory and realtime router
+- b4adf25 refactor(front): extract api sync operations module
+- 20897d4 refactor(front): extract modal section sync module
+- 5582bed refactor(front): extract api state sync module
+- 88a0261 refactor(front): extract beta polling sync module
+- 80174c3 refactor(front): extract pending users and aux modal flows
+- 9d959d5 refactor(back): extract operations audit and realtime services
+- a1c1a61 fix(beta): disable realtime user test panel
+- e293d23 test(back): align C34 lock validation with hybrid mode
+- 6ac6f5c refactor(front): extract canonical raw-field sync helpers
+- 80dffc6 refactor(front): highlight modal readonly lock state
+- e52e976 refactor(front): render main table rows via uiRender
+- bf9f5eb refactor(front): offload modal render blocks to uiRender
+- 361a36c feat: lock de edicao por emenda e fluxo de orquestracao IA
+- 107f098 feat: restrict profile creation by role and separate owner/supervisor views
+- 38f62e7 chore: add one-click startup script and fix Windows front launcher
+- ff2c32c feat(import): persist row-level import lines and sync from UI
+- 3a9ae13 feat: baseline operacional + logs de import/export + workflow e realtime
+
+## Import (25)
+- a9011cb fix(front): restore import processor bridge
+- 4978959 feat(import): finalize backend-first xlsx preview flow
+- d120c91 feat(beta): add import governance and workspace prebeta flow
+- 71313d6 refactor(front): consolidate import control context
+- a124ada refactor(front): extract import control module
+- 6b54800 refactor(front): extract workbook import reader
+- 241789f refactor(front): extract import processing orchestrator
+- 6bf45e9 refactor(front): extract import pipeline utilities
+- d80cf93 refactor(front): extract import validation utilities
+- 4cf5667 refactor(front): centralize import validation context
+- 6352249 refactor(front): centralize import pipeline context
+- 41086a4 refactor(front): reuse getXlsxApi in import flow
+- 4581ee6 refactor(front): centralize import report wrapper context
+- 04a9cdf refactor(front): export planilha1 renderer from import report module
+- ce92a85 refactor(front): centralize import report module bridge
+- 0002160 refactor(front): normalize importReportUtils access in app
+- 2a751dc refactor(front): pass explicit export summary dependencies to import dashboard
+- 7a65487 refactor(front): normalize import report tab wiring
+- 0a022f9 refactor(front): delegate import dashboard rendering to module
+- e0720f3 refactor(front): delegate export summary badge to importReport utils
+- 0a506f3 refactor(front): extraise utilidades de relatorio de importacao para modulo
+- 5018bf0 refactor(front): extract planilha1 html renderer
+- 96f8377 fix(import): use Planilha1 sheet values for deputado summary
+- be02027 fix(import): purge demo records before xlsx import and keep deputado summary visible
+- 269f1ba feat: enforce xlsx-only flow and surface deputado panel by default
+
+## PowerBI (3)
+- 31d7e29 feat(powerbi): export enxuto, mapa interativo e calibracao desktop 1366-1920
+- b7b26df refactor(front): extract powerbi data module
+- 5ad4b9e refactor(front): extract beta powerbi panel module
+
+## UI-UX (83)
+- 1b0217a chore(cloudflare): preparar fluxo de homologacao sem terminal
+- bedcfda fix(higiene): ignorar arquivos root que ja estao no .gitignore
+- 7312613 chore(scripts): auto start front na validacao beta
+- d52485e feat(ui): reforca foco e melhora fluxo do sidebar
+- 695c1ed feat: add beta front shell and handoff maps
+- e71d012 refactor(front): consolidate residual context helpers
+- 94a5660 fix(front): unify frontend module registry
+- 13d641b refactor(front): extract ui shell actions module
+- 721285e refactor(front): extract role access module
+- 7452ba0 refactor(front): extract record model module
+- 7fbba61 refactor(front): extract app startup module
+- 4df8a83 refactor(front): extract access profile module
+- e02d201 refactor(front): extract modal save orchestration module
+- bace8f4 refactor(front): extract beta data helper module
+- a307397 refactor(front): extract local state module
+- 35b94d0 refactor(front): extract app lifecycle module
+- 813240a refactor(front): extract modal shell module
+- 7433b2d refactor(front): extract modal draft state module
+- 71d975a refactor(front): extract ui binding shell module
+- 9330383 refactor(front): extract beta workspace and executive export helpers
+- 2bf8510 refactor(front): extract beta history panel module
+- 8016a33 refactor(front): extract beta support panel module
+- c7ef79f refactor(front): extract modal header and conflict helpers
+- 3334d8f refactor(front): extract modal feedback and helper visibility renderers
+- 02fcc29 docs(orq): create frontend refactor queue
+- 4085de9 refactor(front): extract modal draft state renderers
+- 9bb4b91 refactor(front): extract modal editor renderers
+- c6497fa refactor(front): extract modal access renderers
+- 5705825 refactor(front): extract export flow orchestration
+- 09d79e5 refactor(front): extract workbook export writer
+- dfd57e6 refactor(front): extract template export writer
+- 33c5523 refactor(front): centralize utility wrapper contexts
+- d4934ea refactor(front): centralize progress wrapper context
+- ac15d4e refactor(front): centralize frontend module config contexts
+- 7231a70 refactor(front): centralize filter wrapper context
+- 9934b64 refactor(front): centralize ui renderer wrapper context
+- f9dd815 refactor(front): centralize export wrapper contexts
+- 23a9ab9 refactor(front): normalize export template metadata access
+- d15a632 refactor(front): reduce repeated ui guard clauses
+- 9b83058 refactor(front): centralize dom and escape module bridges
+- 8805b76 refactor(front): align export module access with SECFrontend registry
+- 89b621c refactor(front): centralize infrastructure module bridges
+- 3d86c5a refactor(front): centralize utility module bridges
+- 857ae23 refactor(front): centralize progress and ui renderer bridges
+- aebe02f refactor(front): centralize filter module bridge
+- 9d6b202 refactor(front): track shared api key header delegation
+- 519d115 refactor(front): use storageUtils for shared api key in API headers
+- 2627328 refactor(front): mark shared API key storage delegation in checklist
+- fc99ab4 refactor(front): read shared api key via storage utils
+- bf91537 refactor(front): track session-token delegation in checklist
+- d0cf5a7 refactor(front): delegate session token fallback to storage utils
+- 4902b28 refactor(front): delegate storage helpers and reference-key utilities
+- f35e52c refactor(front): extract export data builders
+- 085f6e7 refactor(front): extract template export helpers
+- 44afeed refactor(front): add defensive token fallback in app.js
+- d4b4463 refactor(front): remove direct profile storage access from app.js
+- 3c818cb refactor(front): simplify api mode base/url wrappers after centralization
+- 8701c82 refactor(front): centralize api error extraction utility
+- 5bcf582 refactor(front): enforce api client for all API wrappers
+- d9a339d refactor(front): centralize draft field parsing in format utils
+- 0f7a358 refactor(front): preserve roleNotice fallback semantics
+- 0b840cb refactor(front): delegate modal renderers to uiRender module
+- ecd0a11 refactor(front): remove innerHTML fallback in app.js markup append
+- 3601deb refactor(front): use storage helpers for cross-tab and shared api keys
+- 297317c refactor(front): remove innerHTML fallback from markup append path
+- 4306ac4 refactor(front): reuse domUtils markup inserter in renderers
+- 433c7ae refactor(front): centraliza utilitario de markup no dom utils
+- 9a8725f refactor(front): reduzir innerHTML em renderizações de tabelas
+- 603e3a8 refactor(front): reduce modal fallbacks innerHTML and add safe DOM render helpers
+- f1b8f80 refactor(front): centralize supervisor and pending users UI rendering
+- c8762cc refactor(front): extract metrics utilities
+- bccda3b refactor(front): extract export filter helpers to utility module
+- f06460e refactor(front): extract filter and select utilities to module
+- 0e4bb48 refactor(front): extract status/hash utilities to module
+- 2b152e7 refactor(front): extract id generation utils (ID-FE-06)
+- 5b4d893 refactor(front): add normalize utils module for ID-FE-05
+- 04a2455 chore: versiona guias operacionais e ajusta deploy pages
+- 72daf91 feat: ativa client id do google no frontend
+- 4ee4a1f chore: prepare free cloud deploy defaults and guide
+- a5c0806 ux: explicitar preparo de acoes no modal; historico grava em salvar
+- 201ceda ux: separar preparar x salvar; historico grava somente em salvar edicoes
+- 72dad58 ux: simplifica modal de edicao sem popup nativo
+- 813098e docs: consolidate prioritized checklist and codex continuity handoff
+
+## Deploy-CI (12)
+- 10c948e ci: automate Cloudflare Pages deploy
+- 21e69db chore(ci): alinhar check de higiene com estrutura atual do repo
+- 57eb866 feat(beta): fechar validacoes C48 C49 C50-A aria C45-A e export oficial enxuto
+- b70a554 docs: adiciona plano e checklist de refatoracao
+- 1365e22 backend: row_version + plan_a/plan_b + publish homologation check
+- e39b744 fix: evita falha automatica do workflow custom pages
+- af8b6d9 chore: valida artefato pages e gera relatorio go-live
+- a539c21 fix: torna smoke deploy compativel com PowerShell em OPTIONS
+- 484ab6f fix: avoid sqlalchemy optional-union crash on render runtime
+- 17f316a fix: bump psycopg binary pin for render compatibility
+- a8ba312 chore: add runtime API config file for easier production deploy
+- 8618637 chore: add automated deploy config for Render and GitHub Pages
+
+## Refactor (2)
+- 9e441a3 refactor(back): extract platform service and router
+- 3a4d2bb docs(orq): define refactor execution stack
+
+## Docs-Chore (11)
+- fba6279 chore: checkpoint fechamento beta
+- 368dd50 chore: consolidate beta structure and docs
+- c7d27dc chore: checkpoint antes da refatoracao
+- 2387f19 Update README.md
+- edae114 chore: pin backend python runtime to 3.13.9
+- 797ae3a chore: update roadmap and add pilot/simulation scripts
+- 0a491f4 chore(security): harden gitignore for secrets, local db and editor files
+- e402c1a chore: ignore private notes directory
+- ae0d478 docs: centralize notes in anotacoes and add context snapshot generator
+- b14e765 docs: add project README and MIT license
+- f13acc8 chore: initial project commit
+
+## Outros (12)
+- 97e5734 feat: strengthen beta backend governance and summaries
+- 8380de5 feat(beta): advance operational dashboard and governance
+- b1ae69c test: add item8 real-run script for 2 APG + 2 CONTABIL
+- 9575cfb security: privatiza estudos no historico e reforca bloqueio de segredos
+- 8f4da5c feat: add real-operation expediente automation and evidence scripts
+- 1c3dccf fix: reduce noisy 404s on root and favicon
+- c353055 fix: escape percent chars in alembic database url
+- 672dd99 md
+- d61290e feat: fechar C09 C30 C31 com bloqueio de inativos, indices e migration
+- 32a4275 feat: exportacao 3 modos + escopo auditavel + validacao p0/c34
+- ca2b0c0 versao v3
+- 124bf48 feat: add production config override and host-based API routing
+

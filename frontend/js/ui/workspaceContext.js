@@ -1,3 +1,18 @@
+// =============================================================
+// workspaceContext.js — SELETOR E CONTEXTO DE BASE OPERACIONAL
+// Dono: Antigravity (frontend/js/ui/)
+// Responsabilidade: Renderiza o painel de troca de workspace
+//   (LOA atual, sandbox, futuro) com selector de base, badges de modo,
+//   aviso de contexto nao-operacional e card de roadmap por workspace.
+//   Sem efeitos colaterais fora dos tres nos alvo recebidos por parametro.
+// Contrato de opts (renderWorkspaceContext): visibleWorkspaces, currentWorkspace,
+//   canSwitch, onChange(workspaceKey), clearNodeChildren.
+//   currentWorkspace shape: {key, label, mode, description, notice,
+//     preBetaLocked, stageTitle, stageDescription, rules[], nextSteps[]}.
+// Exports: SECFrontend.workspaceContextUtils
+//   renderWorkspaceContext(barTarget, noticeTarget, stageTarget, opts) -> void
+// Nao tocar: app.js, index.html, style.css
+// =============================================================
 (function (globalScope) {
   "use strict";
 

@@ -7,6 +7,9 @@
  * - Merge de importacao sem perder historico
  ************************/
 
+// ==========================================
+// CONSTANTES E CONFIGURAÇÕES
+// ==========================================
 const STORAGE_KEY = "sec_emendas_prototipo_v3";
 const LEGACY_STORAGE_KEYS = ["sec_emendas_prototipo_v2"];
 
@@ -126,6 +129,7 @@ const appLifecycleUtils = SEC_FRONTEND.appLifecycleUtils || null;
 const appStartupUtils = SEC_FRONTEND.appStartupUtils || null;
 const uiShellActions = SEC_FRONTEND.uiShellActions || null;
 const pendingUsersUtils = SEC_FRONTEND.pendingUsersUtils || null;
+const modalCreateUtils = SEC_FRONTEND.modalCreateUtils || null;
 const betaHistoryUtils = SEC_FRONTEND.betaHistoryUtils || null;
 const powerBiDataUtils = SEC_FRONTEND.powerBiDataUtils || null;
 const betaPowerBiUtils = SEC_FRONTEND.betaPowerBiUtils || null;
@@ -283,6 +287,10 @@ const RAW_PREFERRED_HEADERS = {
  * - CURRENT_USER: nome de quem esta usando
  * - CURRENT_ROLE: APG | SUPERVISAO | POWERBI | PROGRAMADOR
  */
+
+// ==========================================
+// STATE E VARIÁVEIS GLOBAIS
+// ==========================================
 let CURRENT_USER = "USER01";
 let CURRENT_ROLE = "APG";
 let lastFocusedElement = null;
@@ -482,6 +490,9 @@ assignMissingIds(state.records, idCountersByYear);
 syncReferenceKeys(state.records);
 saveState(true);
 
+// ==========================================
+// DOM SELECTORS
+// ==========================================
 const tbody = document.getElementById("tbody");
 const statusFilter = document.getElementById("statusFilter");
 const yearFilter = document.getElementById("yearFilter");
@@ -517,6 +528,7 @@ const btnExportAtuais = document.getElementById("btnExportAtuais");
 const btnExportHistorico = document.getElementById("btnExportHistorico");
 const btnExportCustom = document.getElementById("btnExportCustom");
 const btnExportOne = document.getElementById("btnExportOne");
+const btnCreateEmenda = document.getElementById("btnCreateEmenda");
 const btnReset = document.getElementById("btnReset");
 const fileCsv = document.getElementById("fileCsv");
 const importReport = document.getElementById("importReport");
@@ -571,6 +583,8 @@ const exportCustomYear = document.getElementById("exportCustomYear");
 const exportCustomStatus = document.getElementById("exportCustomStatus");
 const exportCustomDeputado = document.getElementById("exportCustomDeputado");
 const exportCustomMunicipio = document.getElementById("exportCustomMunicipio");
+const exportCustomDataInicio = document.getElementById("exportCustomDataInicio");
+const exportCustomDataFim = document.getElementById("exportCustomDataFim");
 const exportCustomIncludeOld = document.getElementById("exportCustomIncludeOld");
 const exportCustomSummary = document.getElementById("exportCustomSummary");
 
@@ -611,6 +625,9 @@ const authRegisterPassword = document.getElementById("authRegisterPassword");
 const authRegisterPassword2 = document.getElementById("authRegisterPassword2");
 const authMsg = document.getElementById("authMsg");
 
+// ==========================================
+// FUNÇÕES E UTILITÁRIOS LOCAIS
+// ==========================================
 function getFilterUtil(methodName) {
   if (!filterUtils) return null;
   const method = filterUtils[methodName];
@@ -1282,6 +1299,12 @@ function getUiShellBindingsContext() {
     canMutateRecords: canMutateRecords,
     getReadOnlyRoleMessage: getReadOnlyRoleMessage,
     normalizeStatus: normalizeStatus,
+    btnCreateEmenda: btnCreateEmenda,
+    openCreateModal: function () {
+      if (modalCreateUtils && typeof modalCreateUtils.openCreateModal === "function") {
+        modalCreateUtils.openCreateModal(getStateContext());
+      }
+    },
     btnExportOne: btnExportOne,
     exportOne: runUiShellExportOne,
     btnExportAtuais: btnExportAtuais,
@@ -1301,6 +1324,8 @@ function getUiShellBindingsContext() {
     exportCustomStatus: exportCustomStatus,
     exportCustomDeputado: exportCustomDeputado,
     exportCustomMunicipio: exportCustomMunicipio,
+    exportCustomDataInicio: exportCustomDataInicio,
+    exportCustomDataFim: exportCustomDataFim,
     exportCustomIncludeOld: exportCustomIncludeOld,
     btnProfileClose: btnProfileClose,
     btnProfileCloseX: btnProfileCloseX,
@@ -7038,10 +7063,19 @@ async function submitChangePassword() {
     setChangePasswordFeedback("Preencha senha atual, nova senha e confirmacao.", true);
     return false;
   }
-  if (nextValue.length < 4) {
-    setChangePasswordFeedback("A nova senha precisa ter ao menos 4 caracteres.", true);
+
+  // Validação de complexidade (U08)
+  const hasUpper = /[A-Z]/.test(nextValue);
+  const hasLower = /[a-z]/.test(nextValue);
+  const hasNum = /[0-9]/.test(nextValue);
+  const hasSpec = /[@$!%*#?&]/.test(nextValue);
+  const isLongEnough = nextValue.length >= 8;
+
+  if (!isLongEnough || !hasUpper || !hasLower || !hasNum || !hasSpec) {
+    setChangePasswordFeedback("A nova senha nao atende aos requisitos de complexidade.", true);
     return false;
   }
+
   if (nextValue !== confirmValue) {
     setChangePasswordFeedback("A confirmacao nao confere com a nova senha.", true);
     return false;
@@ -8711,7 +8745,7 @@ function buildPlanilhaIndicatorsHtml(records) {
   });
 
   return ""
-    + "<div class=\"planilha-indicadores\">"
+    + "<div>"
     + "  <div class=\"mini-status-row\">"
     + "    <div class=\"mini-status-card\">"
     + "      <div class=\"mini-status-label\">Total de Emendas</div>"
