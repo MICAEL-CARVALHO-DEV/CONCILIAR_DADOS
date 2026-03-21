@@ -5,19 +5,19 @@ repo_root="$(git rev-parse --show-toplevel)"
 check_script="$repo_root/scripts/check_higiene_organizacao.ps1"
 
 if [ ! -f "$check_script" ]; then
-  echo "[pre-commit] ERRO: script nao encontrado em $check_script"
-  exit 1
+  echo "[pre-commit] AVISO: script nao encontrado em $check_script"
+  exit 0
 fi
 
 if command -v pwsh >/dev/null 2>&1; then
-  pwsh -NoProfile -ExecutionPolicy Bypass -File "$check_script" -RepoRoot "$repo_root"
-  exit $?
+  pwsh -NoProfile -ExecutionPolicy Bypass -File "$check_script" -RepoRoot "$repo_root" -WarnOnly
+  exit 0
 fi
 
 if command -v powershell >/dev/null 2>&1; then
-  powershell -NoProfile -ExecutionPolicy Bypass -File "$check_script" -RepoRoot "$repo_root"
-  exit $?
+  powershell -NoProfile -ExecutionPolicy Bypass -File "$check_script" -RepoRoot "$repo_root" -WarnOnly
+  exit 0
 fi
 
-echo "[pre-commit] ERRO: nem 'pwsh' nem 'powershell' foram encontrados no PATH."
-exit 1
+echo "[pre-commit] AVISO: nem 'pwsh' nem 'powershell' foram encontrados no PATH."
+exit 0

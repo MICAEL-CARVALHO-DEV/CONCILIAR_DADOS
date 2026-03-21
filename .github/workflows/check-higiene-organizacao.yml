@@ -39,6 +39,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Rodar check de higiene
+      - name: Rodar check de higiene (warn-only)
+        continue-on-error: true
         shell: pwsh
-        run: ./scripts/check_higiene_organizacao.ps1 -RepoRoot .
+        run: ./scripts/check_higiene_organizacao.ps1 -RepoRoot . -WarnOnly

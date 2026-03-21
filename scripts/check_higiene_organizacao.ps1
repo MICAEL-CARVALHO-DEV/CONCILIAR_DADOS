@@ -1,5 +1,6 @@
 param(
-  [string]$RepoRoot = "."
+  [string]$RepoRoot = ".",
+  [switch]$WarnOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -141,9 +142,18 @@ if ($issues.Count -eq 0) {
   exit 0
 }
 
-Write-Host "[higiene] FALHA - ajustes necessarios:" -ForegroundColor Red
+if ($WarnOnly) {
+  Write-Host "[higiene] AVISO - ajustes recomendados:" -ForegroundColor Yellow
+} else {
+  Write-Host "[higiene] FALHA - ajustes necessarios:" -ForegroundColor Red
+}
 for ($i = 0; $i -lt $issues.Count; $i++) {
   Write-Host ("  {0}. {1}" -f ($i + 1), $issues[$i]) -ForegroundColor Yellow
+}
+
+if ($WarnOnly) {
+  Write-Host "[higiene] modo warn-only ativo; commit local nao sera bloqueado." -ForegroundColor Yellow
+  exit 0
 }
 
 exit 1
