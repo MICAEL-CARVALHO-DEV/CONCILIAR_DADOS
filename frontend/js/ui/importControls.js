@@ -37,7 +37,11 @@
 
   function generateRandomMultiUserDemo(ctx) {
     if (typeof ctx.canUseDemoTools === "function" && !ctx.canUseDemoTools()) {
-      globalScope.alert("A demo de usuarios so pode ser aplicada na Pagina de teste.");
+      globalScope.alert("Esse recurso interno so pode ser aplicado no ambiente protegido.");
+      return;
+    }
+    if (ctx.workspaceMode === "operational" && typeof ctx.isManualDemoWorkspaceActive === "function" && !ctx.isManualDemoWorkspaceActive()) {
+      globalScope.alert("Ative o demo manual antes de rodar este teste.");
       return;
     }
     var currentState = ctx.getState();
@@ -68,7 +72,7 @@
     ctx.saveState();
     ctx.syncYearFilter();
     ctx.render();
-    globalScope.alert("Demo aplicada: 4 usuarios com eventos aleatorios em " + String(sampleSize) + " emendas.");
+    globalScope.alert("Dados internos aplicados: 4 usuarios com eventos simulados em " + String(sampleSize) + " emendas.");
   }
 
   function bindImportControls(options) {
@@ -81,14 +85,25 @@
     if (btnReset) {
       btnReset.addEventListener("click", function () {
         if (typeof opts.canUseDemoTools === "function" && !opts.canUseDemoTools()) {
-          globalScope.alert("O reset de demo so pode ser usado na Pagina de teste.");
+          globalScope.alert("Esse recurso interno so pode ser usado no ambiente protegido.");
+          return;
+        }
+        if (opts.workspaceMode === "operational" && typeof opts.isManualDemoWorkspaceActive === "function" && !opts.isManualDemoWorkspaceActive()) {
+          globalScope.alert("Ative o demo manual antes de resetar os dados de teste.");
           return;
         }
         if (!canMutateRecords()) {
           globalScope.alert("Perfil atual nao pode resetar dados neste workspace.");
           return;
         }
-        if (!globalScope.confirm("Resetar a Pagina de teste para dados DEMO? Isso apaga alteracoes locais deste workspace.")) return;
+        if (!globalScope.confirm("Resetar os dados internos deste workspace? Isso apaga alteracoes locais.")) return;
+        if (typeof opts.isManualDemoWorkspaceActive === "function" && opts.isManualDemoWorkspaceActive() && typeof opts.resetManualDemoWorkspaceState === "function") {
+          opts.resetManualDemoWorkspaceState();
+          opts.closeModal();
+          opts.hideImportReport();
+          opts.setLastImportedPlanilha1Aoa(null);
+          return;
+        }
         opts.setState({ records: opts.deepClone(opts.DEMO).map(opts.normalizeRecordShape) });
         var nextState = opts.getState();
         opts.setIdCountersByYear(opts.buildIdCounters(nextState.records));

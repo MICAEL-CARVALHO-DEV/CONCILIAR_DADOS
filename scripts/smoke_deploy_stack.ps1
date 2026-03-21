@@ -1,10 +1,13 @@
 param(
   [string]$ApiBaseUrl = "https://sec-emendas-api.onrender.com",
-  [string]$FrontOrigin = "https://micael-carvalho-dev.github.io",
+  [string]$FrontOrigin = "https://conciliar-dados.pages.dev",
   [string]$LoginUser = "",
   [string]$LoginPass = "",
+  [string]$ExpectBranch = "",
   [switch]$SkipCors,
-  [switch]$SkipLogin
+  [switch]$SkipLogin,
+  [switch]$ExpectProduction = $true,
+  [switch]$RequireReady = $true
 )
 
 $ErrorActionPreference = "Stop"
@@ -30,6 +33,30 @@ Write-Step "GET /health"
 $health = Invoke-RestMethod -Method Get -Uri "$base/health"
 Assert-True ($health.ok -eq $true) "/health sem ok=true"
 Write-Host ("  ok={0} auth_enabled={1} env={2}" -f $health.ok, $health.auth_enabled, $health.app_env) -ForegroundColor Green
+$deployService = [string]($health.deployment.service)
+$deployBranch = [string]($health.deployment.branch)
+$deployCommit = [string]($health.deployment.commit)
+if ($deployService -or $deployBranch -or $deployCommit) {
+  Write-Host ("  deploy service={0} branch={1} commit={2}" -f $deployService, $deployBranch, $deployCommit) -ForegroundColor DarkCyan
+}
+
+if ($ExpectProduction) {
+  Assert-True ($health.app_env -eq "production") "/health.app_env deveria ser production"
+  Assert-True ($health.auth_enabled -eq $true) "/health.auth_enabled deveria ser true"
+  Assert-True ($health.db_auto_bootstrap -eq $false) "/health.db_auto_bootstrap deveria ser false em producao"
+  Assert-True ($health.demo_mode -eq $false) "/health.demo_mode deveria ser false em producao"
+}
+
+if ($ExpectBranch) {
+  Assert-True ($deployBranch -eq $ExpectBranch) "/health.deployment.branch diferente da branch esperada"
+}
+
+if ($RequireReady) {
+  Assert-True ($null -ne $health.production_ready) "/health sem production_ready"
+  Assert-True ($health.production_ready -eq $true) "/health.production_ready deveria ser true"
+  $runtimeWarnings = @($health.runtime_warnings)
+  Assert-True ($runtimeWarnings.Count -eq 0) "/health.runtime_warnings deveria estar vazio"
+}
 
 # 2) OpenAPI + rotas criticas
 Write-Step "GET /openapi.json"

@@ -14,6 +14,11 @@
     return !host || host === "localhost" || host === "127.0.0.1";
   }
 
+  function clearAuthBootstrapMask() {
+    if (!globalScope.document || !globalScope.document.documentElement) return;
+    globalScope.document.documentElement.removeAttribute("data-auth-bootstrap");
+  }
+
   function loadUserConfig(forcePrompt, ctx) {
     var savedAuthUser = ctx.readAuthenticatedProfile ? ctx.readAuthenticatedProfile() : null;
     var legacyAuthUser = ctx.readLegacyAuthenticatedProfile ? ctx.readLegacyAuthenticatedProfile() : null;
@@ -91,6 +96,7 @@
       loadUserConfig(false, ctx);
       ctx.applyAccessProfile();
       ctx.bootstrapApiIntegration();
+      clearAuthBootstrapMask();
       return;
     }
 
@@ -108,7 +114,7 @@
       if (authErr && (authErr.status === 403 || authErr.message.indexOf("403") >= 0)) {
         ctx.clearStoredSessionToken();
         ctx.closeApiSocket();
-        ctx.redirectToAuth(ctx.authLoginPage, "msg=" + encodeURIComponent("Acesso restrito (403). Seu perfil nao tem permissao para acessar."));
+        ctx.redirectToAuth(ctx.authLoginPage, "clean=1&msg=" + encodeURIComponent("Acesso restrito (403). Seu perfil nao tem permissao para acessar."));
         return;
       }
 
@@ -125,7 +131,7 @@
       if (!me) {
         ctx.clearStoredSessionToken();
         ctx.closeApiSocket();
-        ctx.redirectToAuth(ctx.authLoginPage, "msg=" + encodeURIComponent("Sessao expirada. Faca login novamente."));
+        ctx.redirectToAuth(ctx.authLoginPage, "clean=1&msg=" + encodeURIComponent("Sessao expirada. Faca login novamente."));
         return;
       }
 
@@ -138,7 +144,9 @@
       ctx.applyAccessProfile();
       await ctx.bootstrapApiIntegration();
       ctx.connectApiSocket();
+      clearAuthBootstrapMask();
     } catch (uiErr) {
+      clearAuthBootstrapMask();
       globalScope.console.error("Falha ao inicializar UI apos autenticacao:", uiErr);
     }
   }

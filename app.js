@@ -60,6 +60,7 @@ const ENTRY_PLANILHA_FOCUS_SESSION_KEY = "SEC_PLANILHA_ENTRY_FOCUS";
 const AUTH_LOGIN_PAGE = "frontend/pages/login.html";
 const AUTH_REGISTER_PAGE = "frontend/pages/cadastro.html";
 const STORAGE_MODE_KEY = "SEC_STORAGE_MODE";
+const WORKSPACE_DEMO_MODE_KEY = "SEC_WORKSPACE_DEMO_MODE";
 const STORAGE_MODE_LOCAL = "local";
 const STORAGE_MODE_SESSION = "session";
 const DEFAULT_API_BASE_URL = "http://localhost:8000";
@@ -115,7 +116,6 @@ const exportWorkbookWriterUtils = SEC_FRONTEND.exportWorkbookWriterUtils || null
 const exportTemplateUtils = SEC_FRONTEND.exportTemplateUtils || null;
 const exportTemplateWriterUtils = SEC_FRONTEND.exportTemplateWriterUtils || null;
 const exportDataUtils = SEC_FRONTEND.exportDataUtils || null;
-const exportExecutiveUtils = SEC_FRONTEND.exportExecutiveUtils || null;
 const recordModelUtils = SEC_FRONTEND.recordModelUtils || null;
 const auxModalsUtils = SEC_FRONTEND.auxModalsUtils || null;
 const importReportUtils = SEC_FRONTEND.importReportUtils || null;
@@ -529,6 +529,7 @@ const btnExportHistorico = document.getElementById("btnExportHistorico");
 const btnExportCustom = document.getElementById("btnExportCustom");
 const btnExportOne = document.getElementById("btnExportOne");
 const btnCreateEmenda = document.getElementById("btnCreateEmenda");
+const btnDemoMode = document.getElementById("btnDemoMode");
 const btnReset = document.getElementById("btnReset");
 const fileCsv = document.getElementById("fileCsv");
 const importReport = document.getElementById("importReport");
@@ -887,12 +888,6 @@ function getBetaImportsUtil(methodName) {
 function getBetaSyncUtil(methodName) {
   if (!betaSyncUtils) return null;
   const method = betaSyncUtils[methodName];
-  return typeof method === "function" ? method : null;
-}
-
-function getExportExecutiveUtil(methodName) {
-  if (!exportExecutiveUtils) return null;
-  const method = exportExecutiveUtils[methodName];
   return typeof method === "function" ? method : null;
 }
 
@@ -1272,6 +1267,8 @@ function getUiShellBindingsContext() {
     logoutCurrentUser: logoutCurrentUser,
     redirectToAuth: redirectToAuth,
     authLoginPage: AUTH_LOGIN_PAGE,
+    btnDemoMode: btnDemoMode,
+    toggleManualDemoWorkspace: toggleManualDemoWorkspace,
     btnDemo4Users: btnDemo4Users,
     generateRandomMultiUserDemo: generateRandomMultiUserDemo,
     modalClose: modalClose,
@@ -1302,7 +1299,7 @@ function getUiShellBindingsContext() {
     btnCreateEmenda: btnCreateEmenda,
     openCreateModal: function () {
       if (modalCreateUtils && typeof modalCreateUtils.openCreateModal === "function") {
-        modalCreateUtils.openCreateModal(getStateContext());
+        modalCreateUtils.openCreateModal(getModalCreateContext());
       }
     },
     btnExportOne: btnExportOne,
@@ -1362,6 +1359,8 @@ function getImportControlsContext() {
     canImportData: canImportData,
     canApplyImportGovernance: canApplyImportGovernance,
     canUseDemoTools: canUseDemoWorkspaceTools,
+    isManualDemoWorkspaceActive: isManualDemoWorkspaceActive,
+    resetManualDemoWorkspaceState: resetManualDemoWorkspaceState,
     getState: function () {
       return state;
     },
@@ -1423,6 +1422,39 @@ function getImportControlsContext() {
     mkEvent: mkEvent,
     isoNow: isoNow,
     syncCanonicalToAllFields: syncCanonicalToAllFields
+  };
+}
+
+function getModalCreateContext() {
+  return {
+    currentUser: CURRENT_USER,
+    currentRole: CURRENT_ROLE,
+    canMutateRecords: canMutateRecords,
+    setAuxModalVisibility: setAuxModalVisibility,
+    isApiEnabled: isApiEnabled,
+    apiRequest: apiRequest,
+    refreshRemoteEmendasFromApi: function (forceRender) {
+      return refreshRemoteEmendasFromApi(!!forceRender);
+    },
+    getState: function () {
+      return state;
+    },
+    setState: function (nextState) {
+      state = nextState;
+    },
+    buildIdCounters: buildIdCounters,
+    assignMissingIds: assignMissingIds,
+    setIdCountersByYear: function (nextValue) {
+      idCountersByYear = nextValue;
+    },
+    getIdCountersByYear: function () {
+      return idCountersByYear;
+    },
+    normalizeRecordShape: normalizeRecordShape,
+    saveState: saveState,
+    syncYearFilter: syncYearFilter,
+    render: render,
+    mkEvent: mkEvent
   };
 }
 
@@ -3151,6 +3183,10 @@ function generateRandomMultiUserDemo() {
   if (moduleFn) {
     return moduleFn(getImportControlsContext());
   }
+  if (canUseManualDemoWorkspace() && !isManualDemoWorkspaceActive()) {
+    alert("Ative o demo manual antes de rodar este teste.");
+    return;
+  }
   if (!Array.isArray(state.records) || state.records.length === 0) {
     state = { records: deepClone(DEMO).map(normalizeRecordShape) };
   }
@@ -3177,7 +3213,7 @@ function generateRandomMultiUserDemo() {
   saveState();
   syncYearFilter();
   render();
-  alert("Demo aplicada: 4 usuarios com eventos aleatorios em " + String(sampleSize) + " emendas.");
+  alert("Dados internos aplicados: 4 usuarios com eventos simulados em " + String(sampleSize) + " emendas.");
 }
 
 // Configura eventos de login/cadastro do auth-gate interno da pagina principal.
@@ -3312,6 +3348,7 @@ function getRoleAccessContext() {
     isImportPreviewApiEnabled: isImportPreviewApiEnabled,
     workspaceMode: getCurrentWorkspaceDefinition().mode,
     workspaceKey: getCurrentWorkspaceDefinition().key,
+    workspaceIsDemoMode: isManualDemoWorkspaceActive(),
     workspaceAllowsImport: canImportInCurrentWorkspace(),
     workspaceAllowsMutation: canMutateInCurrentWorkspace(),
     workspaceAllowsDemoTools: canUseDemoWorkspaceTools()
@@ -3408,6 +3445,42 @@ function isWorkspaceOwnerUser() {
   return identity.role === "PROGRAMADOR" && PRIVATE_WORKSPACE_OWNER_USERS.has(identity.user);
 }
 
+function buildWorkspaceDemoModeStorageKey(workspaceKey) {
+  return WORKSPACE_DEMO_MODE_KEY + "__" + String(normalizeWorkspaceKey(workspaceKey) || WORKSPACE_KEYS.LOA).toLowerCase();
+}
+
+function readWorkspaceDemoModeFlag(workspaceKey) {
+  const key = buildWorkspaceDemoModeStorageKey(workspaceKey);
+  try {
+    return String(localStorage.getItem(key) || "").trim() === "1";
+  } catch (_err) {
+    return false;
+  }
+}
+
+function writeWorkspaceDemoModeFlag(workspaceKey, enabled) {
+  const key = buildWorkspaceDemoModeStorageKey(workspaceKey);
+  try {
+    if (enabled) {
+      localStorage.setItem(key, "1");
+    } else {
+      localStorage.removeItem(key);
+    }
+  } catch (_err) {
+    // no-op
+  }
+}
+
+function canUseManualDemoWorkspace() {
+  return DEMO_MODE_ENABLED
+    && isWorkspaceOwnerUser()
+    && normalizeWorkspaceKey(CURRENT_WORKSPACE || WORKSPACE_KEYS.LOA) === WORKSPACE_KEYS.LOA;
+}
+
+function isManualDemoWorkspaceActive() {
+  return canUseManualDemoWorkspace() && readWorkspaceDemoModeFlag(CURRENT_WORKSPACE || WORKSPACE_KEYS.LOA);
+}
+
 function readStoredWorkspaceKey() {
   try {
     return normalizeWorkspaceKey(localStorage.getItem(WORKSPACE_STORAGE_KEY));
@@ -3430,7 +3503,7 @@ function getWorkspaceDefinitions() {
       key: WORKSPACE_KEYS.LOA,
       label: "LOA atual",
       description: LOA_PRE_BETA_LOCKED
-        ? "Base oficial preparada para a beta. Ela permanece limpa ate a liberacao da operacao real."
+        ? "Base oficial preparada para liberacao controlada. Ela permanece protegida ate a ativacao da operacao."
         : "Base oficial em operacao. A logica atual continua rodando aqui sem alteracao.",
       mode: "operational",
       datasetVisible: !LOA_PRE_BETA_LOCKED,
@@ -3440,22 +3513,22 @@ function getWorkspaceDefinitions() {
       demoTools: false,
       preBetaLocked: LOA_PRE_BETA_LOCKED,
       notice: LOA_PRE_BETA_LOCKED
-        ? "A LOA oficial fica vazia e sem integracao ate o inicio da beta com usuarios. Smoke e validacoes controladas seguem fora do fluxo oficial."
+        ? "A LOA oficial permanece protegida e sem integracao ate a liberacao controlada da operacao."
         : "",
       stageTitle: "",
       stageDescription: "",
       rules: LOA_PRE_BETA_LOCKED
         ? [
-            "A LOA continua visivel para validacao do layout e do fluxo oficial.",
-            "Importacao, alteracao e sincronizacao oficial ficam bloqueadas ate a liberacao da beta.",
-            "Homologacao e smoke seguem controlados sem reabrir workspaces extras nesta fase."
+            "A LOA continua visivel para leitura e conferencias do fluxo oficial.",
+            "Importacao, alteracao e sincronizacao oficial ficam bloqueadas ate a liberacao da operacao.",
+            "O contexto operacional permanece preservado ate a ativacao oficial."
           ]
         : [],
       nextSteps: LOA_PRE_BETA_LOCKED
         ? [
-            "Liberar a operacao da LOA quando a beta oficial comecar.",
+            "Liberar a operacao da LOA quando a ativacao oficial for autorizada.",
             "Reativar a integracao com a API oficial nesse contexto.",
-            "Manter validacoes locais controladas ate a entrada oficial da beta."
+            "Manter a base protegida ate a entrada oficial em operacao."
           ]
         : []
     }
@@ -3511,7 +3584,7 @@ function canRenderWorkspaceDataset() {
 }
 
 function isApiBackedWorkspace() {
-  return !!getCurrentWorkspaceDefinition().apiBacked;
+  return !isManualDemoWorkspaceActive() && !!getCurrentWorkspaceDefinition().apiBacked;
 }
 
 function canImportInCurrentWorkspace() {
@@ -3523,20 +3596,36 @@ function canMutateInCurrentWorkspace() {
 }
 
 function canUseDemoWorkspaceTools() {
-  return DEMO_MODE_ENABLED && !!getCurrentWorkspaceDefinition().demoTools;
+  return !!getCurrentWorkspaceDefinition().demoTools || canUseManualDemoWorkspace();
+}
+
+function buildLoaMitigationNoiseBlob(rec) {
+  if (!rec || typeof rec !== "object") return "";
+  const events = Array.isArray(rec.eventos) ? rec.eventos : [];
+  const notes = events.map(function (ev) {
+    return normalizeLooseText(ev && ev.note ? ev.note : "");
+  }).join(" ");
+  return [
+    normalizeLooseText(rec.id || rec.id_interno || ""),
+    normalizeLooseText(rec.identificacao || ""),
+    normalizeLooseText(rec.ref_key || ""),
+    normalizeLooseText(rec.processo_sei || ""),
+    normalizeLooseText(rec.objetivo_epi || rec.objetivo || ""),
+    normalizeLooseText(rec.observacao || rec.observacoes || ""),
+    normalizeLooseText(rec.source_sheet || ""),
+    notes
+  ].join(" ");
 }
 
 function isLoaMitigationNoiseRecord(rec) {
   if (!rec || typeof rec !== "object") return false;
-  const id = normalizeLooseText(rec.id || rec.id_interno || "");
-  const identificacao = normalizeLooseText(rec.identificacao || "");
-  const refKey = normalizeLooseText(rec.ref_key || "");
-  const processo = normalizeLooseText(rec.processo_sei || "");
-  const blob = [id, identificacao, refKey, processo].join(" ");
+  if (rec.demo_seed === true || inferDemoSeed(rec)) return true;
+  const blob = buildLoaMitigationNoiseBlob(rec);
 
   if (blob.indexOf("smoke e2e") >= 0) return true;
   if (blob.indexOf("regressao p0") >= 0) return true;
   if (blob.indexOf("qa_smoke_") >= 0) return true;
+  if (/(^|[^a-z0-9])(beta|teste|debug|hmlg|homolog)([^a-z0-9]|$)/.test(blob)) return true;
   if (/^epi-(item8|c34|hmlg|smoke)-/i.test(String(rec.id || "").trim())) return true;
   if (/^epi-\d{4}-\d{6}-v\d{2,}$/i.test(String(rec.id || "").trim()) && blob.indexOf("smoke") >= 0) return true;
   return false;
@@ -3557,11 +3646,13 @@ function isLoaPreBetaLocked() {
 
 function getWorkspaceStorageKey() {
   const base = STORAGE_KEY + "__" + String(getCurrentWorkspaceDefinition().key || WORKSPACE_KEYS.LOA).toLowerCase();
+  if (isManualDemoWorkspaceActive()) return base + "__demo_manual";
   return isLoaPreBetaLocked() ? (base + "__prebeta") : base;
 }
 
 function getWorkspaceCrossTabPingKey() {
-  return CROSS_TAB_PING_KEY + "__" + String(getCurrentWorkspaceDefinition().key || WORKSPACE_KEYS.LOA).toLowerCase();
+  const base = CROSS_TAB_PING_KEY + "__" + String(getCurrentWorkspaceDefinition().key || WORKSPACE_KEYS.LOA).toLowerCase();
+  return isManualDemoWorkspaceActive() ? (base + "__demo_manual") : base;
 }
 
 function getWorkspaceLegacyStorageKeys() {
@@ -3569,14 +3660,70 @@ function getWorkspaceLegacyStorageKeys() {
 }
 
 function getWorkspaceSeedRecords() {
-  return isTestWorkspace() ? DEMO : [];
+  return (isTestWorkspace() || isManualDemoWorkspaceActive()) ? DEMO : [];
 }
 
-function setCurrentWorkspace(nextKey) {
-  const resolved = getAccessibleWorkspaceKey(nextKey);
-  if (!resolved || resolved === CURRENT_WORKSPACE) return;
-  CURRENT_WORKSPACE = resolved;
-  writeStoredWorkspaceKey(resolved);
+function buildWorkspaceStateStorageKey(workspaceKey, options) {
+  const normalized = String(normalizeWorkspaceKey(workspaceKey) || WORKSPACE_KEYS.LOA).toLowerCase();
+  const opts = options && typeof options === "object" ? options : {};
+  let key = STORAGE_KEY + "__" + normalized;
+  if (opts.manualDemo) key += "__demo_manual";
+  if (opts.demoBaseline) key += "__baseline";
+  return key;
+}
+
+function clearWorkspaceStateSlot(workspaceKey, options) {
+  const key = buildWorkspaceStateStorageKey(workspaceKey, options);
+  try {
+    sessionStorage.removeItem(key);
+  } catch (_err) {
+    // no-op
+  }
+  try {
+    localStorage.removeItem(key);
+  } catch (_err) {
+    // no-op
+  }
+}
+
+function readWorkspaceStateSlot(workspaceKey, options) {
+  const key = buildWorkspaceStateStorageKey(workspaceKey, options);
+  try {
+    const primary = readStorageValue(getPrimaryStorage(), key);
+    if (primary) {
+      const parsedPrimary = JSON.parse(primary);
+      if (parsedPrimary && Array.isArray(parsedPrimary.records)) return parsedPrimary;
+    }
+    const secondary = readStorageValue(getSecondaryStorage(), key);
+    if (secondary) {
+      const parsedSecondary = JSON.parse(secondary);
+      if (parsedSecondary && Array.isArray(parsedSecondary.records)) return parsedSecondary;
+    }
+  } catch (_err) {
+    // no-op
+  }
+  return null;
+}
+
+function writeWorkspaceStateSlot(workspaceKey, records, options) {
+  const key = buildWorkspaceStateStorageKey(workspaceKey, options);
+  const payload = {
+    records: (Array.isArray(records) ? records : []).map(normalizeRecordShape)
+  };
+  const data = JSON.stringify(payload);
+  const primary = getPrimaryStorage();
+  const secondary = getSecondaryStorage();
+  primary.setItem(key, data);
+  secondary.removeItem(key);
+}
+
+function captureManualDemoSeedRecords() {
+  const source = Array.isArray(state && state.records) ? state.records : [];
+  if (source.length) return deepClone(source).map(normalizeRecordShape);
+  return deepClone(DEMO).map(normalizeRecordShape);
+}
+
+function restoreWorkspaceStateAfterContextSwitch() {
   forceCloseModal();
   selectedId = null;
   state = loadState();
@@ -3598,6 +3745,54 @@ function setCurrentWorkspace(nextKey) {
       console.error(err);
     });
   }
+}
+
+function toggleManualDemoWorkspace() {
+  if (!canUseManualDemoWorkspace()) {
+    alert("Modo demo manual disponivel apenas para PROGRAMADOR na LOA atual.");
+    return false;
+  }
+
+  const workspaceKey = CURRENT_WORKSPACE || WORKSPACE_KEYS.LOA;
+  if (!isManualDemoWorkspaceActive()) {
+    const seedRecords = captureManualDemoSeedRecords();
+    if (!readWorkspaceStateSlot(workspaceKey, { manualDemo: true })) {
+      writeWorkspaceStateSlot(workspaceKey, seedRecords, { manualDemo: true });
+      writeWorkspaceStateSlot(workspaceKey, seedRecords, { manualDemo: true, demoBaseline: true });
+    } else if (!readWorkspaceStateSlot(workspaceKey, { manualDemo: true, demoBaseline: true })) {
+      writeWorkspaceStateSlot(workspaceKey, seedRecords, { manualDemo: true, demoBaseline: true });
+    }
+    writeWorkspaceDemoModeFlag(workspaceKey, true);
+    restoreWorkspaceStateAfterContextSwitch();
+    alert("Modo demo manual ativado. A LOA agora roda em um slot local isolado.");
+    return true;
+  }
+
+  writeWorkspaceDemoModeFlag(workspaceKey, false);
+  restoreWorkspaceStateAfterContextSwitch();
+  alert("Modo demo manual desativado. A LOA oficial voltou a ser exibida.");
+  return true;
+}
+
+function resetManualDemoWorkspaceState() {
+  if (!isManualDemoWorkspaceActive()) return 0;
+  const workspaceKey = CURRENT_WORKSPACE || WORKSPACE_KEYS.LOA;
+  const baseline = readWorkspaceStateSlot(workspaceKey, { manualDemo: true, demoBaseline: true });
+  const fallback = captureManualDemoSeedRecords();
+  const records = baseline && Array.isArray(baseline.records) && baseline.records.length
+    ? baseline.records
+    : fallback;
+  writeWorkspaceStateSlot(workspaceKey, records, { manualDemo: true });
+  restoreWorkspaceStateAfterContextSwitch();
+  return Array.isArray(records) ? records.length : 0;
+}
+
+function setCurrentWorkspace(nextKey) {
+  const resolved = getAccessibleWorkspaceKey(nextKey);
+  if (!resolved || resolved === CURRENT_WORKSPACE) return;
+  CURRENT_WORKSPACE = resolved;
+  writeStoredWorkspaceKey(resolved);
+  restoreWorkspaceStateAfterContextSwitch();
 }
 
 function setWorkspaceSectionVisibility(sectionEl, visible) {
@@ -3870,10 +4065,15 @@ function applyWorkspaceLayoutMode(canUseDataset) {
 }
 
 function getWorkspaceContext() {
+  const currentWorkspace = Object.assign({}, getCurrentWorkspaceDefinition());
+  if (isManualDemoWorkspaceActive()) {
+    currentWorkspace.description = "Base oficial em modo demo manual isolado. Tudo que voce fizer aqui fica em um slot local separado e nao substitui a planilha oficial.";
+  }
   return {
-    currentWorkspace: getCurrentWorkspaceDefinition(),
+    currentWorkspace: currentWorkspace,
     visibleWorkspaces: getVisibleWorkspaceDefinitions(),
     canSwitch: getVisibleWorkspaceDefinitions().length > 1,
+    manualDemoActive: isManualDemoWorkspaceActive(),
     clearNodeChildren: clearNodeChildren,
     onChange: setCurrentWorkspace
   };
@@ -6042,13 +6242,18 @@ function getBetaPowerBiContext() {
     filterDefaults: BETA_POWERBI_FILTER_DEFAULTS,
     clearNodeChildren: clearNodeChildren,
     buildPowerBiDashboardData: buildPowerBiDashboardData,
-    exportExecutiveDashboardReport: exportExecutiveDashboardReport,
-    exportPowerBiLeanReport: exportPowerBiLeanReport,
-    extractApiError: extractApiError,
     setSelectOptions: setSelectOptions,
     fmtMoney: fmtMoney,
     fmtDateTime: fmtDateTime,
     getDeputadoAvatarLetters: getDeputadoAvatarLetters,
+    getRecordCurrentStatus: getRecordCurrentStatus,
+    getRecordIdentificationText: typeof getRecordIdentificationText === "function" ? getRecordIdentificationText : function(rec) { return text(rec && rec.identificacao) || text(rec && rec.id) || "-"; },
+    text: text,
+    getBackendIdForRecord: getBackendIdForRecord,
+    onSelectRecordId: function(id) {
+       var r = Array.isArray(ALL_RECORDS) ? ALL_RECORDS.find(function(rp){ return getBackendIdForRecord(rp) == id; }) : null;
+       if (r && typeof selectRecord === "function") selectRecord(r);
+    },
     rerender: rerenderBetaWorkspaceFiltered,
     setPowerBiFilters: function (nextFilters) {
       betaPowerBiFilters = nextFilters;
@@ -6082,22 +6287,6 @@ function getBetaWorkspaceContext() {
     renderPowerBi: renderBetaPowerBiPanel,
     renderSupport: renderBetaSupportPanel,
     renderImports: renderBetaImportsPanel
-  };
-}
-
-function getExecutiveExportContext() {
-  return {
-    fmtDateTime: fmtDateTime,
-    isoNow: isoNow,
-    currentRole: CURRENT_ROLE,
-    currentUser: CURRENT_USER,
-    filters: betaPowerBiFilters,
-    text: text,
-    toNumber: toNumber,
-    getRecordCurrentStatus: getRecordCurrentStatus,
-    getActiveUsersWithLastMark: getActiveUsersWithLastMark,
-    calcProgress: calcProgress,
-    getGlobalProgressState: getGlobalProgressState
   };
 }
 
@@ -6241,6 +6430,7 @@ function getAccessProfileContext() {
     btnCreateProfile: btnCreateProfile,
     importLabel: importLabel,
     fileCsv: fileCsv,
+    btnDemoMode: btnDemoMode,
     btnReset: btnReset,
     btnDemo4Users: btnDemo4Users,
     btnProfile: btnProfile,
@@ -6252,6 +6442,8 @@ function getAccessProfileContext() {
     isWorkspaceOperational: isOperationalWorkspace,
     canUseWorkspaceDataset: canRenderWorkspaceDataset,
     canUseDemoTools: canUseDemoWorkspaceTools,
+    canUseManualDemoWorkspace: canUseManualDemoWorkspace,
+    isManualDemoWorkspaceActive: isManualDemoWorkspaceActive,
     getReadOnlyRoleMeta: getReadOnlyRoleMeta,
     canImportData: canImportData,
     buildUserAvatarLetters: buildUserAvatarLetters,
@@ -6563,226 +6755,6 @@ function buildPowerBiDashboardData(filteredRows) {
     byStatus: byStatus,
     byUser: byUser
   };
-}
-
-function buildExecutiveSummaryAoa(model) {
-  const moduleFn = getExportExecutiveUtil("buildExecutiveSummaryAoa");
-  if (moduleFn) return moduleFn(model, getExecutiveExportContext());
-  return [["Relatorio executivo indisponivel"]];
-}
-
-function buildExecutiveDeputadosAoa(model) {
-  const moduleFn = getExportExecutiveUtil("buildExecutiveDeputadosAoa");
-  if (moduleFn) return moduleFn(model, getExecutiveExportContext());
-  return [["Deputado", "Emendas", "Municipios", "Valor Atual", "Concluidas", "Em atencao", "Eventos", "Status dominante", "Ultima atualizacao", "Ultima acao", "Ultimo ator"]];
-}
-
-function buildExecutiveMunicipiosAoa(model) {
-  const moduleFn = getExportExecutiveUtil("buildExecutiveMunicipiosAoa");
-  if (moduleFn) return moduleFn(model, getExecutiveExportContext());
-  return [["Municipio", "Emendas", "Valor Atual", "Em atencao"]];
-}
-
-function buildExecutiveObjetivosAoa(model) {
-  const moduleFn = getExportExecutiveUtil("buildExecutiveObjetivosAoa");
-  if (moduleFn) return moduleFn(model, getExecutiveExportContext());
-  return [["Objetivo EPI", "Emendas", "Valor Atual", "Em atencao"]];
-}
-
-function buildExecutiveUsersAoa(model) {
-  const moduleFn = getExportExecutiveUtil("buildExecutiveUsersAoa");
-  if (moduleFn) return moduleFn(model, getExecutiveExportContext());
-  return [["Usuario", "Perfil", "Eventos", "Ultima acao", "Tipo ultimo evento"]];
-}
-
-function buildPowerBiLeanBaseAoa(model) {
-  const moduleFn = getExportExecutiveUtil("buildPowerBiLeanBaseAoa");
-  if (moduleFn) return moduleFn(model, getExecutiveExportContext());
-  return [[
-    "backend_id",
-    "id_interno_sistema",
-    "ano",
-    "identificacao",
-    "municipio",
-    "deputado",
-    "objetivo_epi",
-    "status_atual",
-    "global_state",
-    "progresso_percentual",
-    "valor_atual",
-    "usuarios_ativos",
-    "updated_at",
-    "processo_sei",
-    "cod_acao",
-    "cod_subfonte"
-  ]];
-}
-
-function validateExecutiveWorkbookStructure(workbook) {
-  const requiredSheets = [
-    "Resumo Executivo",
-    "Deputados",
-    "Municipios",
-    "Objetivos EPI",
-    "Usuarios",
-    "Base Filtrada"
-  ];
-  const sheetNames = Array.isArray(workbook && workbook.SheetNames) ? workbook.SheetNames : [];
-  const missingSheets = requiredSheets.filter(function (name) {
-    return sheetNames.indexOf(name) < 0;
-  });
-  if (missingSheets.length) {
-    return {
-      ok: false,
-      message: "Falha ao montar relatorio executivo. Abas ausentes: " + missingSheets.join(", ")
-    };
-  }
-  return { ok: true, message: "" };
-}
-
-function validateLeanPowerBiWorkbookStructure(workbook) {
-  const requiredSheets = ["PowerBI_Base"];
-  const sheetNames = Array.isArray(workbook && workbook.SheetNames) ? workbook.SheetNames : [];
-  const missingSheets = requiredSheets.filter(function (name) {
-    return sheetNames.indexOf(name) < 0;
-  });
-  if (missingSheets.length) {
-    return {
-      ok: false,
-      message: "Falha ao montar export enxuto do Power BI. Abas ausentes: " + missingSheets.join(", ")
-    };
-  }
-  return { ok: true, message: "" };
-}
-
-async function exportExecutiveDashboardReport(filteredRows) {
-  const model = buildPowerBiDashboardData(filteredRows);
-  if (!model.isExecutiveRole) {
-    alert("A exportacao executiva fica liberada para APG, SUPERVISAO, POWERBI e PROGRAMADOR.");
-    return false;
-  }
-  const xlsxApi = getXlsxApi();
-  if (!xlsxApi) {
-    alert("Biblioteca XLSX nao carregada.");
-    return false;
-  }
-
-  const filename = "relatorio_executivo_" + dateStamp() + ".xlsx";
-  const baseTable = buildExportTableData(model.rows, { useOriginalHeaders: false });
-  const baseAoa = [baseTable.headers].concat(baseTable.rows.map(function (rowObj) {
-    return baseTable.headers.map(function (header) {
-      return rowObj && rowObj[header] != null ? rowObj[header] : "";
-    });
-  }));
-
-  const wb = xlsxApi.utils.book_new();
-  xlsxApi.utils.book_append_sheet(wb, xlsxApi.utils.aoa_to_sheet(buildExecutiveSummaryAoa(model)), "Resumo Executivo");
-  xlsxApi.utils.book_append_sheet(wb, xlsxApi.utils.aoa_to_sheet(buildExecutiveDeputadosAoa(model)), "Deputados");
-  xlsxApi.utils.book_append_sheet(wb, xlsxApi.utils.aoa_to_sheet(buildExecutiveMunicipiosAoa(model)), "Municipios");
-  xlsxApi.utils.book_append_sheet(wb, xlsxApi.utils.aoa_to_sheet(buildExecutiveObjetivosAoa(model)), "Objetivos EPI");
-  xlsxApi.utils.book_append_sheet(wb, xlsxApi.utils.aoa_to_sheet(buildExecutiveUsersAoa(model)), "Usuarios");
-  xlsxApi.utils.book_append_sheet(wb, xlsxApi.utils.aoa_to_sheet(baseAoa), "Base Filtrada");
-  const workbookValidation = validateExecutiveWorkbookStructure(wb);
-  if (!workbookValidation.ok) {
-    alert(workbookValidation.message || "Falha ao montar relatorio executivo.");
-    return false;
-  }
-  xlsxApi.writeFile(wb, filename);
-
-  latestExportReport = {
-    escopo: EXPORT_SCOPE.PERSONALIZADO,
-    arquivoNome: filename,
-    quantidadeRegistros: model.rows.length,
-    filtros: {
-      dashboard: "powerbi_executivo",
-      deputado: betaPowerBiFilters.deputado || "",
-      municipio: betaPowerBiFilters.municipio || "",
-      status: betaPowerBiFilters.status || "",
-      objetivo_epi: betaPowerBiFilters.objetivo_epi || "",
-      q: betaPowerBiFilters.q || ""
-    },
-    geradoEm: isoNow()
-  };
-  renderImportDashboard();
-
-  await syncExportLogToApi({
-    formato: "XLSX",
-    arquivoNome: filename,
-    quantidadeRegistros: model.rows.length,
-    quantidadeEventos: model.scopedAuditRows.length,
-    filtros: {
-      dashboard: "powerbi_executivo",
-      deputado: betaPowerBiFilters.deputado || "",
-      municipio: betaPowerBiFilters.municipio || "",
-      status: betaPowerBiFilters.status || "",
-      objetivo_epi: betaPowerBiFilters.objetivo_epi || "",
-      q: betaPowerBiFilters.q || ""
-    },
-    modoHeaders: "executivo_dashboard",
-    escopoExportacao: EXPORT_SCOPE.PERSONALIZADO,
-    roundTripOk: null,
-    roundTripIssues: []
-  });
-  return true;
-}
-
-async function exportPowerBiLeanReport(filteredRows) {
-  const model = buildPowerBiDashboardData(filteredRows);
-  if (!model.isExecutiveRole) {
-    alert("A exportacao enxuta do Power BI fica liberada para APG, SUPERVISAO, POWERBI e PROGRAMADOR.");
-    return false;
-  }
-  const xlsxApi = getXlsxApi();
-  if (!xlsxApi) {
-    alert("Biblioteca XLSX nao carregada.");
-    return false;
-  }
-
-  const filename = "powerbi_consumo_enxuto_" + dateStamp() + ".xlsx";
-  const wb = xlsxApi.utils.book_new();
-  xlsxApi.utils.book_append_sheet(wb, xlsxApi.utils.aoa_to_sheet(buildPowerBiLeanBaseAoa(model)), "PowerBI_Base");
-  const workbookValidation = validateLeanPowerBiWorkbookStructure(wb);
-  if (!workbookValidation.ok) {
-    alert(workbookValidation.message || "Falha ao montar export enxuto do Power BI.");
-    return false;
-  }
-  xlsxApi.writeFile(wb, filename);
-
-  latestExportReport = {
-    escopo: EXPORT_SCOPE.PERSONALIZADO,
-    arquivoNome: filename,
-    quantidadeRegistros: model.rows.length,
-    filtros: {
-      dashboard: "powerbi_consumo_enxuto",
-      deputado: betaPowerBiFilters.deputado || "",
-      municipio: betaPowerBiFilters.municipio || "",
-      status: betaPowerBiFilters.status || "",
-      objetivo_epi: betaPowerBiFilters.objetivo_epi || "",
-      q: betaPowerBiFilters.q || ""
-    },
-    geradoEm: isoNow()
-  };
-  renderImportDashboard();
-
-  await syncExportLogToApi({
-    formato: "XLSX",
-    arquivoNome: filename,
-    quantidadeRegistros: model.rows.length,
-    quantidadeEventos: model.scopedAuditRows.length,
-    filtros: {
-      dashboard: "powerbi_consumo_enxuto",
-      deputado: betaPowerBiFilters.deputado || "",
-      municipio: betaPowerBiFilters.municipio || "",
-      status: betaPowerBiFilters.status || "",
-      objetivo_epi: betaPowerBiFilters.objetivo_epi || "",
-      q: betaPowerBiFilters.q || ""
-    },
-    modoHeaders: "powerbi_consumo_enxuto",
-    escopoExportacao: EXPORT_SCOPE.PERSONALIZADO,
-    roundTripOk: null,
-    roundTripIssues: []
-  });
-  return true;
 }
 
 function renderBetaPowerBiPanel(target, filteredRows) {
@@ -7840,7 +7812,7 @@ function getStorageMode() {
 }
 
 function isCentralSyncMode() {
-  return CENTRAL_SYNC_REQUIRED;
+  return CENTRAL_SYNC_REQUIRED && !isManualDemoWorkspaceActive();
 }
 
 function canOperateCentralData() {
@@ -8878,12 +8850,24 @@ function buildImportSummaryHtml(report) {
     + "<h4>Resumo da importacao</h4>"
     + "<p class=\"muted small\">Arquivo: " + ctx.escapeHtml(fileName) + " | Abas lidas: " + ctx.escapeHtml(sheets) + "</p>"
     + "<div class=\"import-tabs\" role=\"tablist\" aria-label=\"Abas do relatorio de importacao\">"
-    + "  <button type=\"button\" class=\"import-tab-btn active\" data-import-tab=\"resumo\" role=\"tab\" aria-selected=\"true\">Resumo da importacao</button>"
+    + (report.applyPending ? "  <button type=\"button\" class=\"import-tab-btn active\" data-import-tab=\"revisao\" role=\"tab\" aria-selected=\"true\">Revisao e Aplicacao</button>\n" : "")
+    + "  <button type=\"button\" class=\"import-tab-btn" + (!report.applyPending ? " active" : "") + "\" data-import-tab=\"resumo\" role=\"tab\" aria-selected=\"" + (!report.applyPending ? "true" : "false") + "\">Resumo da importacao</button>"
     + "  <button type=\"button\" class=\"import-tab-btn\" data-import-tab=\"planilha1\" role=\"tab\" aria-selected=\"false\">Planilha1 (Reflexo)</button>"
     + "  <button type=\"button\" class=\"import-tab-btn\" data-import-tab=\"validacao\" role=\"tab\" aria-selected=\"false\">Validacao</button>"
     + "</div>"
     + "<div class=\"import-tab-panels\">"
-    + "  <section class=\"import-tab-panel active entering\" data-import-panel=\"resumo\">"
+    + (report.applyPending ?
+      "  <section class=\"import-tab-panel active entering\" data-import-panel=\"revisao\">"
+      + "    <h4 style=\"margin-bottom:8px\">Revisao do Lote Pendente</h4>"
+      + "    <p class=\"muted small\">" + ctx.escapeHtml(report.applyMessage || "Lote pronto para revisao.") + "</p>"
+      + "    <div style=\"margin-top:16px; margin-bottom:16px; display:flex; gap:8px;\">"
+      + (report.canApplyGovernance 
+          ? "      <button type=\"button\" class=\"btn active\" data-import-action=\"apply-preview\">Aprovar e Aplicar Oficialmente</button>" 
+          : "      <button type=\"button\" class=\"btn\" disabled title=\"Apenas perfis autorizados podem aprovar.\">Aprovar e Aplicar Oficialmente (Bloqueado)</button>")
+      + "      <button type=\"button\" class=\"btn danger\" data-import-action=\"discard-preview\">Descartar Lote</button>"
+      + "    </div>"
+      + "  </section>\n" : "")
+    + "  <section class=\"import-tab-panel" + (!report.applyPending ? " active entering" : "") + "\" data-import-panel=\"resumo\">"
     + "    <div class=\"kv\" style=\"margin-top:8px\">"
     + "      <div class=\"k\">Linhas lidas</div><div class=\"v\">" + String(report.totalRows || 0) + "</div>"
     + "      <div class=\"k\">Linhas validas</div><div class=\"v\">" + String(report.consideredRows || 0) + "</div>"

@@ -84,6 +84,24 @@
     return rec;
   }
 
+  function buildInternalSeedBlob(rec, ctx) {
+    if (!rec) return "";
+    var events = Array.isArray(rec.eventos) ? rec.eventos : [];
+    var notes = events.map(function (ev) {
+      return ctx.normalizeLooseText(ev && ev.note ? ev.note : "");
+    }).join(" ");
+    return [
+      ctx.normalizeLooseText(rec.id || rec.id_interno || ""),
+      ctx.normalizeLooseText(rec.identificacao || ""),
+      ctx.normalizeLooseText(rec.ref_key || ""),
+      ctx.normalizeLooseText(rec.processo_sei || ""),
+      ctx.normalizeLooseText(rec.objetivo_epi || rec.objetivo || ""),
+      ctx.normalizeLooseText(rec.observacao || rec.observacoes || ""),
+      ctx.normalizeLooseText(rec.source_sheet || ""),
+      notes
+    ].join(" ");
+  }
+
   function inferDemoSeed(rec, ctx) {
     if (!rec) return false;
     if (rec.demo_seed === true) return true;
@@ -93,11 +111,16 @@
     var processo = ctx.normalizeLooseText(rec.processo_sei || "");
     var id = ctx.normalizeLooseText(rec.id || "");
     var events = Array.isArray(rec.eventos) ? rec.eventos : [];
+    var blob = buildInternalSeedBlob(rec, ctx);
 
     var hasDemoNote = events.some(function (ev) {
       return ctx.normalizeLooseText(ev && ev.note ? ev.note : "").indexOf("demo") >= 0;
     });
     if (hasDemoNote) return true;
+    if (/(^|[^a-z0-9])(beta|teste|debug|hmlg|homolog)([^a-z0-9]|$)/.test(blob)) return true;
+    if (blob.indexOf("smoke e2e") >= 0) return true;
+    if (blob.indexOf("regressao p0") >= 0) return true;
+    if (blob.indexOf("qa_smoke_") >= 0) return true;
 
     if (identificacao === "epi 2026 / fanfarra" && deputado === "dep-alfa") return true;
     if (identificacao === "epi 2026 / reforma escola" && deputado === "dep-beta") return true;

@@ -48,6 +48,14 @@ def ensure_legacy_schema(engine) -> None:
             statements.append("ALTER TABLE usuarios ADD COLUMN ativo BOOLEAN NOT NULL DEFAULT TRUE")
         if "status_cadastro" not in cols:
             statements.append("ALTER TABLE usuarios ADD COLUMN status_cadastro VARCHAR(20) NOT NULL DEFAULT 'APROVADO'")
+        if "failed_login_attempts" not in cols:
+            statements.append("ALTER TABLE usuarios ADD COLUMN failed_login_attempts INTEGER NOT NULL DEFAULT 0")
+        if "locked_until" not in cols:
+            statements.append("ALTER TABLE usuarios ADD COLUMN locked_until TIMESTAMP")
+        if "password_reset_token" not in cols:
+            statements.append("ALTER TABLE usuarios ADD COLUMN password_reset_token VARCHAR(255)")
+        if "password_reset_expires" not in cols:
+            statements.append("ALTER TABLE usuarios ADD COLUMN password_reset_expires TIMESTAMP")
         if "ultimo_login" not in cols:
             statements.append("ALTER TABLE usuarios ADD COLUMN ultimo_login TIMESTAMP")
 
@@ -63,6 +71,16 @@ def ensure_legacy_schema(engine) -> None:
                         "ELSE 'EM_ANALISE' END "
                         "WHERE status_cadastro IS NULL OR TRIM(status_cadastro) = ''"
                     )
+                )
+                conn.execute(
+                    text(
+                        "UPDATE usuarios "
+                        "SET failed_login_attempts = 0 "
+                        "WHERE failed_login_attempts IS NULL"
+                    )
+                )
+                conn.execute(
+                    text("CREATE INDEX IF NOT EXISTS ix_usuarios_password_reset_token ON usuarios(password_reset_token)")
                 )
 
     if "emendas" in tables:
@@ -284,6 +302,16 @@ def build_health_payload(settings, roles: list[str], ai_orchestrator) -> dict:
         "database_backend": settings.database_backend,
         "db_auto_bootstrap": settings.db_auto_bootstrap_enabled,
         "demo_mode": settings.demo_mode_enabled,
+        "legacy_import_sync_enabled": settings.legacy_import_sync_enabled,
+        "production_ready": settings.production_ready,
+        "runtime_warnings": settings.production_runtime_warnings,
+        "deployment": settings.deployment_metadata,
+        "auth_hardening": {
+            "password_min_length": 8,
+            "login_failure_window_minutes": settings.login_failure_window_minutes,
+            "login_failure_max_attempts": settings.login_failure_max_attempts,
+            "login_lockout_minutes": settings.login_lockout_minutes,
+        },
         "roles": roles,
         "ai_orchestrator_enabled": settings.AI_ORCHESTRATOR_ENABLED,
         "ai_configured_providers": ai_orchestrator.configured_count(),

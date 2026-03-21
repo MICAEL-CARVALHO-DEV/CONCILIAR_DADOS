@@ -120,6 +120,8 @@
     var btnProfile = opts.btnProfile || null;
     var btnChangePassword = opts.btnChangePassword || null;
     var btnLogout = opts.btnLogout || null;
+    var btnDemoMode = opts.btnDemoMode || null;
+    var toggleManualDemoWorkspace = typeof opts.toggleManualDemoWorkspace === "function" ? opts.toggleManualDemoWorkspace : noop;
     var btnDemo4Users = opts.btnDemo4Users || null;
     var modalClose = opts.modalClose || null;
     var modalClose2 = opts.modalClose2 || null;
@@ -243,6 +245,11 @@
         closeSidebarUserMenu();
         await logoutCurrentUser();
         redirectToAuth(authLoginPage, "logout=1");
+      });
+    }
+    if (btnDemoMode) {
+      btnDemoMode.addEventListener("click", function () {
+        toggleManualDemoWorkspace();
       });
     }
     if (btnDemo4Users) {

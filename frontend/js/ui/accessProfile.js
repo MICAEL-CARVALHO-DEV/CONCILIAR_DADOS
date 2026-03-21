@@ -25,6 +25,8 @@
     var isWorkspaceOperational = typeof ctx.isWorkspaceOperational === "function" ? !!ctx.isWorkspaceOperational() : true;
     var canUseWorkspaceDataset = typeof ctx.canUseWorkspaceDataset === "function" ? !!ctx.canUseWorkspaceDataset() : isWorkspaceOperational;
     var canUseDemoTools = typeof ctx.canUseDemoTools === "function" ? !!ctx.canUseDemoTools() : false;
+    var canUseManualDemoWorkspace = typeof ctx.canUseManualDemoWorkspace === "function" ? !!ctx.canUseManualDemoWorkspace() : false;
+    var isManualDemoWorkspaceActive = typeof ctx.isManualDemoWorkspaceActive === "function" ? !!ctx.isManualDemoWorkspaceActive() : false;
     var canImportData = canUseWorkspaceDataset
       && (typeof ctx.canImportData === "function" ? !!ctx.canImportData() : canManageData)
       && (!isCentralSyncMode || canOperateCentralData);
@@ -43,7 +45,7 @@
       : "SE";
 
     if (ctx.currentUserInfo) {
-      ctx.currentUserInfo.textContent = apiTag + " | " + storageTag;
+      ctx.currentUserInfo.textContent = apiTag + " | " + storageTag + (isManualDemoWorkspaceActive ? " | demo manual" : "");
     }
     if (ctx.sidebarUserName) {
       ctx.sidebarUserName.textContent = userName;
@@ -69,8 +71,19 @@
     if (ctx.btnCreateProfile) ctx.btnCreateProfile.style.display = canCreateProfiles ? "inline-block" : "none";
     if (ctx.importLabel) ctx.importLabel.style.display = canImportData ? "inline-block" : "none";
     if (ctx.fileCsv) ctx.fileCsv.disabled = !canImportData;
-    if (ctx.btnReset) ctx.btnReset.style.display = isOwner && canUseDemoTools ? "inline-block" : "none";
-    if (ctx.btnDemo4Users) ctx.btnDemo4Users.style.display = isOwner && canUseDemoTools ? "inline-block" : "none";
+    if (ctx.btnDemoMode) {
+      ctx.btnDemoMode.style.display = isOwner && canUseManualDemoWorkspace ? "inline-block" : "none";
+      ctx.btnDemoMode.textContent = isManualDemoWorkspaceActive ? "Sair demo manual" : "Ativar demo manual";
+      ctx.btnDemoMode.classList.toggle("active", isManualDemoWorkspaceActive);
+    }
+    if (ctx.btnReset) {
+      ctx.btnReset.style.display = isOwner && canUseDemoTools && isManualDemoWorkspaceActive ? "inline-block" : "none";
+      ctx.btnReset.textContent = "Reset demo";
+    }
+    if (ctx.btnDemo4Users) {
+      ctx.btnDemo4Users.style.display = isOwner && canUseDemoTools && isManualDemoWorkspaceActive ? "inline-block" : "none";
+      ctx.btnDemo4Users.textContent = "Rodar teste demo";
+    }
     if (ctx.btnProfile) ctx.btnProfile.style.display = "flex";
     if (ctx.btnChangePassword) ctx.btnChangePassword.style.display = "flex";
     if (ctx.btnLogout) ctx.btnLogout.style.display = "flex";

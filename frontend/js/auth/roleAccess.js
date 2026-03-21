@@ -62,14 +62,17 @@
   }
 
   function canViewGlobalAuditApi(ctx) {
+    if (ctx && ctx.workspaceIsDemoMode) return false;
     return String(ctx.workspaceMode || "operational") === "operational" && ctx.isApiEnabled() && ["APG", "SUPERVISAO", "POWERBI", "PROGRAMADOR"].indexOf(ctx.currentRole) >= 0;
   }
 
   function canUseSupportApi(ctx) {
+    if (ctx && ctx.workspaceIsDemoMode) return false;
     return String(ctx.workspaceMode || "operational") === "operational" && ctx.isApiEnabled() && !!ctx.currentUser;
   }
 
   function canImportData(ctx) {
+    if (ctx && ctx.workspaceIsDemoMode) return false;
     var canUsePreviewApi = false;
     if (typeof ctx.isImportPreviewApiEnabled === "function") {
       canUsePreviewApi = !!ctx.isImportPreviewApiEnabled();
@@ -83,6 +86,7 @@
   }
 
   function canApplyImportGovernance(ctx) {
+    if (ctx && ctx.workspaceIsDemoMode) return false;
     var canUsePreviewApi = false;
     if (typeof ctx.isImportPreviewApiEnabled === "function") {
       canUsePreviewApi = !!ctx.isImportPreviewApiEnabled();
