@@ -6,15 +6,14 @@ on:
     paths:
       - ".github/workflows/deploy-cloudflare-pages.yml"
       - "index.html"
-      - "login.html"
-      - "cadastro.html"
-      - "reset-senha.html"
       - "style.css"
       - "app.js"
-      - "config.js"
-      - "config.production.js"
+      - "frontend/**"
       - "assets/**"
       - "vendor/**"
+      - "scripts/build_cloudflare_dist.mjs"
+      - "scripts/build_cloudflare_dist.ps1"
+      - "anotacoes/legal/license"
   workflow_dispatch:
 
 permissions:
@@ -35,22 +34,22 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
       - name: Build static site artifact
         run: |
-          set -euxo pipefail
-          rm -rf _site
-          mkdir -p _site
-          cp index.html _site/
-          cp login.html _site/
-          cp cadastro.html _site/
-          if [ -f reset-senha.html ]; then cp reset-senha.html _site/; fi
-          cp style.css _site/
-          cp app.js _site/
-          cp config.js _site/
-          cp config.production.js _site/
-          cp LICENSE _site/
-          if [ -d assets ]; then cp -r assets _site/assets; fi
-          if [ -d vendor ]; then cp -r vendor _site/vendor; fi
+          node ./scripts/build_cloudflare_dist.mjs
+
+      - name: Verify Cloudflare artifact
+        run: |
+          test -f .cf-pages-dist/index.html
+          test -f .cf-pages-dist/style.css
+          test -f .cf-pages-dist/app.js
+          test -d .cf-pages-dist/frontend
+          test -d .cf-pages-dist/vendor
 
       - name: Deploy to Cloudflare Pages
         id: deploy
@@ -58,7 +57,7 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy _site --project-name=${{ env.CLOUDFLARE_PAGES_PROJECT_NAME }}
+          command: pages deploy .cf-pages-dist --project-name=${{ env.CLOUDFLARE_PAGES_PROJECT_NAME }}
 
       - name: Show deployment URL
         run: echo "${{ steps.deploy.outputs.deployment-url }}"

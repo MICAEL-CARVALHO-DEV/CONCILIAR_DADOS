@@ -1,11 +1,13 @@
 {
   "env": {
     "browser": true,
-    "es6": true
+    "es6": true,
+    "es2021": true
   },
   "globals": {
     "SECFrontend": "readonly",
-    "SEC_FRONTEND": "readonly"
+    "SEC_FRONTEND": "readonly",
+    "globalThis": "readonly"
   },
   "rules": {
     "no-unused-vars": ["warn", { "args": "none" }],
@@ -23,5 +25,13 @@
     "vendor/",
     ".cf-pages-dist/",
     "backend/"
+  ],
+  "overrides": [
+    {
+      "files": ["app.js"],
+      "rules": {
+        "no-implicit-globals": "off"
+      }
+    }
   ]
 }

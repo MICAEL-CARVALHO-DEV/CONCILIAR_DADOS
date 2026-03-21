@@ -5,6 +5,7 @@ Goal: Centralizar todas as pendencias (decisao, validacao, execucao e pos-beta) 
 Success: Qualquer duvida de "o que falta" e respondida aqui, sem precisar cruzar varios arquivos.
 
 ## Regra oficial de uso
+- `PLANO_MESTRE_UNIFICADO.md` define a prioridade unica, o recorte ativo e a ordem oficial de execucao.
 - Pendencia nova entra primeiro aqui.
 - `check62.md` e `checkuser.md` ficam como mapa/historico de execucao.
 - `check_pendencias_beta_sec.md` fica somente como referencia historica de decisoes.
@@ -65,6 +66,20 @@ Success: Qualquer duvida de "o que falta" e respondida aqui, sem precisar cruzar
   Veredito manual/tecnico em 17/03/2026: `PASSOU`.
   Regra funcional: painel interno fica em modo leitura; integracao externa com `Power BI Desktop` vem depois.
 
+### C) Hardening tecnico para beta publica
+- [TODO] `U08-B` Remover a exposicao do token de reset na resposta de `POST /auth/recovery-request` e retirar do front a leitura de `Token para simulacao`.
+  Objetivo: o usuario nao recebe token reutilizavel em resposta HTTP.
+  Aceite: reset so segue por fluxo seguro; resposta da API fica generica.
+- [TODO] `U09-B` Atualizar o workflow oficial do Cloudflare Pages para publicar a estrutura real do app atual.
+  Objetivo: o deploy do front nao depender mais de `login.html`, `cadastro.html`, `config.js` e `config.production.js` na raiz.
+  Aceite: workflow publica `index.html`, `style.css`, `app.js`, `frontend/`, `assets/` e `vendor/` a partir de `main`.
+- [TODO] `U09-C` Fazer `npm run lint` voltar a ser gate confiavel do front.
+  Objetivo: parar de operar com lint estruturalmente vermelho.
+  Aceite: o comando oficial do projeto passa ou o baseline e ajustado formalmente ao contrato atual.
+- [TODO] `U08-C` Reduzir a persistencia ampla do token de sessao no navegador antes de abrir mais a beta.
+  Objetivo: diminuir impacto de XSS/extensoes no navegador.
+  Aceite: sessao persistente fica restrita a modo controlado (`sessionStorage` ou opt-in claro).
+
 ## PENDENCIAS QUE NAO BLOQUEIAM A BETA (POS-BETA)
 - [TODO] reabrir `workspace_id` real no backend apenas se a estrategia multi-base voltar no futuro.
 - [TODO] refinamento do export para fidelidade visual maior ao original.
@@ -80,26 +95,25 @@ Success: Qualquer duvida de "o que falta" e respondida aqui, sem precisar cruzar
   Objetivo: evitar leitura ambigua de status.
 
 ## Ordem recomendada para resolver agora
-1. `C48`
-2. `C49`
-3. `C50-A`
-4. warning `aria-hidden`
-5. `C45-A`
+1. `U08-B`
+2. `U09-B`
+3. `U09-C`
+4. `U08-C`
 
 ## Formato de resposta rapida (para voce me enviar)
-1. `C48`: `PASSOU`
-2. `C49`: `PASSOU`
-3. `C50-A`: `PASSOU`
-4. `aria-hidden`: `PASSOU`
-5. `C45-A`: `PASSOU`
+1. `U08-B`: `PASSOU` ou `FALHOU`
+2. `U09-B`: `PASSOU` ou `FALHOU`
+3. `U09-C`: `PASSOU` ou `FALHOU`
+4. `U08-C`: `PASSOU` ou `FALHOU`
 
 ## Criterio de fechamento da beta
 Beta fecha quando:
 1. bloco A (vereditos restantes) estiver decidido
 2. bloco B (validacoes finais) estiver aprovado
-3. sem erro critico em smoke/regressao local
+3. bloco C (hardening tecnico para beta publica) estiver aprovado
+4. sem erro critico em smoke/regressao local
 
 ## Resume from
-- Proximo bloco recomendado: validacao manual de `C48`, `C49`, `C50-A`, warning `aria-hidden` e `C45-A`.
+- Proximo bloco recomendado: executar `U08-B`, `U09-B`, `U09-C` e `U08-C` como corte unico de estabilizacao da beta publica.
 
 

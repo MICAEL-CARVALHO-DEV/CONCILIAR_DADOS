@@ -1,0 +1,44 @@
+name: Lint Frontend
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - ".github/workflows/lint-frontend.yml"
+      - ".eslintrc.json"
+      - "package.json"
+      - "package-lock.json"
+      - "app.js"
+      - "frontend/**"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/lint-frontend.yml"
+      - ".eslintrc.json"
+      - "package.json"
+      - "package-lock.json"
+      - "app.js"
+      - "frontend/**"
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install frontend lint dependencies
+        run: npm ci
+
+      - name: Run frontend lint
+        run: npm run lint

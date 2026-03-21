@@ -6247,12 +6247,19 @@ function getBetaPowerBiContext() {
     fmtDateTime: fmtDateTime,
     getDeputadoAvatarLetters: getDeputadoAvatarLetters,
     getRecordCurrentStatus: getRecordCurrentStatus,
-    getRecordIdentificationText: typeof getRecordIdentificationText === "function" ? getRecordIdentificationText : function(rec) { return text(rec && rec.identificacao) || text(rec && rec.id) || "-"; },
+    getRecordIdentificationText: function (rec) {
+      return text(rec && rec.identificacao) || text(rec && rec.id) || "-";
+    },
     text: text,
     getBackendIdForRecord: getBackendIdForRecord,
-    onSelectRecordId: function(id) {
-       var r = Array.isArray(ALL_RECORDS) ? ALL_RECORDS.find(function(rp){ return getBackendIdForRecord(rp) == id; }) : null;
-       if (r && typeof selectRecord === "function") selectRecord(r);
+    onSelectRecordId: function (id) {
+      var records = Array.isArray(state && state.records) ? state.records : [];
+      var record = records.find(function (candidate) {
+        return String(getBackendIdForRecord(candidate)) === String(id);
+      });
+      if (record && record.id != null) {
+        openModal(record.id);
+      }
     },
     rerender: rerenderBetaWorkspaceFiltered,
     setPowerBiFilters: function (nextFilters) {

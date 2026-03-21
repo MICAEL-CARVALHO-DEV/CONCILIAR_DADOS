@@ -3,6 +3,7 @@ from __future__ import annotations
 import secrets
 from datetime import datetime, timedelta
 from typing import Callable
+from urllib.parse import quote
 
 from fastapi import HTTPException, Request, status
 from sqlalchemy.exc import IntegrityError
@@ -505,6 +506,7 @@ def auth_change_password_service(*, payload, actor: dict, request: Request, db: 
 
 def auth_recovery_request_service(*, payload, request: Request, db: Session) -> dict:
     identificador = payload.identificador.strip()
+    public_detail = "Se o cadastro existir e estiver ativo, a solicitacao foi registrada."
     user = _find_user_by_login(db, identificador)
     if not user:
         detail = "usuario nao encontrado"
@@ -520,7 +522,7 @@ def auth_recovery_request_service(*, payload, request: Request, db: Session) -> 
         db.commit()
         if settings.is_dev_environment:
             raise HTTPException(status_code=404, detail="Usuario nao encontrado. Use Cadastrar para solicitar acesso.")
-        return {"ok": True, "detail": "Se o cadastro existir e estiver ativo, a solicitacao foi registrada."}
+        return {"ok": True, "detail": public_detail}
 
     if not user.ativo:
         detail = _inactive_account_detail(user)
@@ -537,13 +539,13 @@ def auth_recovery_request_service(*, payload, request: Request, db: Session) -> 
         db.commit()
         if settings.is_dev_environment:
             raise HTTPException(status_code=403, detail=detail)
-        return {"ok": True, "detail": "Se o cadastro existir e estiver ativo, a solicitacao foi registrada."}
+        return {"ok": True, "detail": public_detail}
 
     token = secrets.token_urlsafe(32)
     user.password_reset_token = token
-    user.password_reset_expires = datetime.utcnow() + timedelta(hours=1)
-    
-    detail = f"Solicitacao registrada. Use o link de recuperacao. (Token para simulacao: {token})"
+    user.password_reset_expires = datetime.utcnow() + timedelta(minutes=settings.password_reset_token_minutes)
+
+    detail = "solicitacao registrada; token de recuperacao emitido"
     _add_auth_audit(
         db,
         request=request,
@@ -555,7 +557,13 @@ def auth_recovery_request_service(*, payload, request: Request, db: Session) -> 
         user=user,
     )
     db.commit()
-    return {"ok": True, "detail": detail}
+    response = {"ok": True, "detail": public_detail}
+    if settings.is_dev_environment and settings.PASSWORD_RESET_RETURN_LINK_IN_RESPONSE:
+        frontend_url = (settings.PASSWORD_RESET_FRONTEND_URL or "").strip()
+        if frontend_url:
+            sep = "&" if "?" in frontend_url else "?"
+            response["debug_reset_url"] = f"{frontend_url}{sep}token={quote(token)}"
+    return response
 
 
 def auth_reset_password_service(*, payload, request: Request, db: Session) -> dict:

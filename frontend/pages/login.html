@@ -617,10 +617,6 @@
           if (data && data.debug_reset_url) {
             displayMsg = `Solicitacao registrada! <br><br> <a href="${data.debug_reset_url}" style="color:#4be08e; font-weight:bold; text-decoration:underline;">CLIQUE AQUI PARA DEFINIR NOVA SENHA (SIMULACAO)</a>`;
             msg.innerHTML = displayMsg;
-          } else if (displayMsg.includes("Token para simulacao:")) {
-            const token = displayMsg.split("Token para simulacao:")[1].trim().replace(")", "");
-            displayMsg = `Solicitacao registrada! <br><br> <a href="reset-senha.html?token=${token}" style="color:#4be08e; font-weight:bold; text-decoration:underline;">CLIQUE AQUI PARA DEFINIR NOVA SENHA (SIMULACAO)</a>`;
-            msg.innerHTML = displayMsg;
           } else {
             msg.textContent = displayMsg;
           }
