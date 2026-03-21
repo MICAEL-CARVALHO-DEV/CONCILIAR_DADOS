@@ -548,9 +548,6 @@
     var opts = options || {};
     var clearNodeChildren = typeof opts.clearNodeChildren === "function" ? opts.clearNodeChildren : clearNode;
     var buildPowerBiDashboardData = typeof opts.buildPowerBiDashboardData === "function" ? opts.buildPowerBiDashboardData : function () { return {}; };
-    var exportExecutiveDashboardReport = typeof opts.exportExecutiveDashboardReport === "function" ? opts.exportExecutiveDashboardReport : function () { return Promise.resolve(false); };
-    var exportPowerBiLeanReport = typeof opts.exportPowerBiLeanReport === "function" ? opts.exportPowerBiLeanReport : function () { return Promise.resolve(false); };
-    var extractApiError = typeof opts.extractApiError === "function" ? opts.extractApiError : function (_err, fallback) { return String(fallback || "Falha ao exportar relatorio executivo."); };
     var setSelectOptions = typeof opts.setSelectOptions === "function" ? opts.setSelectOptions : fallbackSetSelectOptions;
     var fmtMoney = typeof opts.fmtMoney === "function" ? opts.fmtMoney : safeText;
     var fmtDateTime = typeof opts.fmtDateTime === "function" ? opts.fmtDateTime : safeText;
@@ -633,29 +630,6 @@
       rerender();
     });
     executiveActions.appendChild(layoutBtn);
-    if (isExecutiveRole) {
-      var exportLeanBtn = document.createElement("button");
-      exportLeanBtn.className = "btn primary";
-      exportLeanBtn.type = "button";
-      exportLeanBtn.textContent = "Exportar Power BI (enxuto)";
-      exportLeanBtn.addEventListener("click", function () {
-        exportPowerBiLeanReport(filteredRows).catch(function (err) {
-          alert(extractApiError(err, "Falha ao exportar base enxuta do Power BI."));
-        });
-      });
-      executiveActions.appendChild(exportLeanBtn);
-
-      var exportBtn = document.createElement("button");
-      exportBtn.className = "btn primary";
-      exportBtn.type = "button";
-      exportBtn.textContent = "Exportar relatorio executivo";
-      exportBtn.addEventListener("click", function () {
-        exportExecutiveDashboardReport(filteredRows).catch(function (err) {
-          alert(extractApiError(err, "Falha ao exportar relatorio executivo."));
-        });
-      });
-      executiveActions.appendChild(exportBtn);
-    }
     intro.appendChild(executiveActions);
     target.appendChild(intro);
 
