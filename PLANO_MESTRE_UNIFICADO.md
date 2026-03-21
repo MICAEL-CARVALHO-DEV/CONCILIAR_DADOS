@@ -19,6 +19,25 @@ Success: qualquer pessoa entende em menos de 5 minutos qual e o veredito atual d
 Pendencia principal da beta publica:
 1. consolidar a politica operacional de senha, bloqueio e contingencia (`R06`)
 
+## Quadro sincronizado de ataque
+
+### AGORA - fechar a beta com regra operacional valida
+- `R06` Politica operacional de auth e contingencia.
+  Necessidade atendida: a operacao deixa de improvisar em senha, bloqueio por tentativa, perda de acesso e indisponibilidade.
+  Aceite pratico: politica publicada, alinhada ao comportamento real do sistema e referenciada na central da beta.
+
+### DEPOIS DA BETA FUNCIONANDO - manutencao com o carro em movimento
+- `R07` Rotina de backup real + prova de recuperacao.
+  Necessidade atendida: backup diario automatizado com dono, horario, log de execucao e destino oficial, mais restore testado com evidencia e roteiro operacional de desastre.
+- `R08` Teste automatico para evitar regressao silenciosa.
+  Necessidade atendida: smoke de release e suite minima do backend rodando em rotina e servindo como gate.
+
+### FUTURO - depois que a beta estiver estavel e sustentavel
+- `R09` BI externo lendo o banco oficial sem depender de planilha.
+- `R10` Decisao formal de nuvem vs interno vs hibrido sem reabrir regra de negocio.
+- Pendencias preservadas como pos-beta em `checks/@deve_de_casa_beta.md`:
+  `workspace_id` real no backend se a estrategia multi-base voltar, refinamento visual do export, redesign maior, mapa interativo, migracao interna, leitura externa Power BI e melhorias finais de acessibilidade/UX.
+
 ## Recorte unificado ativo
 
 ### BLOCO P0 - destravar beta publica com seguranca
@@ -51,27 +70,21 @@ Pendencia principal da beta publica:
 | R09 | U07/C59 | BI externo e camada executiva completa | `Power BI Desktop` lendo o banco oficial sem depender de planilha |
 | R10 | Infra futura | Servidor interno/intranet so depois da base estavel | decisao formal de manter nuvem, migrar ou operar hibrido sem reabrir a regra de negocio |
 
-## Ordem oficial de execucao
-1. `R01` reset de senha seguro
-2. `R02` workflow correto do Cloudflare Pages
-3. `R03` lint e gate de qualidade
-4. `R04` persistencia de sessao
-5. `R05` fechar pendencias operacionais do mapa
-6. `R06` politica operacional de auth e contingencia
-7. `R07` backup e restore
-8. `R08` suite automatizada backend
-9. `R09` e `R10` como pos-beta
+## Ordem oficial de execucao a partir de agora
+1. `R06` politica operacional de auth e contingencia
+2. `R07` backup diario automatizado + restore testado com evidencia
+3. `R08` suite automatizada minima do backend
+4. `R09` e `R10` como pos-beta
 
 ## O que entra neste corte e o que fica fora
 
 Entra agora:
-- seguranca de recovery/reset
-- deploy oficial do front
-- lint e gate minimo de qualidade
-- ajustes de hardening de sessao
-- saneamento das regras operacionais abertas
+- `R06`
+- politica operacional de auth, bloqueio e contingencia
+- consolidacao final das regras que faltam para a beta rodar sem improviso
 
 Fica fora deste corte:
+- `R07` e `R08` entram logo depois da beta funcionando, como manutencao em operacao
 - redesign grande de layout
 - evolucao executiva completa do BI
 - migracao para servidor interno

@@ -104,6 +104,14 @@ Success: Qualquer duvida de "o que falta" e respondida aqui, sem precisar cruzar
 2. `R07`
 3. `R08`
 
+## Quadro objetivo de ataque
+- `AGORA`: `R06`
+  Fechar a politica operacional de auth, bloqueio e contingencia para a beta rodar sem improviso.
+- `DEPOIS DA BETA FUNCIONANDO`: `R07` e `R08`
+  Fazer manutencao com o carro em movimento: backup diario real, prova de restauracao e teste automatico para evitar regressao silenciosa.
+- `FUTURO`: `R09` e `R10`
+  BI externo, decisao de infraestrutura e demais refinamentos pos-beta.
+
 ## Formato de resposta rapida (para voce me enviar)
 1. `R06`: `PASSOU` ou `FALHOU`
 2. `R07`: `PASSOU` ou `FALHOU`
