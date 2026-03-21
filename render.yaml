@@ -1,0 +1,43 @@
+services:
+  - type: web
+    name: sec-emendas-api
+    env: python
+    rootDir: backend
+    plan: free
+    autoDeploy: true
+    healthCheckPath: /health
+    buildCommand: pip install -r requirements.txt
+    startCommand: alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DB_AUTO_BOOTSTRAP
+        value: "false"
+      - key: ENABLE_DEMO_MODE
+        value: "false"
+      - key: ALLOW_SHARED_KEY_AUTH
+        value: "false"
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: JWT_ALGORITHM
+        value: HS256
+      - key: JWT_EXPIRE_HOURS
+        value: "12"
+      - key: API_AUTH_ENABLED
+        value: "true"
+      - key: API_SHARED_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: CORS_ALLOW_ORIGIN_REGEX
+        value: ^https://([a-z0-9-]+\.)?conciliar-dados\.pages\.dev$|^https://micael-carvalho-dev\.github\.io$|^http://(localhost|127\.0\.0\.1)(:\d+)?$
+      - key: PASSWORD_RESET_FRONTEND_URL
+        value: https://conciliar-dados.pages.dev/frontend/pages/reset-senha.html
+      - key: PASSWORD_RESET_RETURN_LINK_IN_RESPONSE
+        value: "false"
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_IDS
+        sync: false

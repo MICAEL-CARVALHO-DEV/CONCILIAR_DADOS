@@ -81,6 +81,16 @@
       const senha = document.getElementById("senha");
       const senha2 = document.getElementById("senha2");
       const submitBtn = form.querySelector(".login-submit");
+      const reqLen = document.getElementById("reqLen");
+      const reqUpper = document.getElementById("reqUpper");
+      const reqLower = document.getElementById("reqLower");
+      const reqNum = document.getElementById("reqNum");
+      const reqSpec = document.getElementById("reqSpec");
+      let authPolicy = {
+        passwordMinLength: 8,
+        minimumGroups: 4,
+        forbidSpaces: true
+      };
 
       if (!token) {
         msg.textContent = "Token de redefinicao ausente. Solicite uma nova recuperacao.";
@@ -99,17 +109,53 @@
         return (raw || def).replace(/\/+$/, "");
       }
 
+      function passwordGroupChecks(val) {
+        return {
+          upper: /[A-Z]/.test(val),
+          lower: /[a-z]/.test(val),
+          digit: /[0-9]/.test(val),
+          special: /[^A-Za-z0-9]/.test(val),
+          noSpaces: !/\s/.test(val)
+        };
+      }
+
+      async function loadAuthPolicy() {
+        try {
+          const resp = await fetch(getBaseUrl() + "/auth/policy");
+          if (!resp.ok) return;
+          const data = await resp.json();
+          const passwordPolicy = (data && data.password_policy && typeof data.password_policy === "object")
+            ? data.password_policy
+            : {};
+          const minLength = Number(passwordPolicy.min_length);
+          const minimumGroups = Number(passwordPolicy.minimum_groups);
+          authPolicy.passwordMinLength = Number.isFinite(minLength) && minLength > 0 ? minLength : 8;
+          authPolicy.minimumGroups = Number.isFinite(minimumGroups) && minimumGroups > 0 ? minimumGroups : 4;
+          authPolicy.forbidSpaces = passwordPolicy.forbid_spaces !== false;
+          reqLen.textContent = "Minimo " + authPolicy.passwordMinLength + " caracteres";
+        } catch (_) {
+          // Mantem fallback local.
+        }
+      }
+
       function validateComplexity(val) {
-        document.getElementById("reqLen").classList.toggle("valid", val.length >= 8);
-        document.getElementById("reqUpper").classList.toggle("valid", /[A-Z]/.test(val));
-        document.getElementById("reqLower").classList.toggle("valid", /[a-z]/.test(val));
-        document.getElementById("reqNum").classList.toggle("valid", /[0-9]/.test(val));
-        document.getElementById("reqSpec").classList.toggle("valid", /[@$!%*#?&]/.test(val));
-        
-        return val.length >= 8 && /[A-Z]/.test(val) && /[a-z]/.test(val) && /[0-9]/.test(val) && /[@$!%*#?&]/.test(val);
+        const groups = passwordGroupChecks(val);
+        const groupCount = [groups.upper, groups.lower, groups.digit, groups.special].filter(Boolean).length;
+        reqLen.classList.toggle("valid", val.length >= authPolicy.passwordMinLength);
+        reqUpper.classList.toggle("valid", groups.upper);
+        reqLower.classList.toggle("valid", groups.lower);
+        reqNum.classList.toggle("valid", groups.digit);
+        reqSpec.classList.toggle("valid", groups.special);
+
+        return (
+          val.length >= authPolicy.passwordMinLength
+          && groupCount >= authPolicy.minimumGroups
+          && (!authPolicy.forbidSpaces || groups.noSpaces)
+        );
       }
 
       senha.addEventListener("input", () => validateComplexity(senha.value));
+      loadAuthPolicy();
 
       form.addEventListener("submit", async function (e) {
         e.preventDefault();

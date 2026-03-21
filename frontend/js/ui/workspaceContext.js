@@ -38,6 +38,7 @@
     var visibleWorkspaces = Array.isArray(opts.visibleWorkspaces) ? opts.visibleWorkspaces : [];
     var currentWorkspace = opts.currentWorkspace || null;
     var canSwitch = !!opts.canSwitch;
+    var manualDemoActive = !!opts.manualDemoActive;
     var onChange = typeof opts.onChange === "function" ? opts.onChange : function () {};
     var clearNodeChildren = typeof opts.clearNodeChildren === "function" ? opts.clearNodeChildren : clearNode;
 
@@ -76,6 +77,12 @@
       opBadge.className = "workspace-badge";
       opBadge.textContent = "Operacao ativa";
       meta.appendChild(opBadge);
+      if (manualDemoActive) {
+        var demoBadge = document.createElement("span");
+        demoBadge.className = "workspace-badge workspace-badge-test";
+        demoBadge.textContent = "Demo manual isolado";
+        meta.appendChild(demoBadge);
+      }
     } else if (currentWorkspace.mode === "sandbox") {
       var testBadge = document.createElement("span");
       testBadge.className = "workspace-badge workspace-badge-test";

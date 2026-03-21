@@ -1,4 +1,3 @@
-```
 // =============================================================
 // modalDraftState.js — CICLO DE VIDA DO RASCUNHO LOCAL DO MODAL
 // Dono: Antigravity (frontend/js/ui/)

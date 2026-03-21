@@ -63,6 +63,7 @@
 
           <button type="button" id="btnForgotPassword" class="login-help-link muted small">Esqueceu a senha?</button>
           <p id="msg" class="login-msg muted small"></p>
+          <p id="authPolicyHint" class="login-msg muted small auth-policy-hint"></p>
         </div>
       </div>
     </section>
@@ -222,6 +223,7 @@
       const forgotBtn = document.getElementById("btnForgotPassword");
       const googleAuthBlock = document.getElementById("googleAuthBlock");
       const googleLoginButton = document.getElementById("googleLoginButton");
+      const authPolicyHint = document.getElementById("authPolicyHint");
 
       const linkCadastro = document.getElementById("linkCadastro");
 
@@ -274,8 +276,116 @@
         return base.replace(/\/+$/, "");
       }
 
+      function readPolicyNumber(source, keys, fallbackValue) {
+        const policy = source && typeof source === "object" ? source : {};
+        for (let i = 0; i < keys.length; i += 1) {
+          const key = String(keys[i] || "");
+          const raw = Number(policy[key]);
+          if (Number.isFinite(raw) && raw > 0) return raw;
+        }
+        return fallbackValue;
+      }
+
+      function readPolicyBoolean(source, keys, fallbackValue) {
+        const policy = source && typeof source === "object" ? source : {};
+        for (let i = 0; i < keys.length; i += 1) {
+          const key = String(keys[i] || "");
+          if (!Object.prototype.hasOwnProperty.call(policy, key)) continue;
+          return !!policy[key];
+        }
+        return !!fallbackValue;
+      }
+
+      function friendlyAuthMessage(err, fallback) {
+        if (Number(err && err.status) === 429) {
+          return "Muitas tentativas de login. Aguarde alguns minutos e tente novamente.";
+        }
+        return err && err.message ? String(err.message) : String(fallback || "Falha na autenticacao.");
+      }
+
+      let hostedEnvironmentBlockedReason = "";
+
+      function setHostedEnvironmentBlocked(reason) {
+        hostedEnvironmentBlockedReason = String(reason || "").trim();
+        clearStoredToken();
+        try { localStorage.removeItem(USER_NAME_KEY); } catch (_) {}
+        try { localStorage.removeItem(USER_ROLE_KEY); } catch (_) {}
+        if (msg && hostedEnvironmentBlockedReason) {
+          msg.textContent = hostedEnvironmentBlockedReason;
+          msg.style.color = "#b4233d";
+        }
+        if (submitBtn) submitBtn.disabled = true;
+        if (forgotBtn) forgotBtn.disabled = true;
+        if (nome) nome.disabled = false;
+        if (senha) senha.disabled = false;
+        if (googleAuthBlock) {
+          googleAuthBlock.hidden = true;
+        }
+      }
+
+      function formatHealthIssueList(health) {
+        const issues = [];
+        if (health && health.app_env && String(health.app_env) !== "production") {
+          issues.push("APP_ENV=" + String(health.app_env));
+        }
+        if (health && Object.prototype.hasOwnProperty.call(health, "auth_enabled") && !health.auth_enabled) {
+          issues.push("auth_enabled=false");
+        }
+        if (health && Object.prototype.hasOwnProperty.call(health, "db_auto_bootstrap") && health.db_auto_bootstrap) {
+          issues.push("db_auto_bootstrap=true");
+        }
+        if (health && Object.prototype.hasOwnProperty.call(health, "demo_mode") && health.demo_mode) {
+          issues.push("demo_mode=true");
+        }
+        return issues;
+      }
+
+      async function validateHostedEnvironment() {
+        if (IS_LOCAL_FRONTEND) return null;
+        try {
+          const resp = await fetch(getBaseUrl() + "/health");
+          if (!resp.ok) return null;
+          const health = await resp.json();
+          const issues = formatHealthIssueList(health);
+          if (!issues.length) return health;
+          setHostedEnvironmentBlocked(
+            "Login indisponivel no ambiente publicado. A API esta fora do contrato de producao (" + issues.join(", ") + ")."
+          );
+          return health;
+        } catch (_) {
+          return null;
+        }
+      }
+
+      async function loadAuthPolicy() {
+        if (!authPolicyHint) return null;
+        try {
+          const resp = await fetch(getBaseUrl() + "/auth/policy");
+          if (!resp.ok) throw new Error("auth policy indisponivel");
+          const policy = await resp.json();
+          const passwordPolicy = (policy && policy.password_policy && typeof policy.password_policy === "object")
+            ? policy.password_policy
+            : policy;
+          const lockoutPolicy = (policy && policy.login_lockout && typeof policy.login_lockout === "object")
+            ? policy.login_lockout
+            : policy;
+          const minLength = readPolicyNumber(passwordPolicy, ["min_length", "password_min_length", "senha_min_length"], 8);
+          const minimumGroups = readPolicyNumber(passwordPolicy, ["minimum_groups"], 4);
+          const strongPassword = readPolicyBoolean(passwordPolicy, ["strong_password", "password_strong", "senha_forte"], minimumGroups >= 3);
+          const lockMinutes = readPolicyNumber(lockoutPolicy, ["lockout_minutes", "lock_minutes", "blocked_for_minutes"], 5);
+          authPolicyHint.textContent = strongPassword
+            ? "Senha forte ativa (minimo " + minLength + " caracteres e " + minimumGroups + " grupos). O login local pode bloquear temporariamente e retornar 429 por cerca de " + lockMinutes + " min."
+            : "Politica oficial de autenticacao carregada do backend.";
+          return policy;
+        } catch (_) {
+          authPolicyHint.textContent = "Senha forte e bloqueio temporario seguem a politica oficial do backend.";
+          return null;
+        }
+      }
+
       // Se houver token salvo, valida no backend e redireciona para a pagina alvo.
       async function validateExistingSession() {
+        if (hostedEnvironmentBlockedReason) return false;
         const token = readStoredToken();
         if (!token) return false;
 
@@ -310,9 +420,11 @@
         }
       }
 
+      await validateHostedEnvironment();
       if (await validateExistingSession()) {
         return;
       }
+      loadAuthPolicy();
 
       // Requisicao padrao para endpoints de autenticacao.
       async function apiRequest(path, body) {
@@ -377,6 +489,11 @@
 
       // Callback do Google Sign-In: valida credential no backend e cria sessao.
       async function onGoogleCredential(response) {
+        if (hostedEnvironmentBlockedReason) {
+          msg.textContent = hostedEnvironmentBlockedReason;
+          msg.style.color = "#b4233d";
+          return;
+        }
         const credential = String(response && response.credential || "").trim();
         if (!credential) {
           msg.textContent = "Nao foi possivel receber a credencial do Google.";
@@ -445,6 +562,11 @@
       // Login local (usuario/gmail + senha).
       form.addEventListener("submit", async function (e) {
         e.preventDefault();
+        if (hostedEnvironmentBlockedReason) {
+          msg.textContent = hostedEnvironmentBlockedReason;
+          msg.style.color = "#b4233d";
+          return;
+        }
         const n = String(nome.value || "").trim();
         const s = String(senha.value || "").trim();
         if (!n || !s) {
@@ -471,6 +593,11 @@
 
       // Recuperacao de acesso: cria solicitacao para aprovacao de PROGRAMADOR.
       forgotBtn.addEventListener("click", async function () {
+        if (hostedEnvironmentBlockedReason) {
+          msg.textContent = hostedEnvironmentBlockedReason;
+          msg.style.color = "#b4233d";
+          return;
+        }
         const identificador = String(nome.value || "").trim();
         if (!identificador) {
           msg.textContent = "Informe nome de usuario ou Gmail para recuperar o acesso.";
@@ -485,9 +612,12 @@
 
         try {
           const data = await apiRequest("/auth/recovery-request", { identificador: identificador });
-          
+
           let displayMsg = data && data.detail ? data.detail : "Solicitacao registrada.";
-          if (displayMsg.includes("Token para simulacao:")) {
+          if (data && data.debug_reset_url) {
+            displayMsg = `Solicitacao registrada! <br><br> <a href="${data.debug_reset_url}" style="color:#4be08e; font-weight:bold; text-decoration:underline;">CLIQUE AQUI PARA DEFINIR NOVA SENHA (SIMULACAO)</a>`;
+            msg.innerHTML = displayMsg;
+          } else if (displayMsg.includes("Token para simulacao:")) {
             const token = displayMsg.split("Token para simulacao:")[1].trim().replace(")", "");
             displayMsg = `Solicitacao registrada! <br><br> <a href="reset-senha.html?token=${token}" style="color:#4be08e; font-weight:bold; text-decoration:underline;">CLIQUE AQUI PARA DEFINIR NOVA SENHA (SIMULACAO)</a>`;
             msg.innerHTML = displayMsg;
