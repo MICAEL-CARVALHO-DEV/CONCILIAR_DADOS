@@ -67,6 +67,10 @@ RE_PWD_UPPER = re.compile(r"[A-Z]")
 RE_PWD_LOWER = re.compile(r"[a-z]")
 RE_PWD_DIGIT = re.compile(r"\d")
 RE_PWD_SPECIAL = re.compile(r"[!@#$%^&*(),.?\":{}|<>]")
+PASSWORD_POLICY_MIN_LENGTH = 8
+PASSWORD_POLICY_MINIMUM_GROUPS = 4
+PASSWORD_POLICY_FORBID_SPACES = True
+PASSWORD_POLICY_STRONG_PASSWORD = True
 GOOGLE_TOKENINFO_HOST = "oauth2.googleapis.com"
 GOOGLE_TOKENINFO_PATH = "/tokeninfo"
 
@@ -85,8 +89,11 @@ def _hash_password(password: str) -> str:
 
 def _validate_password_complexity(password: str) -> None:
     pwd = (password or "").strip()
-    if len(pwd) < 8:
-        raise HTTPException(status_code=400, detail="A senha deve ter pelo menos 8 caracteres.")
+    if len(pwd) < PASSWORD_POLICY_MIN_LENGTH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"A senha deve ter pelo menos {PASSWORD_POLICY_MIN_LENGTH} caracteres.",
+        )
     if not RE_PWD_UPPER.search(pwd):
         raise HTTPException(status_code=400, detail="A senha deve conter pelo menos uma letra maiuscula.")
     if not RE_PWD_LOWER.search(pwd):
@@ -95,6 +102,15 @@ def _validate_password_complexity(password: str) -> None:
         raise HTTPException(status_code=400, detail="A senha deve conter pelo menos um numero.")
     if not RE_PWD_SPECIAL.search(pwd):
         raise HTTPException(status_code=400, detail="A senha deve conter pelo menos um caractere especial.")
+
+
+def _build_password_policy() -> dict:
+    return {
+        "min_length": PASSWORD_POLICY_MIN_LENGTH,
+        "minimum_groups": PASSWORD_POLICY_MINIMUM_GROUPS,
+        "forbid_spaces": PASSWORD_POLICY_FORBID_SPACES,
+        "strong_password": PASSWORD_POLICY_STRONG_PASSWORD,
+    }
 
 
 def _validated_google_tokeninfo_url(raw_url: str) -> str:

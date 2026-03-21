@@ -10,6 +10,7 @@ from ..schemas import (
     AuthGoogleIn,
     AuthLoginIn,
     AuthOut,
+    AuthPolicyOut,
     AuthRecoveryRequestIn,
     AuthRegisterIn,
     AuthResetPasswordIn,
@@ -45,6 +46,10 @@ def create_auth_router(broadcast_update) -> APIRouter:
     @router.post("/auth/login", response_model=AuthOut)
     def auth_login(payload: AuthLoginIn, request: Request, db=Depends(get_db)):
         return auth_service.auth_login_service(payload=payload, request=request, db=db)
+
+    @router.get("/auth/policy", response_model=AuthPolicyOut)
+    def auth_policy():
+        return auth_service.auth_policy_service()
 
     @router.post("/auth/recovery-request")
     def auth_recovery_request(payload: AuthRecoveryRequestIn, request: Request, db=Depends(get_db)):

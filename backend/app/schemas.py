@@ -159,6 +159,25 @@ class AuthAuditLogOut(BaseModel):
         from_attributes = True
 
 
+class AuthPasswordPolicyOut(BaseModel):
+    min_length: int
+    minimum_groups: int
+    forbid_spaces: bool
+    strong_password: bool
+
+
+class AuthLoginLockoutPolicyOut(BaseModel):
+    failure_window_minutes: int
+    failure_max_attempts: int
+    lockout_minutes: int
+
+
+class AuthPolicyOut(BaseModel):
+    auth_enabled: bool
+    password_policy: AuthPasswordPolicyOut
+    login_lockout: AuthLoginLockoutPolicyOut
+
+
 class EmendaCreate(BaseModel):
     id_interno: str = ""
     ano: int

@@ -13,6 +13,7 @@ from ..core.dependencies import OWNER_ROLE
 from ..core.security import (
     IMMUTABLE_OWNER_NAMES,
     _add_auth_audit,
+    _build_password_policy,
     _assert_allowed_owner_identity,
     _create_jwt_session,
     _find_user_by_email,
@@ -33,6 +34,18 @@ PUBLIC_REGISTER_ROLES = {"APG", "SUPERVISAO", "POWERBI"}
 REGISTRATION_STATUS_PENDING = "EM_ANALISE"
 REGISTRATION_STATUS_APPROVED = "APROVADO"
 REGISTRATION_STATUS_REJECTED = "RECUSADO"
+
+
+def auth_policy_service() -> dict:
+    return {
+        "auth_enabled": settings.API_AUTH_ENABLED,
+        "password_policy": _build_password_policy(),
+        "login_lockout": {
+            "failure_window_minutes": settings.login_failure_window_minutes,
+            "failure_max_attempts": settings.login_failure_max_attempts,
+            "lockout_minutes": settings.login_lockout_minutes,
+        },
+    }
 
 
 def _owner_exists(db: Session) -> bool:
