@@ -13,18 +13,19 @@ Success: qualquer pessoa entende em menos de 5 minutos qual e o veredito atual d
 ## Veredito atual da plataforma
 - Data-base: `2026-03-21`
 - Backend publico: `OK`, com `production_ready=true`, branch `main` e commit publicado validado.
-- Beta fechada/interna: `APROVOU COM RESSALVAS`
-- Beta publica/ampliada: `APROVOU COM RESSALVAS`
+- Beta fechada/interna: `APROVOU`
+- Beta publica/ampliada: `APROVOU`
 
-Pendencia principal da beta publica:
-1. consolidar a politica operacional de senha, bloqueio e contingencia (`R06`)
+Proxima prioridade operacional apos a beta funcional:
+1. `R07` backup diario automatizado + restore testado com evidencia
+2. `R08` suite automatizada minima do backend
 
 ## Quadro sincronizado de ataque
 
-### AGORA - fechar a beta com regra operacional valida
+### AGORA - beta funcional fechada
 - `R06` Politica operacional de auth e contingencia.
-  Necessidade atendida: a operacao deixa de improvisar em senha, bloqueio por tentativa, perda de acesso e indisponibilidade.
-  Aceite pratico: politica publicada, alinhada ao comportamento real do sistema e referenciada na central da beta.
+  Estado: `PASSOU`.
+  Resultado: a operacao deixou de depender de improviso em senha, bloqueio por tentativa, perda de acesso e indisponibilidade.
 
 ### DEPOIS DA BETA FUNCIONANDO - manutencao com o carro em movimento
 - `R07` Rotina de backup real + prova de recuperacao.
@@ -71,20 +72,19 @@ Pendencia principal da beta publica:
 | R10 | Infra futura | Servidor interno/intranet so depois da base estavel | decisao formal de manter nuvem, migrar ou operar hibrido sem reabrir a regra de negocio |
 
 ## Ordem oficial de execucao a partir de agora
-1. `R06` politica operacional de auth e contingencia
-2. `R07` backup diario automatizado + restore testado com evidencia
-3. `R08` suite automatizada minima do backend
-4. `R09` e `R10` como pos-beta
+1. `R07` backup diario automatizado + restore testado com evidencia
+2. `R08` suite automatizada minima do backend
+3. `R09` e `R10` como pos-beta
 
 ## O que entra neste corte e o que fica fora
 
 Entra agora:
-- `R06`
-- politica operacional de auth, bloqueio e contingencia
-- consolidacao final das regras que faltam para a beta rodar sem improviso
+- `R07`
+- rotina de backup real com prova de recuperacao
+- sustentacao operacional do sistema em uso real
 
 Fica fora deste corte:
-- `R07` e `R08` entram logo depois da beta funcionando, como manutencao em operacao
+- `R08` entra na sequencia imediata, ainda em manutencao de operacao
 - redesign grande de layout
 - evolucao executiva completa do BI
 - migracao para servidor interno
@@ -97,4 +97,4 @@ Fica fora deste corte:
 - Se a execucao de uma operacao mudar, refletir em `CHECKPOINT_OPERACOES_FINAL.md` e `CHECKPOINT_OPERACOES_TABELA.md`.
 
 ## Resume from
-- executar `R06` como proximo corte de endurecimento operacional da beta
+- executar `R07` como proximo corte de manutencao operacional da beta em uso real

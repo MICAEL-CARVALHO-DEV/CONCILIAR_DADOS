@@ -5,7 +5,11 @@ from datetime import datetime
 from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
-from ..core.security import PASSWORD_POLICY_MIN_LENGTH
+from ..core.security import (
+    PASSWORD_POLICY_FORBID_SPACES,
+    PASSWORD_POLICY_MINIMUM_GROUPS,
+    PASSWORD_POLICY_MIN_LENGTH,
+)
 from ..models import Emenda
 
 
@@ -309,9 +313,12 @@ def build_health_payload(settings, roles: list[str], ai_orchestrator) -> dict:
         "deployment": settings.deployment_metadata,
         "auth_hardening": {
             "password_min_length": PASSWORD_POLICY_MIN_LENGTH,
+            "password_minimum_groups": PASSWORD_POLICY_MINIMUM_GROUPS,
+            "password_forbid_spaces": PASSWORD_POLICY_FORBID_SPACES,
             "login_failure_window_minutes": settings.login_failure_window_minutes,
             "login_failure_max_attempts": settings.login_failure_max_attempts,
             "login_lockout_minutes": settings.login_lockout_minutes,
+            "password_reset_token_minutes": settings.password_reset_token_minutes,
         },
         "roles": roles,
         "ai_orchestrator_enabled": settings.AI_ORCHESTRATOR_ENABLED,

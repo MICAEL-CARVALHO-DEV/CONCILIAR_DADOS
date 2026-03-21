@@ -45,7 +45,42 @@ def auth_policy_service() -> dict:
             "failure_max_attempts": settings.login_failure_max_attempts,
             "lockout_minutes": settings.login_lockout_minutes,
         },
+        "recovery": {
+            "token_minutes": settings.password_reset_token_minutes,
+            "frontend_url_configured": bool((settings.PASSWORD_RESET_FRONTEND_URL or "").strip()),
+            "debug_link_in_response": bool(
+                settings.is_dev_environment and settings.PASSWORD_RESET_RETURN_LINK_IN_RESPONSE
+            ),
+        },
+        "registration": {
+            "public_requires_approval": True,
+            "public_roles": sorted(PUBLIC_REGISTER_ROLES),
+            "owner_role": OWNER_ROLE,
+            "google_login_available": bool(settings.google_client_ids_list),
+        },
+        "contingency": {
+            "local_login_fallback": True,
+            "google_login_is_optional": True,
+            "programador_review_required": True,
+        },
     }
+
+
+def _recent_failed_local_password_attempts(*, db: Session, user: Usuario, now: datetime) -> int:
+    window_start = now - timedelta(minutes=settings.login_failure_window_minutes)
+    return int(
+        db.query(AuthAuditLog.id)
+        .filter(
+            AuthAuditLog.user_id == user.id,
+            AuthAuditLog.event_type == "LOGIN_PASSWORD",
+            AuthAuditLog.provider == "LOCAL",
+            AuthAuditLog.success.is_(False),
+            AuthAuditLog.detail.like("senha invalida%"),
+            AuthAuditLog.created_at >= window_start,
+        )
+        .count()
+        or 0
+    )
 
 
 def _owner_exists(db: Session) -> bool:
@@ -211,6 +246,7 @@ def auth_register_service(*, payload, actor: dict | None, db: Session) -> dict:
         raw_password = (payload.senha or "").strip()
         if not raw_password:
             raise HTTPException(status_code=400, detail="senha obrigatoria no cadastro normal")
+        _validate_password_complexity(raw_password)
         pwd_hash = _hash_password(raw_password)
 
     user = Usuario(
@@ -353,6 +389,7 @@ def auth_google_service(*, payload, request: Request, db: Session) -> dict:
 
 def auth_login_service(*, payload, request: Request, db: Session) -> dict:
     nome = payload.nome.strip()
+    now = datetime.utcnow()
     user = _find_user_by_login(db, nome)
     if not user:
         audit_detail = "usuario nao encontrado"
@@ -371,8 +408,8 @@ def auth_login_service(*, payload, request: Request, db: Session) -> dict:
             raise HTTPException(status_code=404, detail="Usuario nao encontrado. Use Cadastrar para solicitar acesso.")
         raise HTTPException(status_code=401, detail=public_detail)
 
-    if user.locked_until and user.locked_until > datetime.utcnow():
-        diff = user.locked_until - datetime.utcnow()
+    if user.locked_until and user.locked_until > now:
+        diff = user.locked_until - now
         mins = int(diff.total_seconds() / 60) + 1
         detail = f"Conta bloqueada temporariamente. Tente novamente em {mins} minutos."
         _add_auth_audit(
@@ -387,6 +424,9 @@ def auth_login_service(*, payload, request: Request, db: Session) -> dict:
         )
         db.commit()
         raise HTTPException(status_code=403, detail=detail)
+
+    if user.locked_until and user.locked_until <= now:
+        user.locked_until = None
 
     if not user.ativo:
         detail = _inactive_account_detail(user)
@@ -407,13 +447,19 @@ def auth_login_service(*, payload, request: Request, db: Session) -> dict:
     if not valid:
         audit_detail = "senha invalida"
         public_detail = "Credenciais invalidas."
-        
-        user.failed_login_attempts += 1
-        if user.failed_login_attempts >= 5:
-            user.locked_until = datetime.utcnow() + timedelta(minutes=15)
-            audit_detail = f"senha invalida - CONTA BLOQUEADA (tentativa {user.failed_login_attempts})"
+
+        user.failed_login_attempts = _recent_failed_local_password_attempts(db=db, user=user, now=now) + 1
+        if user.failed_login_attempts >= settings.login_failure_max_attempts:
+            user.locked_until = now + timedelta(minutes=settings.login_lockout_minutes)
+            audit_detail = (
+                "senha invalida - CONTA BLOQUEADA "
+                f"(tentativa {user.failed_login_attempts} na janela de {settings.login_failure_window_minutes} min)"
+            )
         else:
-            audit_detail = f"senha invalida (tentativa {user.failed_login_attempts})"
+            audit_detail = (
+                "senha invalida "
+                f"(tentativa {user.failed_login_attempts} na janela de {settings.login_failure_window_minutes} min)"
+            )
 
         _add_auth_audit(
             db,

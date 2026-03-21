@@ -88,12 +88,14 @@ def _hash_password(password: str) -> str:
 
 
 def _validate_password_complexity(password: str) -> None:
-    pwd = (password or "").strip()
+    pwd = password or ""
     if len(pwd) < PASSWORD_POLICY_MIN_LENGTH:
         raise HTTPException(
             status_code=400,
             detail=f"A senha deve ter pelo menos {PASSWORD_POLICY_MIN_LENGTH} caracteres.",
         )
+    if PASSWORD_POLICY_FORBID_SPACES and any(char.isspace() for char in pwd):
+        raise HTTPException(status_code=400, detail="A senha nao pode conter espacos.")
     if not RE_PWD_UPPER.search(pwd):
         raise HTTPException(status_code=400, detail="A senha deve conter pelo menos uma letra maiuscula.")
     if not RE_PWD_LOWER.search(pwd):

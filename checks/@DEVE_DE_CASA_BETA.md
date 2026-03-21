@@ -85,6 +85,11 @@ Success: Qualquer duvida de "o que falta" e respondida aqui, sem precisar cruzar
   Status tecnico: politica oficial publicada em `docs/politica_operacional_beta.md` e mapa historico/checklists alinhados ao mesmo entendimento.
   Veredito tecnico: `PASSOU`.
 
+### E) Auth operacional e contingencia
+- [DONE] `R06` Consolidar politica operacional de senha, bloqueio e contingencia.
+  Status tecnico: politica oficial publicada em `docs/politica_auth_contingencia_beta.md`, backend alinhado ao contrato de lockout em `settings` e cadastro local passou a validar a politica de senha oficial.
+  Veredito tecnico: `PASSOU`.
+
 ## PENDENCIAS QUE NAO BLOQUEIAM A BETA (POS-BETA)
 - [TODO] reabrir `workspace_id` real no backend apenas se a estrategia multi-base voltar no futuro.
 - [TODO] refinamento do export para fidelidade visual maior ao original.
@@ -100,22 +105,22 @@ Success: Qualquer duvida de "o que falta" e respondida aqui, sem precisar cruzar
   Objetivo: evitar leitura ambigua de status.
 
 ## Ordem recomendada para resolver agora
-1. `R06`
-2. `R07`
-3. `R08`
+1. `R07`
+2. `R08`
+3. `R09`
 
 ## Quadro objetivo de ataque
-- `AGORA`: `R06`
-  Fechar a politica operacional de auth, bloqueio e contingencia para a beta rodar sem improviso.
+- `AGORA`: beta funcional ja fechada com `R06`
+  Proxima prioridade operacional: backup, restauracao e gate automatizado.
 - `DEPOIS DA BETA FUNCIONANDO`: `R07` e `R08`
   Fazer manutencao com o carro em movimento: backup diario real, prova de restauracao e teste automatico para evitar regressao silenciosa.
 - `FUTURO`: `R09` e `R10`
   BI externo, decisao de infraestrutura e demais refinamentos pos-beta.
 
 ## Formato de resposta rapida (para voce me enviar)
-1. `R06`: `PASSOU` ou `FALHOU`
-2. `R07`: `PASSOU` ou `FALHOU`
-3. `R08`: `PASSOU` ou `FALHOU`
+1. `R07`: `PASSOU` ou `FALHOU`
+2. `R08`: `PASSOU` ou `FALHOU`
+3. `R09`: `PASSOU` ou `FALHOU`
 
 ## Criterio de fechamento da beta
 Beta fecha quando:
@@ -125,6 +130,6 @@ Beta fecha quando:
 4. sem erro critico em smoke/regressao local
 
 ## Resume from
-- Proximo bloco recomendado: executar `R06` como proximo corte de endurecimento operacional da beta publica.
+- Proximo bloco recomendado: executar `R07` como proximo corte de manutencao operacional da beta em uso real.
 
 

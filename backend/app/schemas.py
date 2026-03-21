@@ -172,10 +172,32 @@ class AuthLoginLockoutPolicyOut(BaseModel):
     lockout_minutes: int
 
 
+class AuthRecoveryPolicyOut(BaseModel):
+    token_minutes: int
+    frontend_url_configured: bool
+    debug_link_in_response: bool
+
+
+class AuthRegistrationPolicyOut(BaseModel):
+    public_requires_approval: bool
+    public_roles: list[str]
+    owner_role: str
+    google_login_available: bool
+
+
+class AuthContingencyPolicyOut(BaseModel):
+    local_login_fallback: bool
+    google_login_is_optional: bool
+    programador_review_required: bool
+
+
 class AuthPolicyOut(BaseModel):
     auth_enabled: bool
     password_policy: AuthPasswordPolicyOut
     login_lockout: AuthLoginLockoutPolicyOut
+    recovery: AuthRecoveryPolicyOut
+    registration: AuthRegistrationPolicyOut
+    contingency: AuthContingencyPolicyOut
 
 
 class EmendaCreate(BaseModel):
