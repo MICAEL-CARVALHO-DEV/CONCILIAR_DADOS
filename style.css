@@ -4206,10 +4206,17 @@ body.sidebar-focus-strong #pendingUsersModal.show .modal-card {
   --login-accent-soft: rgba(63, 154, 114, 0.14);
   --login-text-strong: #1f4336;
   --login-text-muted: #597569;
+  --login-bg-size: cover;
   --login-logo-frame-width: clamp(180px, 24vw, 260px);
   --login-logo-frame-height: auto;
   --login-logo-shift-y: 0px;
   --login-logo-scale: 1;
+}
+
+.cadastro-page {
+  --login-bg-focus-x: 40%;
+  --login-bg-focus-y: 24%;
+  --login-bg-size: min(1160px, 82vw) auto;
 }
 
 .login-page::before {
@@ -4218,7 +4225,7 @@ body.sidebar-focus-strong #pendingUsersModal.show .modal-card {
   inset: -24px;
   background:
     linear-gradient(120deg, rgba(14, 23, 40, 0.26), rgba(22, 28, 38, 0.12)),
-    url("assets/login-bg.jpg") var(--login-bg-focus-x) var(--login-bg-focus-y) / cover no-repeat;
+    url("assets/login-bg.jpg") var(--login-bg-focus-x) var(--login-bg-focus-y) / var(--login-bg-size) no-repeat;
   filter: blur(4.8px) saturate(1.03);
   transform: scale(1.03);
   z-index: -2;
@@ -5060,6 +5067,12 @@ body.sidebar-focus-strong #pendingUsersModal.show .modal-card {
   border: 1px solid rgba(0, 0, 0, 0.05);
 }
 
+.cadastro-page .password-requirements {
+  background: rgba(10, 32, 25, 0.2);
+  border: 1px solid rgba(243, 251, 248, 0.14);
+  backdrop-filter: blur(8px);
+}
+
 [data-theme="dark"] .password-requirements {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.05);
@@ -5072,6 +5085,12 @@ body.sidebar-focus-strong #pendingUsersModal.show .modal-card {
   font-size: 0.75rem;
   color: var(--muted);
   transition: color 0.2s ease;
+  user-select: none;
+}
+
+.cadastro-page .req-item {
+  color: rgba(243, 248, 246, 0.88);
+  font-weight: 600;
 }
 
 .req-item::before {
@@ -5081,6 +5100,11 @@ body.sidebar-focus-strong #pendingUsersModal.show .modal-card {
 
 .req-item.valid {
   color: var(--blue);
+}
+
+.cadastro-page .req-item.valid {
+  color: #f9fff9;
+  text-shadow: 0 1px 0 rgba(0, 0, 0, 0.22);
 }
 
 .req-item.valid::before {
