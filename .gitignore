@@ -71,6 +71,8 @@ oauth-client*.json
 *.temp
 *.bundle
 .cf-pages-dist/
+tmp/r07_backups/
+tmp/r07_backups_validation/
 
 # Design scratch / backup assets
 assets/ChatGPT Image *.png
