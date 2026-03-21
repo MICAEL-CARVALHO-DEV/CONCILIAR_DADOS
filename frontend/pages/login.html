@@ -168,7 +168,7 @@
           token = "";
         }
         if (token) {
-          try { localStorage.setItem(SESSION_TOKEN_BACKUP_KEY, token); } catch (_) {}
+          try { localStorage.removeItem(SESSION_TOKEN_BACKUP_KEY); } catch (_) {}
           return token;
         }
         try {
@@ -178,6 +178,7 @@
         }
         if (token) {
           try { sessionStorage.setItem(SESSION_TOKEN_KEY, token); } catch (_) {}
+          try { localStorage.removeItem(SESSION_TOKEN_BACKUP_KEY); } catch (_) {}
         }
         return token;
       }
@@ -189,7 +190,7 @@
           return;
         }
         try { sessionStorage.setItem(SESSION_TOKEN_KEY, raw); } catch (_) {}
-        try { localStorage.setItem(SESSION_TOKEN_BACKUP_KEY, raw); } catch (_) {}
+        try { localStorage.removeItem(SESSION_TOKEN_BACKUP_KEY); } catch (_) {}
       }
 
       function clearStoredToken() {
@@ -197,13 +198,32 @@
         try { localStorage.removeItem(SESSION_TOKEN_BACKUP_KEY); } catch (_) {}
       }
 
+      function writeAuthenticatedProfile(name, role) {
+        try {
+          if (name) sessionStorage.setItem(USER_NAME_KEY, String(name));
+          else sessionStorage.removeItem(USER_NAME_KEY);
+        } catch (_) {}
+        try {
+          if (role) sessionStorage.setItem(USER_ROLE_KEY, String(role));
+          else sessionStorage.removeItem(USER_ROLE_KEY);
+        } catch (_) {}
+        try { localStorage.removeItem(USER_NAME_KEY); } catch (_) {}
+        try { localStorage.removeItem(USER_ROLE_KEY); } catch (_) {}
+      }
+
+      function clearAuthenticatedProfile() {
+        try { sessionStorage.removeItem(USER_NAME_KEY); } catch (_) {}
+        try { sessionStorage.removeItem(USER_ROLE_KEY); } catch (_) {}
+        try { localStorage.removeItem(USER_NAME_KEY); } catch (_) {}
+        try { localStorage.removeItem(USER_ROLE_KEY); } catch (_) {}
+      }
+
       // Modo "clean=1": limpa sessao/storage automaticamente sem depender do DevTools.
       if (forceClean) {
         try {
           clearStoredToken();
           sessionStorage.removeItem(PENDING_GOOGLE_CREDENTIAL_KEY);
-          localStorage.removeItem(USER_NAME_KEY);
-          localStorage.removeItem(USER_ROLE_KEY);
+          clearAuthenticatedProfile();
           localStorage.removeItem("SEC_API_ENABLED");
           if (IS_LOCAL_FRONTEND) {
             localStorage.setItem(API_BASE_URL_KEY, "http://127.0.0.1:8000");
@@ -404,18 +424,14 @@
 
           const data = await resp.json();
           if (data && data.nome) {
-            localStorage.setItem(USER_NAME_KEY, String(data.nome));
-          }
-          if (data && data.perfil) {
-            localStorage.setItem(USER_ROLE_KEY, String(data.perfil));
+            writeAuthenticatedProfile(String(data.nome), data && data.perfil ? String(data.perfil) : "");
           }
 
           window.location.href = nextUrl;
           return true;
         } catch (_) {
           clearStoredToken();
-          localStorage.removeItem(USER_NAME_KEY);
-          localStorage.removeItem(USER_ROLE_KEY);
+          clearAuthenticatedProfile();
           return false;
         }
       }
@@ -469,8 +485,10 @@
       // Persiste sessao no browser apos autenticacao bem sucedida.
       function persistSession(data, fallbackName, fallbackRole) {
         writeStoredToken(String(data.token || ""));
-        localStorage.setItem(USER_NAME_KEY, String(data.usuario && data.usuario.nome || fallbackName || ""));
-        localStorage.setItem(USER_ROLE_KEY, String(data.usuario && data.usuario.perfil || fallbackRole || "APG"));
+        writeAuthenticatedProfile(
+          String(data.usuario && data.usuario.nome || fallbackName || ""),
+          String(data.usuario && data.usuario.perfil || fallbackRole || "APG")
+        );
       }
 
       // Controla estado visual durante chamadas async (loading/disable).

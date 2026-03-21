@@ -224,7 +224,7 @@
           token = "";
         }
         if (token) {
-          try { localStorage.setItem(SESSION_TOKEN_BACKUP_KEY, token); } catch (_) {}
+          try { localStorage.removeItem(SESSION_TOKEN_BACKUP_KEY); } catch (_) {}
           return token;
         }
         try {
@@ -234,6 +234,7 @@
         }
         if (token) {
           try { sessionStorage.setItem(SESSION_TOKEN_KEY, token); } catch (_) {}
+          try { localStorage.removeItem(SESSION_TOKEN_BACKUP_KEY); } catch (_) {}
         }
         return token;
       }
@@ -245,12 +246,25 @@
           return;
         }
         try { sessionStorage.setItem(SESSION_TOKEN_KEY, raw); } catch (_) {}
-        try { localStorage.setItem(SESSION_TOKEN_BACKUP_KEY, raw); } catch (_) {}
+        try { localStorage.removeItem(SESSION_TOKEN_BACKUP_KEY); } catch (_) {}
       }
 
       function clearStoredToken() {
         try { sessionStorage.removeItem(SESSION_TOKEN_KEY); } catch (_) {}
         try { localStorage.removeItem(SESSION_TOKEN_BACKUP_KEY); } catch (_) {}
+      }
+
+      function writeAuthenticatedProfile(name, role) {
+        try {
+          if (name) sessionStorage.setItem(USER_NAME_KEY, String(name));
+          else sessionStorage.removeItem(USER_NAME_KEY);
+        } catch (_) {}
+        try {
+          if (role) sessionStorage.setItem(USER_ROLE_KEY, String(role));
+          else sessionStorage.removeItem(USER_ROLE_KEY);
+        } catch (_) {}
+        try { localStorage.removeItem(USER_NAME_KEY); } catch (_) {}
+        try { localStorage.removeItem(USER_ROLE_KEY); } catch (_) {}
       }
       // Mantem navegacao de retorno preservando parametro next.
       function updateNavLinks() {
@@ -653,8 +667,10 @@
 
             if (data && data.token && data.usuario) {
               writeStoredToken(String(data.token || ""));
-              localStorage.setItem(USER_NAME_KEY, String(data.usuario && data.usuario.nome || n));
-              localStorage.setItem(USER_ROLE_KEY, String(data.usuario && data.usuario.perfil || p));
+              writeAuthenticatedProfile(
+                String(data.usuario && data.usuario.nome || n),
+                String(data.usuario && data.usuario.perfil || p)
+              );
               clearPendingGoogleRegistration();
               window.location.href = nextUrl;
               return;

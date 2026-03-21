@@ -76,9 +76,9 @@ Success: Qualquer duvida de "o que falta" e respondida aqui, sem precisar cruzar
 - [TODO] `U09-C` Fazer `npm run lint` voltar a ser gate confiavel do front.
   Objetivo: parar de operar com lint estruturalmente vermelho.
   Aceite: o comando oficial do projeto passa ou o baseline e ajustado formalmente ao contrato atual.
-- [TODO] `U08-C` Reduzir a persistencia ampla do token de sessao no navegador antes de abrir mais a beta.
-  Objetivo: diminuir impacto de XSS/extensoes no navegador.
-  Aceite: sessao persistente fica restrita a modo controlado (`sessionStorage` ou opt-in claro).
+- [DONE] `U08-C` Reduzir a persistencia ampla do token de sessao no navegador antes de abrir mais a beta.
+  Status tecnico: hardening aplicado em 21/03/2026 para manter token e perfil autenticado em `sessionStorage`, com migracao/limpeza automatica do legado em `localStorage`.
+  Veredito tecnico: `PASSOU`.
 
 ## PENDENCIAS QUE NAO BLOQUEIAM A BETA (POS-BETA)
 - [TODO] reabrir `workspace_id` real no backend apenas se a estrategia multi-base voltar no futuro.

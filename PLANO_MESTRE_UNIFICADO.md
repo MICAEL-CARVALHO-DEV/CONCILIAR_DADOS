@@ -86,4 +86,4 @@ Fica fora deste corte:
 - Se a execucao de uma operacao mudar, refletir em `CHECKPOINT_OPERACOES_FINAL.md` e `CHECKPOINT_OPERACOES_TABELA.md`.
 
 ## Resume from
-- executar `R01`, `R02` e `R03` como corte tecnico unico de estabilizacao da beta publica
+- executar `R05` e `R06` como proximo corte de endurecimento operacional da beta

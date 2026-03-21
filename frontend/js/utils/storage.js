@@ -103,13 +103,14 @@
   function readSessionToken(sessionKey, backupKey) {
     var sessionToken = safeGetItem(global.sessionStorage, sessionKey).trim();
     if (sessionToken) {
-      safeSetItem(global.localStorage, backupKey, sessionToken);
+      safeRemoveItem(global.localStorage, backupKey);
       return sessionToken;
     }
 
     var backupToken = safeGetItem(global.localStorage, backupKey).trim();
     if (backupToken) {
       safeSetItem(global.sessionStorage, sessionKey, backupToken);
+      safeRemoveItem(global.localStorage, backupKey);
       return backupToken;
     }
     return "";
@@ -122,7 +123,7 @@
       return;
     }
     safeSetItem(global.sessionStorage, sessionKey, raw);
-    safeSetItem(global.localStorage, backupKey, raw);
+    safeRemoveItem(global.localStorage, backupKey);
   }
 
   function clearSessionToken(sessionKey, backupKey) {

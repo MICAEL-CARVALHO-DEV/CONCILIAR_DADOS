@@ -71,12 +71,13 @@
     }
     var sessionToken = fallbackGetItem(global.sessionStorage, cfg.sessionToken);
     if (sessionToken) {
-      fallbackSetItem(global.localStorage, cfg.sessionTokenBackup, sessionToken);
+      fallbackRemoveItem(global.localStorage, cfg.sessionTokenBackup);
       return sessionToken;
     }
     var backupToken = fallbackGetItem(global.localStorage, cfg.sessionTokenBackup);
     if (backupToken) {
       fallbackSetItem(global.sessionStorage, cfg.sessionToken, backupToken);
+      fallbackRemoveItem(global.localStorage, cfg.sessionTokenBackup);
       return backupToken;
     }
     return "";
@@ -94,7 +95,7 @@
       return;
     }
     fallbackSetItem(global.sessionStorage, cfg.sessionToken, raw);
-    fallbackSetItem(global.localStorage, cfg.sessionTokenBackup, raw);
+    fallbackRemoveItem(global.localStorage, cfg.sessionTokenBackup);
   }
 
   function clearStoredSessionToken(keys) {
@@ -109,9 +110,31 @@
 
   function readAuthenticatedUser(keys) {
     var cfg = withDefaults(keys);
+    var sessionName = readValue(global.sessionStorage, cfg.userName);
+    var sessionRole = readValue(global.sessionStorage, cfg.userRole);
+    if (sessionName || sessionRole) {
+      removeValue(global.localStorage, cfg.userName);
+      removeValue(global.localStorage, cfg.userRole);
+      return {
+        name: sessionName,
+        role: sessionRole
+      };
+    }
+    var legacyName = readValue(global.localStorage, cfg.userName);
+    var legacyRole = readValue(global.localStorage, cfg.userRole);
+    if (legacyName || legacyRole) {
+      if (legacyName) writeValue(global.sessionStorage, cfg.userName, legacyName);
+      if (legacyRole) writeValue(global.sessionStorage, cfg.userRole, legacyRole);
+      removeValue(global.localStorage, cfg.userName);
+      removeValue(global.localStorage, cfg.userRole);
+      return {
+        name: legacyName,
+        role: legacyRole
+      };
+    }
     return {
-      name: readValue(global.localStorage, cfg.userName),
-      role: readValue(global.localStorage, cfg.userRole)
+      name: "",
+      role: ""
     };
   }
 
@@ -120,12 +143,16 @@
     var nextUser = user && user.name != null ? String(user.name).trim() : "";
     var nextRole = user && user.role != null ? String(user.role).trim() : "";
     if (!nextUser && !nextRole) return;
-    if (nextUser) writeValue(global.localStorage, cfg.userName, nextUser);
-    if (nextRole) writeValue(global.localStorage, cfg.userRole, nextRole);
+    if (nextUser) writeValue(global.sessionStorage, cfg.userName, nextUser);
+    if (nextRole) writeValue(global.sessionStorage, cfg.userRole, nextRole);
+    removeValue(global.localStorage, cfg.userName);
+    removeValue(global.localStorage, cfg.userRole);
   }
 
   function clearAuthenticatedUser(keys) {
     var cfg = withDefaults(keys);
+    removeValue(global.sessionStorage, cfg.userName);
+    removeValue(global.sessionStorage, cfg.userRole);
     removeValue(global.localStorage, cfg.userName);
     removeValue(global.localStorage, cfg.userRole);
   }
