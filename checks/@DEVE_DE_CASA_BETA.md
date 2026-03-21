@@ -67,17 +67,22 @@ Success: Qualquer duvida de "o que falta" e respondida aqui, sem precisar cruzar
   Regra funcional: painel interno fica em modo leitura; integracao externa com `Power BI Desktop` vem depois.
 
 ### C) Hardening tecnico para beta publica
-- [TODO] `U08-B` Remover a exposicao do token de reset na resposta de `POST /auth/recovery-request` e retirar do front a leitura de `Token para simulacao`.
-  Objetivo: o usuario nao recebe token reutilizavel em resposta HTTP.
-  Aceite: reset so segue por fluxo seguro; resposta da API fica generica.
-- [TODO] `U09-B` Atualizar o workflow oficial do Cloudflare Pages para publicar a estrutura real do app atual.
-  Objetivo: o deploy do front nao depender mais de `login.html`, `cadastro.html`, `config.js` e `config.production.js` na raiz.
-  Aceite: workflow publica `index.html`, `style.css`, `app.js`, `frontend/`, `assets/` e `vendor/` a partir de `main`.
-- [TODO] `U09-C` Fazer `npm run lint` voltar a ser gate confiavel do front.
-  Objetivo: parar de operar com lint estruturalmente vermelho.
-  Aceite: o comando oficial do projeto passa ou o baseline e ajustado formalmente ao contrato atual.
+- [DONE] `U08-B` Remover a exposicao do token de reset na resposta de `POST /auth/recovery-request` e retirar do front a leitura de `Token para simulacao`.
+  Status tecnico: hardening aplicado em 21/03/2026 no backend e no front; resposta publica ficou generica e o link de debug so existe em contexto local controlado.
+  Veredito tecnico: `PASSOU`.
+- [DONE] `U09-B` Atualizar o workflow oficial do Cloudflare Pages para publicar a estrutura real do app atual.
+  Status tecnico: workflow alinhado ao builder oficial `.cf-pages-dist`; Cloudflare Pages passou a publicar direto do `main`.
+  Veredito tecnico: `PASSOU`.
+- [DONE] `U09-C` Fazer `npm run lint` voltar a ser gate confiavel do front.
+  Status tecnico: baseline ajustado ao contrato atual, workflow dedicado criado e `npm run lint` voltou a passar com `0 errors`.
+  Veredito tecnico: `PASSOU`.
 - [DONE] `U08-C` Reduzir a persistencia ampla do token de sessao no navegador antes de abrir mais a beta.
   Status tecnico: hardening aplicado em 21/03/2026 para manter token e perfil autenticado em `sessionStorage`, com migracao/limpeza automatica do legado em `localStorage`.
+  Veredito tecnico: `PASSOU`.
+
+### D) Regras operacionais saneadas
+- [DONE] `R05` Consolidar `C03`, `C04`, `C18` e `C27` em regra unica da beta.
+  Status tecnico: politica oficial publicada em `docs/politica_operacional_beta.md` e mapa historico/checklists alinhados ao mesmo entendimento.
   Veredito tecnico: `PASSOU`.
 
 ## PENDENCIAS QUE NAO BLOQUEIAM A BETA (POS-BETA)
@@ -91,20 +96,18 @@ Success: Qualquer duvida de "o que falta" e respondida aqui, sem precisar cruzar
 
 ## PENDENCIAS DE HIGIENE DO MAPA (DOCUMENTACAO)
 - [TODO] alinhar itens do `check62.md` que estao como `[ ]` mas ja trazem `| DONE:` no texto.
-  Exemplos: `C03`, `C04`, `C18`, `C25-A`, `C35`, `C37..C44`, `C47`, `C50`, `C53..C62`.
+  Exemplos: `C25-A`, `C35`, `C37..C44`, `C47`, `C50`, `C53..C62`.
   Objetivo: evitar leitura ambigua de status.
 
 ## Ordem recomendada para resolver agora
-1. `U08-B`
-2. `U09-B`
-3. `U09-C`
-4. `U08-C`
+1. `R06`
+2. `R07`
+3. `R08`
 
 ## Formato de resposta rapida (para voce me enviar)
-1. `U08-B`: `PASSOU` ou `FALHOU`
-2. `U09-B`: `PASSOU` ou `FALHOU`
-3. `U09-C`: `PASSOU` ou `FALHOU`
-4. `U08-C`: `PASSOU` ou `FALHOU`
+1. `R06`: `PASSOU` ou `FALHOU`
+2. `R07`: `PASSOU` ou `FALHOU`
+3. `R08`: `PASSOU` ou `FALHOU`
 
 ## Criterio de fechamento da beta
 Beta fecha quando:
@@ -114,6 +117,6 @@ Beta fecha quando:
 4. sem erro critico em smoke/regressao local
 
 ## Resume from
-- Proximo bloco recomendado: executar `U08-B`, `U09-B`, `U09-C` e `U08-C` como corte unico de estabilizacao da beta publica.
+- Proximo bloco recomendado: executar `R06` como proximo corte de endurecimento operacional da beta publica.
 
 

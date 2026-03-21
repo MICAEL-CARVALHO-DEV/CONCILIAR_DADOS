@@ -14,12 +14,10 @@ Success: qualquer pessoa entende em menos de 5 minutos qual e o veredito atual d
 - Data-base: `2026-03-21`
 - Backend publico: `OK`, com `production_ready=true`, branch `main` e commit publicado validado.
 - Beta fechada/interna: `APROVOU COM RESSALVAS`
-- Beta publica/ampliada: `BLOQUEADA`
+- Beta publica/ampliada: `APROVOU COM RESSALVAS`
 
-Motivo do bloqueio da beta publica:
-1. fluxo de reset de senha ainda expone token na resposta
-2. workflow oficial do Cloudflare Pages esta defasado em relacao ao layout atual do repo
-3. gate de lint do front esta vermelho e hoje nao serve como barreira confiavel de regressao
+Pendencia principal da beta publica:
+1. consolidar a politica operacional de senha, bloqueio e contingencia (`R06`)
 
 ## Recorte unificado ativo
 
@@ -86,4 +84,4 @@ Fica fora deste corte:
 - Se a execucao de uma operacao mudar, refletir em `CHECKPOINT_OPERACOES_FINAL.md` e `CHECKPOINT_OPERACOES_TABELA.md`.
 
 ## Resume from
-- executar `R05` e `R06` como proximo corte de endurecimento operacional da beta
+- executar `R06` como proximo corte de endurecimento operacional da beta
