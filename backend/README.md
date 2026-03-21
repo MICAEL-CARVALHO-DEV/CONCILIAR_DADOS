@@ -9,6 +9,7 @@ Backend SEC Emendas - FastAPI + PostgreSQL/SQLite
 2) Configurar ambiente
    - Copie `.env.example` para `.env` e ajuste valores.
    - SQLite local:   powershell -ExecutionPolicy Bypass -File .\switch_to_sqlite.ps1
+     Esse script grava o banco em `%LOCALAPPDATA%\SECEmendas\sec-emendas-local.db` para evitar lock e sync do OneDrive.
    - PostgreSQL:     powershell -ExecutionPolicy Bypass -File .\switch_to_postgres.ps1
 
 3) Alembic (schema oficial)

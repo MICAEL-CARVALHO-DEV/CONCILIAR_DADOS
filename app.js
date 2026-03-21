@@ -1302,7 +1302,7 @@ function getUiShellBindingsContext() {
     btnCreateEmenda: btnCreateEmenda,
     openCreateModal: function () {
       if (modalCreateUtils && typeof modalCreateUtils.openCreateModal === "function") {
-        modalCreateUtils.openCreateModal(getStateContext());
+        modalCreateUtils.openCreateModal(getModalCreateContext());
       }
     },
     btnExportOne: btnExportOne,
@@ -1423,6 +1423,39 @@ function getImportControlsContext() {
     mkEvent: mkEvent,
     isoNow: isoNow,
     syncCanonicalToAllFields: syncCanonicalToAllFields
+  };
+}
+
+function getModalCreateContext() {
+  return {
+    currentUser: CURRENT_USER,
+    currentRole: CURRENT_ROLE,
+    canMutateRecords: canMutateRecords,
+    setAuxModalVisibility: setAuxModalVisibility,
+    isApiEnabled: isApiEnabled,
+    apiRequest: apiRequest,
+    refreshRemoteEmendasFromApi: function (forceRender) {
+      return refreshRemoteEmendasFromApi(!!forceRender);
+    },
+    getState: function () {
+      return state;
+    },
+    setState: function (nextState) {
+      state = nextState;
+    },
+    buildIdCounters: buildIdCounters,
+    assignMissingIds: assignMissingIds,
+    setIdCountersByYear: function (nextValue) {
+      idCountersByYear = nextValue;
+    },
+    getIdCountersByYear: function () {
+      return idCountersByYear;
+    },
+    normalizeRecordShape: normalizeRecordShape,
+    saveState: saveState,
+    syncYearFilter: syncYearFilter,
+    render: render,
+    mkEvent: mkEvent
   };
 }
 
