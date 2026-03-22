@@ -7,6 +7,7 @@ Success: existe um caminho seguro para gerar backup, restaurar em banco alvo pre
 
 O `R07` cobre:
 - backup logico das tabelas operacionais PostgreSQL
+- copia opcional do backup para Google Drive sincronizado localmente
 - restore controlado em banco alvo preparado
 - validacao automatizada em PostgreSQL local de teste
 - agendamento diario no Windows sem depender de GitHub Actions
@@ -14,6 +15,7 @@ O `R07` cobre:
 ## Pre-requisitos
 
 - `BACKUP_DATABASE_URL` apontando para o PostgreSQL oficial da operacao
+- opcional: `BACKUP_MIRROR_OUTPUT_ROOT` apontando para uma pasta do Google Drive sincronizada na maquina
 - Python do backend disponivel em `backend/.venv`
 - PostgreSQL local instalado para a validacao automatizada
 - `R07_VALIDATION_ADMIN_DATABASE_URL` apontando para o PostgreSQL local de teste
@@ -28,6 +30,7 @@ R07_VALIDATION_ADMIN_DATABASE_URL=postgresql://postgres:SENHA_LOCAL@127.0.0.1:54
 Regra:
 - a validacao do `R07` sem Docker so aceita `localhost` ou `127.0.0.1`
 - nao usar URL de producao para a prova de restore
+- se usar Google Drive, o backup continua nascendo primeiro no disco local e depois e espelhado para a pasta sincronizada
 
 ## Gerar backup manual
 
@@ -39,6 +42,18 @@ Saida esperada:
 - pasta nova em `tmp/r07_backups/...`
 - `manifest.json`
 - um `.csv` por tabela operacional
+- opcionalmente, copia identica em `BACKUP_MIRROR_OUTPUT_ROOT\<PASTA_DO_BACKUP>`
+
+Exemplo com espelho em Google Drive:
+
+```env
+BACKUP_MIRROR_OUTPUT_ROOT=C:\Users\<USUARIO>\Google Drive\SEC_EMENDAS_BACKUP
+```
+
+Regra operacional:
+- local e Google Drive ficam `append-only`
+- nao sobrescrever pastas antigas
+- Drive complementa o local; nao substitui a copia local
 
 ## Restaurar backup
 

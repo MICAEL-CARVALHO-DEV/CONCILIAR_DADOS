@@ -2,9 +2,11 @@ param(
   [string]$PythonExe = ".\backend\.venv\Scripts\python.exe",
   [string]$EnvFile = "backend/.env",
   [string]$OutputRoot = "tmp/r07_backups",
+  [string]$MirrorOutputRoot = "",
   [string]$Label = "sec_emendas_backup",
   [string]$DatabaseUrl = "",
-  [string]$DatabaseUrlEnv = "BACKUP_DATABASE_URL"
+  [string]$DatabaseUrlEnv = "BACKUP_DATABASE_URL",
+  [string]$MirrorOutputRootEnv = "BACKUP_MIRROR_OUTPUT_ROOT"
 )
 
 $ErrorActionPreference = "Stop"
@@ -19,11 +21,16 @@ $cmd = @(
   "--env-file", $EnvFile,
   "--output-root", $OutputRoot,
   "--label", $Label,
-  "--database-url-env", $DatabaseUrlEnv
+  "--database-url-env", $DatabaseUrlEnv,
+  "--mirror-output-root-env", $MirrorOutputRootEnv
 )
 
 if ($DatabaseUrl) {
   $cmd += @("--database-url", $DatabaseUrl)
+}
+
+if ($MirrorOutputRoot) {
+  $cmd += @("--mirror-output-root", $MirrorOutputRoot)
 }
 
 & $cmd[0] $cmd[1..($cmd.Length - 1)]

@@ -8,6 +8,7 @@ from r07_backup_restore_lib import (
     create_backup,
     ensure_dir,
     resolve_database_url,
+    resolve_optional_path_setting,
 )
 
 
@@ -16,6 +17,8 @@ def main() -> int:
     parser.add_argument("--database-url", default="")
     parser.add_argument("--database-url-env", default="BACKUP_DATABASE_URL")
     parser.add_argument("--output-root", default="tmp/r07_backups")
+    parser.add_argument("--mirror-output-root", default="")
+    parser.add_argument("--mirror-output-root-env", default="BACKUP_MIRROR_OUTPUT_ROOT")
     parser.add_argument("--label", default="sec_emendas_backup")
     args = parser.parse_args()
 
@@ -25,7 +28,17 @@ def main() -> int:
         env_file=args.env_file,
     )
     output_root = ensure_dir(Path(args.output_root))
-    result = create_backup(database_url=resolved, output_root=output_root, label=args.label)
+    mirror_output_root = resolve_optional_path_setting(
+        explicit_value=args.mirror_output_root,
+        preferred_env_key=args.mirror_output_root_env,
+        env_file=args.env_file,
+    )
+    result = create_backup(
+        database_url=resolved,
+        output_root=output_root,
+        label=args.label,
+        mirror_output_root=Path(mirror_output_root) if mirror_output_root else None,
+    )
     print(json.dumps(result, ensure_ascii=True, indent=2))
     return 0
 

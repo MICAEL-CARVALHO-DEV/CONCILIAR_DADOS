@@ -77,6 +77,26 @@ def load_env_file(env_file: str | Path | None) -> dict[str, str]:
     return {str(k): str(v) for k, v in dotenv_values(env_path).items() if k and v is not None}
 
 
+def resolve_optional_path_setting(
+    *,
+    explicit_value: str | None = None,
+    preferred_env_key: str | None = None,
+    env_file: str | Path | None = None,
+) -> str:
+    env_file_values = load_env_file(env_file)
+    candidates: list[str] = []
+    if explicit_value:
+        candidates.append(explicit_value)
+    if preferred_env_key:
+        candidates.append(os.environ.get(preferred_env_key, ""))
+        candidates.append(env_file_values.get(preferred_env_key, ""))
+    for candidate in candidates:
+        value = (candidate or "").strip()
+        if value:
+            return value
+    return ""
+
+
 def normalize_psycopg_url(raw_url: str) -> str:
     value = (raw_url or "").strip()
     if value.startswith("postgresql+psycopg://"):
@@ -333,6 +353,7 @@ def create_backup(
     database_url: ResolvedDbUrl,
     output_root: Path,
     label: str,
+    mirror_output_root: Path | None = None,
 ) -> dict[str, Any]:
     backup_dir = ensure_dir(output_root / f"{label}_{utcstamp()}")
     manifest: dict[str, Any] = {
@@ -362,7 +383,17 @@ def create_backup(
             manifest["tables"].append(dump_table_to_csv(conn, table_name, columns, table_output))
 
     write_manifest(backup_dir / "manifest.json", manifest)
-    return {"backup_dir": str(backup_dir), "manifest": manifest}
+    result: dict[str, Any] = {"backup_dir": str(backup_dir), "manifest": manifest}
+    if mirror_output_root:
+        mirror_root = ensure_dir(mirror_output_root)
+        if backup_dir.parent.resolve() == mirror_root.resolve():
+            raise RuntimeError("Destino espelho do R07 nao pode ser o mesmo diretorio do backup local.")
+        mirror_backup_dir = mirror_root / backup_dir.name
+        if mirror_backup_dir.exists():
+            raise RuntimeError(f"Destino espelho ja existe: {mirror_backup_dir}")
+        shutil.copytree(backup_dir, mirror_backup_dir)
+        result["mirror_backup_dir"] = str(mirror_backup_dir)
+    return result
 
 
 def restore_backup(
