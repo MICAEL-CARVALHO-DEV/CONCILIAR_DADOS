@@ -113,7 +113,7 @@ Success: Qualquer duvida de "o que falta" e respondida aqui, sem precisar cruzar
 - `AGORA`: beta funcional ja fechada com `R06`
   Proxima prioridade operacional: backup, restauracao e gate automatizado.
 - `DEPOIS DA BETA FUNCIONANDO`: `R07` e `R08`
-  Fazer manutencao com o carro em movimento: backup diario real, prova de restauracao e teste automatico para evitar regressao silenciosa.
+  Fazer manutencao com o carro em movimento: backup diario real, prova de restauracao em PostgreSQL local e teste automatico para evitar regressao silenciosa.
 - `FUTURO`: `R09` e `R10`
   BI externo, decisao de infraestrutura e demais refinamentos pos-beta.
 

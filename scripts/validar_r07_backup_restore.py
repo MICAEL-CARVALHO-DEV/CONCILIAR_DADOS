@@ -3,60 +3,59 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import socket
 import subprocess
-import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from uuid import uuid4
 
 import psycopg
-from sqlalchemy import create_engine, select
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
 
 from r07_backup_restore_lib import (
     ResolvedDbUrl,
     compare_manifest_counts,
     create_backup,
     ensure_dir,
-    render_counts_markdown,
+    mask_database_url,
     remove_dir_if_exists,
+    render_counts_markdown,
+    replace_database_in_url,
+    resolve_database_url,
     restore_backup,
+    to_sqlalchemy_psycopg_url,
 )
 
 
-def find_free_port() -> int:
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind(("127.0.0.1", 0))
-        return int(sock.getsockname()[1])
+LOCAL_POSTGRES_HOSTS = {"127.0.0.1", "localhost"}
 
 
-def run(cmd: list[str], *, check: bool = True) -> subprocess.CompletedProcess:
-    return subprocess.run(cmd, check=check, text=True, capture_output=True)
+def current_git_commit() -> str:
+    result = subprocess.run(
+        ["git", "rev-parse", "--short", "HEAD"],
+        check=True,
+        text=True,
+        capture_output=True,
+    )
+    return result.stdout.strip()
 
 
-def docker_url(port: int, dbname: str) -> str:
-    return f"postgresql://postgres:postgres@127.0.0.1:{port}/{dbname}"
+def require_local_validation_admin(admin_database_url: ResolvedDbUrl) -> None:
+    if admin_database_url.host not in LOCAL_POSTGRES_HOSTS:
+        raise RuntimeError(
+            "R07 sem Docker exige PostgreSQL local para validacao. "
+            "Defina R07_VALIDATION_ADMIN_DATABASE_URL com host localhost ou 127.0.0.1."
+        )
 
 
-def docker_sqla_url(port: int, dbname: str) -> str:
-    return f"postgresql+psycopg://postgres:postgres@127.0.0.1:{port}/{dbname}"
-
-
-def wait_for_postgres(admin_url: str, timeout_seconds: int = 90) -> None:
-    deadline = time.time() + timeout_seconds
-    last_error = ""
-    while time.time() < deadline:
-        try:
-            with psycopg.connect(admin_url) as conn:
-                with conn.cursor() as cur:
-                    cur.execute("SELECT 1")
-                    cur.fetchone()
-            return
-        except Exception as exc:  # noqa: BLE001
-            last_error = str(exc)
-            time.sleep(2)
-    raise RuntimeError(f"PostgreSQL temporario nao ficou pronto: {last_error}")
+def build_resolved_database(admin_database_url: ResolvedDbUrl, database_name: str) -> ResolvedDbUrl:
+    raw = replace_database_in_url(admin_database_url.raw, database_name)
+    return ResolvedDbUrl(
+        raw=raw,
+        masked=mask_database_url(raw),
+        scheme="postgresql",
+        host=admin_database_url.host,
+        database=database_name,
+    )
 
 
 def create_database(admin_url: str, db_name: str) -> None:
@@ -345,11 +344,6 @@ def collect_target_assertions(target_url: str) -> dict[str, str]:
     }
 
 
-def current_git_commit() -> str:
-    result = run(["git", "rev-parse", "--short", "HEAD"], check=True)
-    return result.stdout.strip()
-
-
 def write_report(path: Path, manifest: dict, source_url: str, restore_url: str, assertions: dict[str, str]) -> Path:
     lines = [
         "# Evidencia R07 - Backup e Restore",
@@ -373,94 +367,81 @@ def write_report(path: Path, manifest: dict, source_url: str, restore_url: str, 
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="R07 - validar backup e restore em PostgreSQL temporario.")
+    parser = argparse.ArgumentParser(
+        description="R07 - validar backup e restore em PostgreSQL local, sem Docker Desktop."
+    )
+    parser.add_argument("--env-file", default="backend/.env")
     parser.add_argument("--output-root", default="tmp/r07_backups_validation")
     parser.add_argument("--report-path", default="docs/r07_backup_restore_evidencia.md")
-    parser.add_argument("--docker-image", default="postgres:16-alpine")
+    parser.add_argument("--admin-database-url", default="")
+    parser.add_argument("--admin-database-url-env", default="R07_VALIDATION_ADMIN_DATABASE_URL")
+    parser.add_argument("--source-db-name", default="r07_source")
+    parser.add_argument("--restore-db-name", default="r07_restore")
     args = parser.parse_args()
+
+    if args.source_db_name == args.restore_db_name:
+        raise RuntimeError("R07 exige source e restore em bancos diferentes.")
+
+    admin_database_url = resolve_database_url(
+        explicit_url=args.admin_database_url,
+        preferred_env_key=args.admin_database_url_env,
+        env_file=args.env_file,
+    )
+    require_local_validation_admin(admin_database_url)
 
     output_root = ensure_dir(Path(args.output_root))
     remove_dir_if_exists(output_root)
     ensure_dir(output_root)
     report_path = Path(args.report_path)
 
-    container_name = f"conciliar-r07-{uuid4().hex[:8]}"
-    port = find_free_port()
-    admin_url = docker_url(port, "postgres")
-    source_db = "r07_source"
-    restore_db = "r07_restore"
-    source_url = docker_url(port, source_db)
-    restore_url = docker_url(port, restore_db)
-    source_sqla_url = docker_sqla_url(port, source_db)
-    restore_sqla_url = docker_sqla_url(port, restore_db)
+    source_database_url = build_resolved_database(admin_database_url, args.source_db_name)
+    restore_database_url = build_resolved_database(admin_database_url, args.restore_db_name)
 
-    try:
-        run(
-            [
-                "docker",
-                "run",
-                "-d",
-                "--rm",
-                "--name",
-                container_name,
-                "-e",
-                "POSTGRES_PASSWORD=postgres",
-                "-e",
-                "POSTGRES_USER=postgres",
-                "-e",
-                "POSTGRES_DB=postgres",
-                "-p",
-                f"{port}:5432",
-                args.docker_image,
-            ]
-        )
-        wait_for_postgres(admin_url)
-        create_database(admin_url, source_db)
-        create_database(admin_url, restore_db)
-        prepare_schema(source_sqla_url, restore_sqla_url)
-        seed_source_database(source_sqla_url)
+    create_database(admin_database_url.raw, args.source_db_name)
+    create_database(admin_database_url.raw, args.restore_db_name)
+    prepare_schema(
+        to_sqlalchemy_psycopg_url(source_database_url.raw),
+        to_sqlalchemy_psycopg_url(restore_database_url.raw),
+    )
+    seed_source_database(to_sqlalchemy_psycopg_url(source_database_url.raw))
 
-        backup_result = create_backup(
-            database_url=ResolvedDbUrl(
-                raw=source_url,
-                masked="postgresql://postgres:***@127.0.0.1:%d/%s" % (port, source_db),
-                scheme="postgresql",
-                host="127.0.0.1",
-                database=source_db,
-            ),
-            output_root=output_root,
-            label="r07_validation_backup",
-        )
-        backup_dir = Path(str(backup_result["backup_dir"]))
-        restore_backup(
-            backup_dir=backup_dir,
-            target_database_url=ResolvedDbUrl(
-                raw=restore_url,
-                masked="postgresql://postgres:***@127.0.0.1:%d/%s" % (port, restore_db),
-                scheme="postgresql",
-                host="127.0.0.1",
-                database=restore_db,
-            ),
-            require_explicit_wipe=True,
-        )
+    backup_result = create_backup(
+        database_url=source_database_url,
+        output_root=output_root,
+        label="r07_validation_backup",
+    )
+    backup_dir = Path(str(backup_result["backup_dir"]))
+    restore_backup(
+        backup_dir=backup_dir,
+        target_database_url=restore_database_url,
+        require_explicit_wipe=True,
+    )
 
-        with psycopg.connect(restore_url) as conn:
-            mismatches = compare_manifest_counts(conn, backup_result["manifest"])
-            if mismatches:
-                raise RuntimeError("Divergencia final no restore: " + "; ".join(mismatches))
+    with psycopg.connect(restore_database_url.raw) as conn:
+        mismatches = compare_manifest_counts(conn, backup_result["manifest"])
+        if mismatches:
+            raise RuntimeError("Divergencia final no restore: " + "; ".join(mismatches))
 
-        assertions = collect_target_assertions(restore_url)
-        write_report(
-            report_path,
-            backup_result["manifest"],
-            "postgresql://postgres:***@127.0.0.1:%d/%s" % (port, source_db),
-            "postgresql://postgres:***@127.0.0.1:%d/%s" % (port, restore_db),
-            assertions,
+    assertions = collect_target_assertions(restore_database_url.raw)
+    write_report(
+        report_path,
+        backup_result["manifest"],
+        source_database_url.masked,
+        restore_database_url.masked,
+        assertions,
+    )
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "backup_dir": str(backup_dir),
+                "report_path": str(report_path),
+                "admin_database_url_masked": admin_database_url.masked,
+            },
+            ensure_ascii=True,
         )
-        print(json.dumps({"ok": True, "backup_dir": str(backup_dir), "report_path": str(report_path)}, ensure_ascii=True))
-        return 0
-    finally:
-        run(["docker", "rm", "-f", container_name], check=False)
+    )
+    return 0
 
 
 if __name__ == "__main__":

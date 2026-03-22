@@ -29,7 +29,7 @@ Proxima prioridade operacional apos a beta funcional:
 
 ### DEPOIS DA BETA FUNCIONANDO - manutencao com o carro em movimento
 - `R07` Rotina de backup real + prova de recuperacao.
-  Necessidade atendida: backup diario automatizado com dono, horario, log de execucao e destino oficial, mais restore testado com evidencia e roteiro operacional de desastre.
+  Necessidade atendida: backup diario automatizado com dono, horario, log de execucao e destino oficial, mais restore testado com evidencia e roteiro operacional de desastre, sem depender de Docker Desktop.
 - `R08` Teste automatico para evitar regressao silenciosa.
   Necessidade atendida: smoke de release e suite minima do backend rodando em rotina e servindo como gate.
 

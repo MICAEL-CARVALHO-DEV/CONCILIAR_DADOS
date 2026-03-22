@@ -8,15 +8,26 @@ Success: existe um caminho seguro para gerar backup, restaurar em banco alvo pre
 O `R07` cobre:
 - backup logico das tabelas operacionais PostgreSQL
 - restore controlado em banco alvo preparado
-- validacao automatizada em PostgreSQL temporario
+- validacao automatizada em PostgreSQL local de teste
 - agendamento diario no Windows sem depender de GitHub Actions
 
 ## Pre-requisitos
 
 - `BACKUP_DATABASE_URL` apontando para o PostgreSQL oficial da operacao
 - Python do backend disponivel em `backend/.venv`
-- Docker instalado para a validacao automatizada
+- PostgreSQL local instalado para a validacao automatizada
+- `R07_VALIDATION_ADMIN_DATABASE_URL` apontando para o PostgreSQL local de teste
 - schema do banco alvo de restore preparado antes da restauracao
+
+Exemplo seguro para validacao local:
+
+```env
+R07_VALIDATION_ADMIN_DATABASE_URL=postgresql://postgres:SENHA_LOCAL@127.0.0.1:5432/postgres
+```
+
+Regra:
+- a validacao do `R07` sem Docker so aceita `localhost` ou `127.0.0.1`
+- nao usar URL de producao para a prova de restore
 
 ## Gerar backup manual
 
@@ -50,7 +61,7 @@ Regra:
 
 Saida esperada:
 - backup gerado em `tmp/r07_backups_validation/...`
-- restore concluido em PostgreSQL temporario
+- restore concluido em bancos locais `r07_source` e `r07_restore`
 - evidencia atualizada em `docs/r07_backup_restore_evidencia.md`
 
 ## Agendar backup diario no Windows

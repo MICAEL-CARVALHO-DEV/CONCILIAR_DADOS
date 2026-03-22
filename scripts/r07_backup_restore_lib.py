@@ -84,6 +84,28 @@ def normalize_psycopg_url(raw_url: str) -> str:
     return value
 
 
+def to_sqlalchemy_psycopg_url(raw_url: str) -> str:
+    value = (raw_url or "").strip()
+    if value.startswith("postgresql+psycopg://"):
+        return value
+    if value.startswith("postgresql://"):
+        return "postgresql+psycopg://" + value.split("://", 1)[1]
+    return value
+
+
+def replace_database_in_url(raw_url: str, database_name: str) -> str:
+    parsed = urlsplit(normalize_psycopg_url(raw_url))
+    return urlunsplit(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            f"/{database_name}",
+            parsed.query,
+            parsed.fragment,
+        )
+    )
+
+
 def mask_database_url(raw_url: str) -> str:
     parsed = urlsplit(raw_url)
     netloc = parsed.netloc or ""
