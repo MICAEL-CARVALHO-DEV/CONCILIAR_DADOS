@@ -97,6 +97,26 @@ def resolve_optional_path_setting(
     return ""
 
 
+def resolve_required_path_setting(
+    *,
+    explicit_value: str | None = None,
+    preferred_env_key: str | None = None,
+    env_file: str | Path | None = None,
+    fallback_value: str | None = None,
+) -> str:
+    resolved = resolve_optional_path_setting(
+        explicit_value=explicit_value,
+        preferred_env_key=preferred_env_key,
+        env_file=env_file,
+    )
+    if resolved:
+        return resolved
+    fallback = (fallback_value or "").strip()
+    if fallback:
+        return fallback
+    raise RuntimeError("Nenhum diretorio valido configurado para o R07.")
+
+
 def normalize_psycopg_url(raw_url: str) -> str:
     value = (raw_url or "").strip()
     if value.startswith("postgresql+psycopg://"):

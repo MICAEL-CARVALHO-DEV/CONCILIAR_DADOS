@@ -15,7 +15,8 @@ O `R07` cobre:
 ## Pre-requisitos
 
 - `BACKUP_DATABASE_URL` apontando para o PostgreSQL oficial da operacao
-- opcional: `BACKUP_MIRROR_OUTPUT_ROOT` apontando para uma pasta do Google Drive sincronizada na maquina
+- `BACKUP_OUTPUT_ROOT` apontando para a area local de execucao do backup
+- opcional: `BACKUP_MIRROR_OUTPUT_ROOT` apontando para uma pasta dedicada do Google Drive sincronizada na maquina
 - Python do backend disponivel em `backend/.venv`
 - PostgreSQL local instalado para a validacao automatizada
 - `R07_VALIDATION_ADMIN_DATABASE_URL` apontando para o PostgreSQL local de teste
@@ -31,6 +32,31 @@ Regra:
 - a validacao do `R07` sem Docker so aceita `localhost` ou `127.0.0.1`
 - nao usar URL de producao para a prova de restore
 - se usar Google Drive, o backup continua nascendo primeiro no disco local e depois e espelhado para a pasta sincronizada
+
+## Preparar armazenamento do R07
+
+Opcao recomendada:
+- local dedicado de execucao
+- pasta dedicada no Google Drive como copia oficial externa
+
+Bootstrap:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\preparar_r07_armazenamento.ps1 -PersistUserEnv
+```
+
+Resultado esperado:
+- `BACKUP_OUTPUT_ROOT` configurado
+- `BACKUP_MIRROR_OUTPUT_ROOT` configurado
+- pasta local criada
+- pasta dedicada `SEC_EMENDAS_BACKUP` criada no Google Drive local
+
+Exemplo de destino:
+
+```env
+BACKUP_OUTPUT_ROOT=C:\Users\<USUARIO>\conciliar-backups\r07
+BACKUP_MIRROR_OUTPUT_ROOT=C:\Users\<USUARIO>\Google Drive\SEC_EMENDAS_BACKUP
+```
 
 ## Gerar backup manual
 

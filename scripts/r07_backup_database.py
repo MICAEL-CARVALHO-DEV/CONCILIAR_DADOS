@@ -9,6 +9,7 @@ from r07_backup_restore_lib import (
     ensure_dir,
     resolve_database_url,
     resolve_optional_path_setting,
+    resolve_required_path_setting,
 )
 
 
@@ -16,7 +17,8 @@ def main() -> int:
     parser = build_common_arg_parser("R07 - gerar backup logico do banco operacional PostgreSQL.")
     parser.add_argument("--database-url", default="")
     parser.add_argument("--database-url-env", default="BACKUP_DATABASE_URL")
-    parser.add_argument("--output-root", default="tmp/r07_backups")
+    parser.add_argument("--output-root", default="")
+    parser.add_argument("--output-root-env", default="BACKUP_OUTPUT_ROOT")
     parser.add_argument("--mirror-output-root", default="")
     parser.add_argument("--mirror-output-root-env", default="BACKUP_MIRROR_OUTPUT_ROOT")
     parser.add_argument("--label", default="sec_emendas_backup")
@@ -27,7 +29,13 @@ def main() -> int:
         preferred_env_key=args.database_url_env,
         env_file=args.env_file,
     )
-    output_root = ensure_dir(Path(args.output_root))
+    output_root_value = resolve_required_path_setting(
+        explicit_value=args.output_root,
+        preferred_env_key=args.output_root_env,
+        env_file=args.env_file,
+        fallback_value="tmp/r07_backups",
+    )
+    output_root = ensure_dir(Path(output_root_value))
     mirror_output_root = resolve_optional_path_setting(
         explicit_value=args.mirror_output_root,
         preferred_env_key=args.mirror_output_root_env,

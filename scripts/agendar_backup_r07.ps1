@@ -30,4 +30,7 @@ Register-ScheduledTask `
 
 Write-Host "Task registrada: $TaskName"
 Write-Host "Horario: {0:D2}:{1:D2}" -f $Hour, $Minute
-Write-Host "Pre-requisito: BACKUP_DATABASE_URL precisa estar configurada no ambiente do usuario/maquina."
+Write-Host "Pre-requisitos:"
+Write-Host "- BACKUP_DATABASE_URL configurada"
+Write-Host "- BACKUP_OUTPUT_ROOT configurada"
+Write-Host "- BACKUP_MIRROR_OUTPUT_ROOT configurada se houver espelho no Google Drive"
