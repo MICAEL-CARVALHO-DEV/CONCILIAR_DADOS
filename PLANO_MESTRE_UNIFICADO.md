@@ -11,14 +11,14 @@ Success: qualquer pessoa entende em menos de 5 minutos qual e o veredito atual d
 - `CHECKPOINT_OPERACOES_TABELA.md` = visao rapida da execucao.
 
 ## Veredito atual da plataforma
-- Data-base: `2026-03-21`
+- Data-base: `2026-03-22`
 - Backend publico: `OK`, com `production_ready=true`, branch `main` e commit publicado validado.
 - Beta fechada/interna: `APROVOU`
 - Beta publica/ampliada: `APROVOU`
 
 Proxima prioridade operacional apos a beta funcional:
-1. `R07` backup diario automatizado + restore testado com evidencia
-2. `R08` suite automatizada minima do backend
+1. `R08` suite automatizada minima do backend
+2. `R09` BI externo como evolucao pos-beta
 
 ## Quadro sincronizado de ataque
 
@@ -29,7 +29,8 @@ Proxima prioridade operacional apos a beta funcional:
 
 ### DEPOIS DA BETA FUNCIONANDO - manutencao com o carro em movimento
 - `R07` Rotina de backup real + prova de recuperacao.
-  Necessidade atendida: backup diario automatizado com dono, horario, log de execucao e destino oficial, mais restore testado com evidencia e roteiro operacional de desastre, sem depender de Docker Desktop.
+  Estado: `PASSOU`.
+  Necessidade atendida: backup diario automatizado com dono, horario, log de execucao e destino oficial, mais restore testado com evidencia e roteiro operacional de desastre, sem depender de Docker Desktop e com espelho opcional em Google Drive sincronizado localmente.
 - `R08` Teste automatico para evitar regressao silenciosa.
   Necessidade atendida: smoke de release e suite minima do backend rodando em rotina e servindo como gate.
 
@@ -72,19 +73,19 @@ Proxima prioridade operacional apos a beta funcional:
 | R10 | Infra futura | Servidor interno/intranet so depois da base estavel | decisao formal de manter nuvem, migrar ou operar hibrido sem reabrir a regra de negocio |
 
 ## Ordem oficial de execucao a partir de agora
-1. `R07` backup diario automatizado + restore testado com evidencia
-2. `R08` suite automatizada minima do backend
+1. `R08` suite automatizada minima do backend
+2. consolidar rotina operacional do `R07` no ambiente de producao
 3. `R09` e `R10` como pos-beta
 
 ## O que entra neste corte e o que fica fora
 
 Entra agora:
-- `R07`
-- rotina de backup real com prova de recuperacao
-- sustentacao operacional do sistema em uso real
+- `R08`
+- gate automatizado do backend para reduzir regressao silenciosa
+- sustentacao operacional do sistema em uso real com backup ja validado
 
 Fica fora deste corte:
-- `R08` entra na sequencia imediata, ainda em manutencao de operacao
+- `R07` ja passou e entra em rotina operacional
 - redesign grande de layout
 - evolucao executiva completa do BI
 - migracao para servidor interno
@@ -97,4 +98,4 @@ Fica fora deste corte:
 - Se a execucao de uma operacao mudar, refletir em `CHECKPOINT_OPERACOES_FINAL.md` e `CHECKPOINT_OPERACOES_TABELA.md`.
 
 ## Resume from
-- executar `R07` como proximo corte de manutencao operacional da beta em uso real
+- executar `R08` como proximo corte de manutencao operacional da beta em uso real

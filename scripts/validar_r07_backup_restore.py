@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import subprocess
+import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -27,6 +28,10 @@ from r07_backup_restore_lib import (
 
 
 LOCAL_POSTGRES_HOSTS = {"127.0.0.1", "localhost"}
+REPO_ROOT = Path(__file__).resolve().parents[1]
+
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 
 def current_git_commit() -> str:

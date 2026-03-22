@@ -252,7 +252,12 @@ def dump_table_to_csv(conn, table_name: str, columns: list[str], output_path: Pa
     with conn.cursor() as cur, output_path.open("w", encoding="utf-8", newline="") as handle:
         with cur.copy(copy_sql) as copy:
             for chunk in copy:
-                handle.write(chunk)
+                if isinstance(chunk, memoryview):
+                    handle.write(chunk.tobytes().decode("utf-8"))
+                elif isinstance(chunk, bytes):
+                    handle.write(chunk.decode("utf-8"))
+                else:
+                    handle.write(chunk)
 
     return {
         "table": table_name,

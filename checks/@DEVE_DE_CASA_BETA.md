@@ -90,6 +90,11 @@ Success: Qualquer duvida de "o que falta" e respondida aqui, sem precisar cruzar
   Status tecnico: politica oficial publicada em `docs/politica_auth_contingencia_beta.md`, backend alinhado ao contrato de lockout em `settings` e cadastro local passou a validar a politica de senha oficial.
   Veredito tecnico: `PASSOU`.
 
+### F) Backup e recuperacao operacional
+- [DONE] `R07` Implantar backup diario real + prova de restauracao.
+  Status tecnico: backup logico oficial implementado, validacao de restore executada em PostgreSQL local, evidencia registrada em `docs/r07_backup_restore_evidencia.md` e espelho opcional em Google Drive suportado pelo fluxo operacional.
+  Veredito tecnico: `PASSOU`.
+
 ## PENDENCIAS QUE NAO BLOQUEIAM A BETA (POS-BETA)
 - [TODO] reabrir `workspace_id` real no backend apenas se a estrategia multi-base voltar no futuro.
 - [TODO] refinamento do export para fidelidade visual maior ao original.
@@ -105,14 +110,14 @@ Success: Qualquer duvida de "o que falta" e respondida aqui, sem precisar cruzar
   Objetivo: evitar leitura ambigua de status.
 
 ## Ordem recomendada para resolver agora
-1. `R07`
-2. `R08`
+1. `R08`
+2. consolidar rotina do `R07` no ambiente operacional
 3. `R09`
 
 ## Quadro objetivo de ataque
-- `AGORA`: beta funcional ja fechada com `R06`
-  Proxima prioridade operacional: backup, restauracao e gate automatizado.
-- `DEPOIS DA BETA FUNCIONANDO`: `R07` e `R08`
+- `AGORA`: `R07` passou e a proxima prioridade operacional e `R08`
+  Backup e restauracao ja tem evidencia; falta fechar o gate automatizado do backend.
+- `DEPOIS DA BETA FUNCIONANDO`: manter `R07` em rotina e fechar `R08`
   Fazer manutencao com o carro em movimento: backup diario real, prova de restauracao em PostgreSQL local e teste automatico para evitar regressao silenciosa.
 - `FUTURO`: `R09` e `R10`
   BI externo, decisao de infraestrutura e demais refinamentos pos-beta.
@@ -130,6 +135,6 @@ Beta fecha quando:
 4. sem erro critico em smoke/regressao local
 
 ## Resume from
-- Proximo bloco recomendado: executar `R07` como proximo corte de manutencao operacional da beta em uso real.
+- Proximo bloco recomendado: executar `R08` como proximo corte de manutencao operacional da beta em uso real.
 
 
